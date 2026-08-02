@@ -1,14 +1,17 @@
 class_name FloorSelector
 extends Control
 
-## The drag rail. Detents at each row; a magnified label follows the thumb,
-## OFFSET ABOVE IT so the finger does not occlude the choice.
+## The drag rail. The marker covers the selected floor's whole band -- exactly
+## the band the classifier selects -- so the highlight can never disagree with
+## what releasing dispatches.
 ##
-## The marker covers the row's whole band, which is exactly the band the
-## gesture classifier selects, so the highlight can never disagree with what
-## releasing dispatches.
+## The bubble normally sits ABOVE the thumb so the finger does not occlude the
+## choice. For the top two bands there is no room above: the viewport is inset
+## to the floors and clips, so the bubble flips below the marker instead.
 
-var _row_height: float = 32.0
+const BUBBLE_OFFSET := 46.0
+
+var _coords: BoardCoords
 var _bubble: Label
 var _marker: ColorRect
 
@@ -26,15 +29,18 @@ func _ready() -> void:
 	_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bubble)
 
-func configure(row_height: float) -> void:
-	_row_height = row_height
+func configure(coords: BoardCoords) -> void:
+	_coords = coords
 
-func show_at(row: int) -> void:
+func show_at(floor_index: int) -> void:
 	visible = true
-	_marker.position = Vector2(0, float(row) * _row_height)
-	_marker.size = Vector2(size.x, _row_height)
-	_bubble.text = str(row)
-	_bubble.position = Vector2(4, float(row) * _row_height - 46.0)  # above the thumb
+	var y := _coords.floor_to_y(floor_index)
+	_marker.position = Vector2(0, y)
+	_marker.size = Vector2(size.x, _coords.row_height)
+	_bubble.text = str(floor_index)
+	var above := y - BUBBLE_OFFSET
+	_bubble.position = Vector2(4, above if above >= 0.0 \
+		else y + _coords.row_height + 2.0)
 
 func hide_rail() -> void:
 	visible = false
