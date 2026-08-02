@@ -76,19 +76,24 @@ it is still cheaper while N is small.
 other comforts.
 
 **The conflict to resolve first.** Satisfaction already exists and already has a
-job: `Tenancy._satisfaction` is a per-row 0–1 value that **scales rent**. If the
-same number is also spent, then spending it cuts income, which makes every
-purchase a rent cut — probably not the intent.
+job. It is a per-row 0–1 value that decides whether a tenant **stays**, and since
+rent was removed and traffic tied to tenants, losing a tenant means losing that
+floor's fares. So satisfaction is already an income lever — an indirect, delayed,
+all-or-nothing one.
+
+Spending that same number would mean every purchase edges a tenant toward
+leaving, which is a strange thing to sell.
 
 **Suggested split.**
-- **Satisfaction** stays what it is: per-row, a rate, not a stock.
-- A second currency — *goodwill*, say — **accrues from** satisfaction over time,
-  the way rent accrues from it now. High satisfaction earns goodwill per minute;
-  spending goodwill does not lower satisfaction.
+- **Satisfaction** stays a per-row *state*: it decides who stays.
+- A second currency — *goodwill*, say — **accrues from** satisfaction, the way
+  rent used to. High satisfaction earns goodwill per minute; spending goodwill
+  does not lower satisfaction.
 
-That keeps the existing balance intact and gives the new currency its own source.
-It also gives satisfaction a second reason to matter, which it needs: right now a
-player can ignore it until a tenant threatens to leave.
+That gives the new currency its own source without touching the tenancy loop,
+and gives satisfaction a second, continuous reason to matter. At the moment it
+does nothing at all until a tenant is nearly gone, which makes it easy to ignore
+right up until it is expensive.
 
 **What it would buy.** Comforts rather than throughput — music, better lighting,
 lobby plants — so the two currencies do not compete for the same purchases.
