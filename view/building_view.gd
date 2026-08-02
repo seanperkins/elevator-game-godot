@@ -56,3 +56,8 @@ func refresh() -> void:
 		_columns[i].set_car_position(_state.building.cars[i].position_row)
 	for i in range(_rows.size()):
 		_rows[i].set_waiting(_state.building.waiting_at(i))
+		_rows[i].set_tenant(
+			_state.tenancy.satisfaction_at(i),
+			_state.tenancy.is_vacant(i),
+			_state.tenancy.is_moving_out(i),
+			_state.tenancy.move_out_ticks_left(i))

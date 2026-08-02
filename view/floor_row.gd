@@ -13,6 +13,8 @@ var row_index: int = 0
 var _label: Label
 var _crowd: Label
 var _sprites: Array[PassengerSprite] = []
+var _tenant: Label
+var _bar: ColorRect
 
 func _ready() -> void:
 	# A hairline at the top of the band: without it 40 rows read as one field.
@@ -31,6 +33,8 @@ func _ready() -> void:
 	_crowd = Label.new()
 	_crowd.add_theme_font_size_override("font_size", 12)
 	add_child(_crowd)
+
+	_build_tenant_widgets()
 
 func set_row(index: int) -> void:
 	row_index = index
@@ -62,3 +66,27 @@ func set_waiting(passengers: Array) -> void:
 	_crowd.position = Vector2(
 		size.x - RIGHT_MARGIN - float(shown) * SPRITE_PITCH - 34.0,
 		(size.y - 16.0) * 0.5)
+
+func _build_tenant_widgets() -> void:
+	_bar = ColorRect.new()
+	_bar.position = Vector2(0, 1)
+	_bar.size = Vector2(3, size.y - 1)
+	_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_bar)
+
+	_tenant = Label.new()
+	_tenant.add_theme_font_size_override("font_size", 10)
+	_tenant.position = Vector2(6, size.y - 21)
+	add_child(_tenant)
+
+## Green-to-red satisfaction bar, plus a visible move-out countdown so the
+## player gets a chance to recover the tenant.
+func set_tenant(satisfaction: float, vacant: bool, moving_out: bool, ticks_left: int) -> void:
+	if _bar == null:
+		_build_tenant_widgets()
+	if vacant:
+		_bar.color = Color("3f3f46")
+		_tenant.text = "VACANT"
+		return
+	_bar.color = Color("ef4444").lerp(Color("4ade80"), clampf(satisfaction, 0.0, 1.0))
+	_tenant.text = "leaving %ds" % int(ceilf(float(ticks_left) / 20.0)) if moving_out else ""

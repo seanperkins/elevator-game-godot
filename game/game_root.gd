@@ -10,6 +10,7 @@ const START_SEED := 20260802
 var state: GameState
 var _view: BuildingView
 var _cash_label: Label
+var _rate_label: Label
 
 func _ready() -> void:
 	state = GameState.new(START_ROWS, START_SHAFTS, START_SEED)
@@ -25,6 +26,11 @@ func _ready() -> void:
 	_cash_label.position = Vector2(16, 8)
 	add_child(_cash_label)
 
+	_rate_label = Label.new()
+	_rate_label.add_theme_font_size_override("font_size", 16)
+	_rate_label.position = Vector2(16, 38)
+	add_child(_rate_label)
+
 	_view = BuildingView.new()
 	_view.position = Vector2(0, 56)
 	_view.size = Vector2(size.x, size.y - 56)
@@ -37,3 +43,8 @@ func _physics_process(delta: float) -> void:
 		state.tick(ticks)
 	_view.refresh()
 	_cash_label.text = "$" + NumberFormat.compact(state.economy.cash)
+	var rent := 0.0
+	for row in range(state.building.row_count):
+		rent += state.tenancy.rent_at(row)
+	_rate_label.text = "%s/min   combo %.2fx" % [
+		NumberFormat.compact(rent), state.economy.combo]
