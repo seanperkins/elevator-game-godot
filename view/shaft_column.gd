@@ -26,10 +26,8 @@ extends Control
 ## spends the only line of type the car has. The count returns only when the row
 ## is too short to draw seats at all, which is the one case where the picture is
 ## gone and the number is all there is.
-const SEAT_SIZE := Vector2(34.0, 26.0)
-const SEAT_PITCH := Vector2(37.0, 30.0)
-const SEAT_FONT := 22
-const SEATS_PER_ROW := 4
+const SEAT_SIZE := Vector2(ChipGrid.SIZE, ChipGrid.SIZE)
+const SEAT_FONT := PassengerSprite.FONT
 const HEADER_HEIGHT := 20.0
 const HEADER_FONT := 16
 ## Characters that fit across the car at HEADER_FONT, in the no-room fallback.
@@ -99,27 +97,24 @@ func set_car_position(position_row: float) -> void:
 ## decides whether dispatching here does anything at all. Hollow seats answer
 ## that at a glance; a subtraction does not.
 func set_riders(riders: Array, capacity: int) -> void:
-	var rows := int(ceil(float(maxi(capacity, 1)) / float(SEATS_PER_ROW)))
-	if float(rows) * SEAT_PITCH.y > _car_rect.size.y:
+	var area := _car_rect.size
+	var grid := ChipGrid.shape(capacity,
+		ChipGrid.columns_for(area.x), ChipGrid.rows_for(area.y))
+	# Every seat or none: a rack that shows six of eight answers "how many more
+	# fit" with a lie, which is the one question it exists to answer.
+	if ChipGrid.fits(grid) < capacity:
 		_draw_header_only(riders, capacity)
 		return
 
 	_car_label.text = ""
 	_grow_pools(capacity)
 	_listed = PackedStringArray()
-	var across := float(mini(capacity, SEATS_PER_ROW))
-	var grid_w := (across - 1.0) * SEAT_PITCH.x + SEAT_SIZE.x
-	var grid_h := float(rows) * SEAT_PITCH.y - (SEAT_PITCH.y - SEAT_SIZE.y)
-	var left := maxf((_car_rect.size.x - grid_w) * 0.5, 0.0)
-	var top := maxf((_car_rect.size.y - grid_h) * 0.5, 0.0)
 	for i in range(_seats.size()):
 		if i >= capacity:
 			_seats[i].visible = false
 			_chips[i].recycle()
 			continue
-		var at := Vector2(
-			left + float(i % SEATS_PER_ROW) * SEAT_PITCH.x,
-			top + float(i / SEATS_PER_ROW) * SEAT_PITCH.y)
+		var at := ChipGrid.position_of(i, capacity, grid, area)
 		if i < riders.size():
 			_seats[i].visible = false
 			var p: Passenger = riders[i]

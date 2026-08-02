@@ -18,8 +18,11 @@ extends ColorRect
 const GREEN := Color("4ade80")
 const RED := Color("ef4444")
 
-const WIDTH := 12.0
-const HEIGHT := 16.0
+## A square, the same everywhere. ChipGrid owns the size so the hall and the car
+## cannot drift apart.
+const WIDTH := ChipGrid.SIZE
+const HEIGHT := ChipGrid.SIZE
+const FONT := 20
 
 var _label: Label
 
@@ -35,7 +38,7 @@ func _ready() -> void:
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_label)
-	_apply_size(Vector2(WIDTH, HEIGHT), 11)
+	_apply_size(Vector2(WIDTH, HEIGHT), FONT)
 
 ## Hall chips hold one glyph; car chips hold two digits, so they are wider.
 ## Same square, same colour ramp, different content -- which is the point.
