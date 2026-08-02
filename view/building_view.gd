@@ -3,38 +3,50 @@ extends Control
 
 ## Subscribes to the sim and renders it. Never mutates sim state -- input goes
 ## back the other way as explicit commands.
+##
+## The shaft columns live in a clipped viewport that pages sideways rather than
+## being squeezed to fit. Fitting all eight on screen at once cost either the
+## 44pt touch guarantee or the entire people strip; paging costs neither, and
+## dispatch stops being a per-shaft chore once automation lands.
 
-const LEFT_GUTTER := 56.0
+const SHAFT_AREA_X := FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH
+const SHAFT_WIDTH := 96.0        # 52.4pt at the 0.546 iPhone 15 scale
 
 var _state: GameState
 var _row_height: float
-var _shaft_width: float
+var _scroll_index: int = 0
+var _shaft_viewport: Control
 var _columns: Array[ShaftColumn] = []
 var _rows: Array[FloorRow] = []
 
 func bind(state: GameState) -> void:
 	_state = state
-	_measure()
+	_row_height = size.y / float(maxi(state.building.row_count, 1))
 	_build_rows()
+
+	_shaft_viewport = Control.new()
+	_shaft_viewport.position = Vector2(SHAFT_AREA_X, 0)
+	_shaft_viewport.size = Vector2(size.x - SHAFT_AREA_X, size.y)
+	_shaft_viewport.clip_contents = true
+	add_child(_shaft_viewport)
+
 	_build_columns()
 
-## Column width is derived from the board CAP, not the current shaft count, so
-## buying a shaft never slides the ones already there out from under a thumb.
-## (720 - 56) / 8 = 83 units, which is 45.3pt at the 0.546 iPhone scale -- still
-## over the 44pt floor, and unlike a hardcoded 84 the eighth column fits.
-func _measure() -> void:
+## Rows and shafts are purchasable, so the board must be able to rebuild.
+func rebuild() -> void:
+	for c in _shaft_viewport.get_children():
+		c.queue_free()          # columns and their empty slots alike
+	for r in _rows:
+		r.queue_free()
+	_columns.clear()
+	_rows.clear()
 	_row_height = size.y / float(maxi(_state.building.row_count, 1))
-	_shaft_width = (size.x - LEFT_GUTTER) / float(Building.MAX_SHAFTS)
-
-## How many passenger sprites fit to the right of the columns. At the shaft cap
-## this is zero and rows fall back to the crowd count alone -- §8.5's cap is a
-## tunable, and a sprite hidden under a column is worse than a number.
-func _individual_budget() -> int:
-	var occupied := LEFT_GUTTER + float(_state.building.cars.size()) * _shaft_width
-	return int(maxf(size.x - occupied - 8.0, 0.0) / FloorRow.SPRITE_PITCH)
+	_build_rows()
+	# The viewport must stay on top of the rows it was created after.
+	move_child(_shaft_viewport, get_child_count() - 1)
+	_build_columns()
 
 func _build_rows() -> void:
-	var budget := _individual_budget()
 	for i in range(_state.building.row_count):
 		var row := FloorRow.new()
 		row.position = Vector2(0, float(i) * _row_height)
@@ -42,33 +54,63 @@ func _build_rows() -> void:
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(row)
 		row.set_row(i)
-		row.set_individual_budget(budget)
 		_rows.append(row)
 
+## Empty slots behind the columns. With one shaft the viewport is otherwise
+## five columns of nothing, and the early game is where most play time is --
+## an unbuilt slot reads as room to grow, a void reads as a broken layout.
+func _build_slots() -> void:
+	for i in range(visible_shafts()):
+		var slot := ColorRect.new()
+		slot.color = Color("151b23")
+		slot.position = Vector2(float(i) * SHAFT_WIDTH, 0)
+		slot.size = Vector2(SHAFT_WIDTH - 4.0, size.y)
+		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_shaft_viewport.add_child(slot)
+
 func _build_columns() -> void:
+	_build_slots()
 	for i in range(_state.building.cars.size()):
 		var col := ShaftColumn.new()
-		col.position = Vector2(LEFT_GUTTER + float(i) * _shaft_width, 0)
-		col.size = Vector2(_shaft_width - 4.0, size.y)
-		add_child(col)
+		col.size = Vector2(SHAFT_WIDTH - 4.0, size.y)
+		_shaft_viewport.add_child(col)
 		var index := i
 		col.setup(index, _row_height, _state.building.row_count,
 			func() -> int: return _state.building.cars[index].current_row())
 		col.dispatch_requested.connect(_on_dispatch)
 		col.surge_requested.connect(_on_surge)
 		_columns.append(col)
+	_scroll_index = clampi(_scroll_index, 0, max_scroll())
+	_position_columns()
 
-## Rows and shafts are purchasable, so the board must be able to rebuild.
-func rebuild() -> void:
-	for c in _columns:
-		c.queue_free()
-	for r in _rows:
-		r.queue_free()
-	_columns.clear()
-	_rows.clear()
-	_measure()
-	_build_rows()
-	_build_columns()
+## Paged-out columns are HIDDEN, not merely clipped. clip_contents stops the
+## drawing but not the hit-testing, and a column scrolled off the left sits
+## under the people strip -- a tap there would dispatch a shaft the player
+## cannot see.
+func _position_columns() -> void:
+	var last_visible := _scroll_index + visible_shafts()
+	for i in range(_columns.size()):
+		_columns[i].position = Vector2(float(i - _scroll_index) * SHAFT_WIDTH, 0)
+		_columns[i].visible = i >= _scroll_index and i < last_visible
+
+## How many whole columns the viewport can show at once.
+func visible_shafts() -> int:
+	return maxi(int(_shaft_viewport.size.x / SHAFT_WIDTH), 1)
+
+func max_scroll() -> int:
+	return maxi(_state.building.cars.size() - visible_shafts(), 0)
+
+func first_visible_shaft() -> int:
+	return _scroll_index
+
+func scroll_by(delta: int) -> void:
+	_scroll_index = clampi(_scroll_index + delta, 0, max_scroll())
+	_position_columns()
+
+## Called when a shaft is bought, so the thing just paid for is on screen.
+func scroll_to_end() -> void:
+	_scroll_index = max_scroll()
+	_position_columns()
 
 func _on_dispatch(shaft_index: int, row: int) -> void:
 	_state.dispatch(shaft_index, row)

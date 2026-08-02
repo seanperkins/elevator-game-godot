@@ -1,18 +1,31 @@
 class_name FloorRow
 extends Control
 
-## One row of the board: index label, the people waiting on it, and a crowd
-## count that takes over once individual sprites are capped.
+## One row of the board, laid out left to right and in fixed regions:
+##
+##   [count] [satisfaction] [index] | people waiting | shafts (scrollable)
+##
+## The waiting count is the leftmost thing on the row and never moves. It is
+## the number a dispatch decision is actually made on, so it cannot be the
+## element that shifts position with the shaft count, or sit unlabelled beside
+## the row index where the two read as one number.
+##
+## The people strip is a fixed width too, so how many sprites a row can show
+## no longer depends on how much space the columns have left over.
 
 const MAX_INDIVIDUALS := 12
 const SPRITE_PITCH := 14.0
-const RIGHT_MARGIN := 6.0
+
+const GUTTER_WIDTH := 64.0       # count, satisfaction bar, row index
+const STRIP_WIDTH := 176.0       # 12 sprites at SPRITE_PITCH, plus margins
+const COUNT_WIDTH := 26.0
+const BAR_X := 30.0
+const LABEL_X := 38.0
 
 var row_index: int = 0
-var individual_budget: int = MAX_INDIVIDUALS
 
 var _label: Label
-var _crowd: Label
+var _count: Label
 var _sprites: Array[PassengerSprite] = []
 var _tenant: Label
 var _bar: ColorRect
@@ -26,14 +39,18 @@ func _ready() -> void:
 	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(rule)
 
+	_count = Label.new()
+	_count.add_theme_font_size_override("font_size", 16)
+	_count.position = Vector2(0, 2)
+	_count.size = Vector2(COUNT_WIDTH, 18)
+	_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	add_child(_count)
+
 	_label = Label.new()
 	_label.add_theme_font_size_override("font_size", 14)
-	_label.position = Vector2(4, 2)
+	_label.add_theme_color_override("font_color", Color("7c8899"))
+	_label.position = Vector2(LABEL_X, 3)
 	add_child(_label)
-
-	_crowd = Label.new()
-	_crowd.add_theme_font_size_override("font_size", 12)
-	add_child(_crowd)
 
 	_build_tenant_widgets()
 
@@ -41,17 +58,11 @@ func set_row(index: int) -> void:
 	row_index = index
 	_label.text = str(index)
 
-## How many sprites the board can spare room for right now. The columns grow
-## rightward as shafts are bought and eventually take the whole width.
-func set_individual_budget(n: int) -> void:
-	individual_budget = clampi(n, 0, MAX_INDIVIDUALS)
-
-## Individuals above the cap collapse into a count, so the worst case stays
-## bounded no matter how badly the player is doing. Sprites are pooled per row
-## and laid out from the right edge inward, which keeps them clear of the
-## shaft columns while the building is still narrow.
+## Individuals above the cap collapse into the count alone, so the worst case
+## stays bounded no matter how badly the player is doing.
 func set_waiting(passengers: Array) -> void:
-	var shown: int = mini(passengers.size(), individual_budget)
+	var total: int = passengers.size()
+	var shown: int = mini(total, MAX_INDIVIDUALS)
 	while _sprites.size() < shown:
 		var s := PassengerSprite.new()
 		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -61,30 +72,23 @@ func set_waiting(passengers: Array) -> void:
 		if i < shown:
 			var p: Passenger = passengers[i]
 			_sprites[i].position = Vector2(
-				size.x - RIGHT_MARGIN - float(i + 1) * SPRITE_PITCH,
+				GUTTER_WIDTH + 4.0 + float(i) * SPRITE_PITCH,
 				(size.y - _sprites[i].size.y) * 0.5)
 			_sprites[i].show_for(p.patience_fraction())
 		else:
 			_sprites[i].recycle()
-	# The count is authoritative and always shown: at the shaft cap there is no
-	# room left for sprites at all, and "how many are waiting up there" is the
-	# whole basis of a dispatch decision.
-	var total: int = passengers.size()
-	_crowd.text = "" if total <= 0 else str(total)
-	_crowd.position = Vector2(
-		size.x - RIGHT_MARGIN - float(shown) * SPRITE_PITCH - 24.0,
-		(size.y - 16.0) * 0.5) if shown > 0 else Vector2(26, 3)
+	_count.text = "" if total <= 0 else str(total)
 
 func _build_tenant_widgets() -> void:
 	_bar = ColorRect.new()
-	_bar.position = Vector2(0, 1)
-	_bar.size = Vector2(3, size.y - 1)
+	_bar.position = Vector2(BAR_X, 1)
+	_bar.size = Vector2(4, size.y - 1)
 	_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bar)
 
 	_tenant = Label.new()
 	_tenant.add_theme_font_size_override("font_size", 10)
-	_tenant.position = Vector2(6, size.y - 21)
+	_tenant.position = Vector2(LABEL_X, size.y - 21)
 	add_child(_tenant)
 
 ## Green-to-red satisfaction bar, plus a visible move-out countdown so the
