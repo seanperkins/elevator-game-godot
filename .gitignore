@@ -6,3 +6,4 @@ export.cfg
 .DS_Store
 build/
 export_credentials.cfg
+.superpowers/
