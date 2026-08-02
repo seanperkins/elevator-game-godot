@@ -88,3 +88,13 @@ func test_passengers_carry_the_configured_patience_and_fare() -> void:
 func test_missing_curve_file_fails_cleanly() -> void:
 	var s := TrafficSpawner.new(1)
 	assert_false(s.load_curve("res://data/does_not_exist.json"))
+
+func test_patience_is_floored_at_one_tick() -> void:
+	# waited_ticks()'s contract needs initial patience >= 1, and the curve file
+	# is data. A zero in data must not silently break the metric.
+	var f := FileAccess.open("user://zero_patience.json", FileAccess.WRITE)
+	f.store_string('{"buckets":[5.0],"base_patience_ticks":0,"base_fare":4.0}')
+	f.close()
+	var s := TrafficSpawner.new(7)
+	assert_true(s.load_curve("user://zero_patience.json"))
+	assert_eq(s.base_patience_ticks, 1, "clamped, not zero")

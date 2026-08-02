@@ -33,7 +33,9 @@ func load_curve(path: String) -> bool:
 		if typeof(v) != TYPE_FLOAT and typeof(v) != TYPE_INT:
 			return false
 		curve.append(float(v))
-	base_patience_ticks = int(parsed.get("base_patience_ticks", 900))
+	# Floored at one tick: Passenger.waited_ticks()'s contract needs an initial
+	# patience of at least 1, and this side of it is data.
+	base_patience_ticks = maxi(int(parsed.get("base_patience_ticks", 900)), 1)
 	base_fare = float(parsed.get("base_fare", 4.0))
 	return true
 

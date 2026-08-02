@@ -42,3 +42,34 @@ func test_direction_is_up_for_ascending_trips() -> void:
 
 func test_direction_is_down_for_descending_trips() -> void:
 	assert_eq(make_p(9, 1).direction(), -1)
+
+func test_waited_ticks_counts_time_spent_waiting() -> void:
+	var p := make_p(0, 5, 900)
+	p.decay(120)
+	assert_eq(p.waited_ticks(), 120)
+
+func test_waited_ticks_is_zero_for_a_fresh_passenger() -> void:
+	assert_eq(make_p(0, 5, 900).waited_ticks(), 0)
+
+func test_waited_ticks_at_the_zero_patience_boundary() -> void:
+	# The passenger delivered on the tick it reaches 0 waited its whole patience.
+	var p := make_p(0, 5, 900)
+	p.decay(900)
+	assert_eq(p.patience_ticks, 0)
+	assert_eq(p.waited_ticks(), 900)
+
+func test_waited_ticks_is_clamped_at_zero_for_nonpositive_patience() -> void:
+	# _initial_patience is maxi(patience, 1), so a zero-patience passenger reads
+	# one tick high. The contract is: meaningful for patience >= 1, never
+	# negative, and pinned here rather than left to discovery.
+	var p := make_p(0, 5, 0)
+	assert_eq(p.waited_ticks(), 1, "documented: one high below the floor")
+	p.decay(3)
+	assert_eq(p.waited_ticks(), 4, "still one high, and still not negative")
+
+func test_waited_ticks_is_never_negative() -> void:
+	# The only way past the floor is a patience the spawner clamps away, but the
+	# clamp is the stated half of the contract, so it is asserted.
+	var p := make_p(0, 5, 10)
+	p.decay(-50)                 # patience above its own initial value
+	assert_eq(p.waited_ticks(), 0, "clamped at zero, never negative")
