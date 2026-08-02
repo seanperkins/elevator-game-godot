@@ -45,15 +45,25 @@ func test_clamped_time_does_not_spiral_into_the_next_frame() -> void:
 	assert_eq(clock.take_ticks(1.0 / 60.0), 0,
 		"the leftover must be discarded, not queued")
 
+func test_the_day_starts_at_the_morning_rush() -> void:
+	# The traffic curve's first six buckets are the overnight trough, 0.4 to 0.8
+	# spawns per simulated minute against a 45-second patience. A day starting at
+	# bucket 0 shows a new player an empty building for six real minutes, which is
+	# the first thing anyone sees.
+	assert_eq(clock.sim_minute(), SimClock.START_MINUTE)
+	assert_gt(SimClock.START_MINUTE, 0, "midnight is not where a session opens")
+
 func test_sim_minute_advances_every_1200_ticks() -> void:
-	assert_eq(clock.sim_minute(), 0)
+	var start := SimClock.START_MINUTE
+	assert_eq(clock.sim_minute(), start)
 	clock.note_ticks(1199)
-	assert_eq(clock.sim_minute(), 0, "1199 ticks is still minute 0")
+	assert_eq(clock.sim_minute(), start, "1199 ticks is still the opening minute")
 	clock.note_ticks(1)
-	assert_eq(clock.sim_minute(), 1, "1200 ticks is minute 1")
+	assert_eq(clock.sim_minute(), start + 1, "1200 ticks is one minute on")
 
 func test_sim_minute_uses_integer_arithmetic() -> void:
 	# Indexing by a float accumulator lands 1.27e-12 below 60.0 after 1200
 	# additions of 0.05, so a >= 60.0 test fires one tick late.
 	clock.note_ticks(1200 * 137)
-	assert_eq(clock.sim_minute(), 137, "exact at a high minute count")
+	assert_eq(clock.sim_minute(), SimClock.START_MINUTE + 137,
+		"exact at a high minute count")

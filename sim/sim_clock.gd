@@ -30,7 +30,22 @@ func take_ticks(delta: float) -> int:
 func note_ticks(n: int) -> void:
 	ticks_executed += n
 
+## Which simulated minute of the day it is, for indexing the traffic curve.
+##
+## The day opens at the MORNING RUSH, not midnight. The curve's first six
+## buckets are the overnight trough -- 0.4, 0.3, 0.2, 0.2, 0.3, 0.8 spawns per
+## simulated minute -- and a simulated minute is sixty real seconds, so a day
+## starting at bucket 0 showed a new player an empty building for about six real
+## minutes. A 900-tick patience is 45 seconds, so even the rare night passenger
+## expired before anyone looked. That was the first thing anyone saw of the game.
+##
+## This is an offset on the READING, not on ticks_executed: the latter means
+## "how long has the sim run", which the metrics window and every elapsed-time
+## test depend on, and conflating it with time-of-day would corrupt both.
+##
 ## Integer arithmetic deliberately: a float accumulator lands just below the
 ## bucket boundary and selects the wrong traffic bucket for one tick.
+const START_MINUTE := 6
+
 func sim_minute() -> int:
-	return ticks_executed / TICKS_PER_MINUTE
+	return START_MINUTE + ticks_executed / TICKS_PER_MINUTE

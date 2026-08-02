@@ -80,13 +80,22 @@ func test_spawned_passengers_join_the_waiting_queues() -> void:
 	# up in a queue snapshot. Twenty minutes spans the morning rush (~43.6
 	# expected spawns), so zero is not a plausible seed, unlike the overnight
 	# trough's 1.4.
-	# An Array, not an int: GDScript lambdas capture by value, so a captured
-	# counter would increment a copy and read back zero.
+	#
+	# The queue is sampled DURING the run rather than at the end. A closing
+	# snapshot only ever worked by accident: twenty minutes from the opening
+	# minute wraps past the trough, so the final minutes are legitimately quiet
+	# and everyone who spawned has long since expired.
+	# Arrays, not ints: GDScript lambdas capture by value, so a captured counter
+	# would increment a copy and read back zero.
 	var spawned := []
 	gs.passenger_spawned.connect(func(p): spawned.append(p))
-	gs.tick(SimClock.TICKS_PER_MINUTE * 20)
+	var queued := []
+	for i in range(SimClock.TICKS_PER_MINUTE * 20):
+		gs.tick(1)
+		if gs.building.total_waiting() > 0:
+			queued.append(i)
 	assert_gt(spawned.size(), 0, "traffic must actually appear")
-	assert_gt(gs.building.total_waiting(), 0, "and it queues on its origin row")
+	assert_false(queued.is_empty(), "and it queues on its origin row")
 
 func test_the_sim_is_deterministic_for_a_given_seed() -> void:
 	var a := GameState.new(6, 1, 777)
@@ -214,3 +223,24 @@ func test_a_spawned_passenger_first_decays_on_the_next_tick() -> void:
 	gs.tick(1)
 	assert_eq(p.patience_ticks, 99,
 		"one tick of decay for one tick of waiting")
+
+func test_the_opening_minutes_carry_real_traffic() -> void:
+	# The cold start a player actually experiences. Starting the day at midnight
+	# opened on the curve's overnight trough -- 0.4, 0.3, 0.2 spawns per simulated
+	# minute -- so a new player watched an empty building for about six real
+	# minutes, and a 900-tick patience meant the rare night passenger was gone
+	# before anyone looked.
+	#
+	# Counted off the signal into an Array: GDScript lambdas capture by value, so
+	# a captured int would increment a copy and read back zero. Three simulated
+	# minutes of rush is ~11.4 expected spawns against ~0.9 for the trough, so
+	# this discriminates rather than riding the seed.
+	var spawned := []
+	gs.passenger_spawned.connect(func(p): spawned.append(p))
+	gs.tick(SimClock.TICKS_PER_MINUTE * 3)
+	assert_gt(spawned.size(), 4,
+		"the opening minutes must be busy, not the 0.9-spawn overnight trough")
+
+func test_the_opening_rate_is_a_rush_rate() -> void:
+	assert_gt(gs.spawner.rate_at_minute(gs.clock.sim_minute()), 2.0,
+		"the day opens on real traffic, not the 0.4/min trough")
