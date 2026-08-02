@@ -1,0 +1,84 @@
+name: Build and deploy web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; a superseded build is not worth finishing.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot and export templates
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
+          curl -fsSL -o godot.zip "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          curl -fsSL -o templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q godot.zip
+          sudo mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+          unzip -q templates.tpz
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          mv templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          godot --version
+
+      # Import populates .godot/; it reports a nonzero status on a clean
+      # checkout even when it succeeds, so its result is checked by whether
+      # the export below works, not by its exit code.
+      - name: Import assets
+        run: godot --headless --import || true
+
+      - name: Export web build
+        run: |
+          set -euo pipefail
+          mkdir -p build/web
+          godot --headless --export-release "Web" build/web/index.html
+          test -f build/web/index.html
+          test -f build/web/index.wasm
+          test -f build/web/index.pck
+
+      # GitHub Pages cannot set COOP/COEP headers, so a threaded export would
+      # load and then fail on the phone. Report what was actually produced.
+      - name: Report build shape
+        run: |
+          echo "--- files ---"
+          ls -la build/web
+          echo "--- SharedArrayBuffer references ---"
+          grep -l "SharedArrayBuffer" build/web/*.js build/web/*.html 2>/dev/null || echo "none (good: threadless)"
+          echo "--- total size ---"
+          du -sh build/web
+
+      # Pages serves via Jekyll by default, which drops files beginning with _.
+      - name: Disable Jekyll processing
+        run: touch build/web/.nojekyll
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
