@@ -99,6 +99,9 @@ func _spawn() -> void:
 		building.enqueue(p)
 		passenger_spawned.emit(p)
 
+## Doors are owned by this phase, which is why answering a call happens here
+## rather than in _deliver: a car that opens here is DOORS by the time boarding
+## runs, exactly as an arriving car is, so both paths board on the same tick.
 func _move_and_doors() -> void:
 	for i in range(building.cars.size()):
 		var car: ElevatorCar = building.cars[i]
@@ -106,6 +109,8 @@ func _move_and_doors() -> void:
 		car.step(1)
 		if was_moving and car.state == ElevatorCar.State.DOORS:
 			car_arrived.emit(i, car.current_row())
+		if not building.waiting_at(car.current_row()).is_empty():
+			car.answer_call()
 
 ## Alight first, then board -- riders leaving free the seats arrivals take.
 func _deliver() -> void:

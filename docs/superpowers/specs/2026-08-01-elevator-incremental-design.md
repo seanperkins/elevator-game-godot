@@ -21,7 +21,16 @@ elevator cars as boxes, passengers as sprites standing on rows with a destinatio
 bubble and a draining patience meter.
 
 1. Passengers spawn on rows with a destination.
-2. The player drags on a shaft to send its car to a row.
+2. The player drags on a shaft to send its car to a row. A car **parked** on a
+   floor also opens its doors for anyone who calls from that floor, and boards
+   them — it does not move. Without that rule a car sitting beside a waiting
+   passenger ignores them until the player dispatches it to the floor it is
+   already standing on, which reads as broken rather than as a rule. It is
+   refused when the car is full, because cycling the doors for someone who
+   cannot board costs dwell and shows an opening the player cannot use.
+   **This is not dispatch automation** (Milestone 4): choosing where a car goes
+   stays the player's job, and a car that is never dispatched delivers nobody
+   however many people climb aboard.
 3. Passengers delivered before their patience expires pay a fare and raise their
    row's tenant satisfaction. Passengers who expire take the stairs, pay nothing,
    and lower satisfaction.

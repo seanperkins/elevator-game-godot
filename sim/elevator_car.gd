@@ -58,6 +58,21 @@ func _open_doors() -> void:
 	state = State.DOORS
 	_door_remaining = door_ticks
 
+## A car parked at a floor answers a call there by opening its doors.
+##
+## It does NOT move, so this is not dispatch automation: choosing where the car
+## goes stays the player's job. Without it a car sitting on a floor ignores
+## somebody standing next to it until the player dispatches it to the floor it
+## is already on, which reads as broken rather than as a rule.
+##
+## Refused when full, because cycling the doors for someone who cannot board
+## costs dwell and shows an opening the player cannot use.
+func answer_call() -> bool:
+	if state != State.IDLE or riders.size() >= capacity:
+		return false
+	_open_doors()
+	return true
+
 func current_row() -> int:
 	return int(roundf(position_row))
 
