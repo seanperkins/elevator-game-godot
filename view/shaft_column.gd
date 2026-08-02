@@ -11,7 +11,7 @@ extends Control
 
 signal dispatch_requested(shaft_index: int, floor_index: int)
 signal surge_requested(shaft_index: int)
-signal pan_requested(delta: float)
+signal pan_requested(delta: Vector2)
 
 ## The car is a rack of seats. Each one is the same little square the passenger
 ## was in the hall, now showing the floor they pressed instead of a call arrow:
@@ -246,7 +246,7 @@ func car_text() -> String:
 ## twice per gesture.
 func _gui_input(event: InputEvent) -> void:
 	if PointerEvents.is_press(event):
-		_gesture.press(event.position.y, _car_floor_provider.call())
+		_gesture.press(event.position, _car_floor_provider.call())
 	elif PointerEvents.is_release(event):
 		match _gesture.release():
 			Gesture.Result.TAP:
@@ -256,8 +256,8 @@ func _gui_input(event: InputEvent) -> void:
 			_:
 				pass
 	elif PointerEvents.is_drag(event):
-		_gesture.move(event.position.y)
+		_gesture.move(event.position)
 		if _gesture.is_panning():
 			var delta := _gesture.take_pan_delta()
-			if not is_zero_approx(delta):
+			if delta != Vector2.ZERO:
 				pan_requested.emit(delta)

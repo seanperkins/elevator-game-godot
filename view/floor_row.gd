@@ -27,12 +27,10 @@ const CALL_DOWN := "\u25bc"
 const MAX_INDIVIDUALS := 12
 const VACANT_MAX_INDIVIDUALS := 9       # leaves room for the re-lease price
 const SPRITE_PITCH := 14.0
-const CROWD_SPAN := 168.0               # the crowd bar's full-width reference
 ## People are laid out by ChipGrid -- the same square, the same packing rule as
 ## inside a car, so a passenger looks the same before and after boarding.
 const STRIP_RIGHT := GUTTER_WIDTH + STRIP_WIDTH          # 240
 const VACANT_STRIP_RIGHT := STRIP_RIGHT - PRICE_WIDTH - 2.0
-const CROWD_BAR_BELOW := 40.0           # row height at or under which sprites collapse
 
 const GUTTER_WIDTH := 64.0
 const STRIP_WIDTH := 176.0
@@ -54,7 +52,6 @@ var _count: Label
 var _price: Label
 var _bar_track: ColorRect
 var _bar_fill: ColorRect
-var _crowd: ColorRect
 var _sprites: Array[PassengerSprite] = []
 
 func _ready() -> void:
@@ -91,11 +88,6 @@ func _ready() -> void:
 	_label.position = Vector2(LABEL_X, 3)
 	add_child(_label)
 
-	_crowd = ColorRect.new()
-	_crowd.visible = false
-	_crowd.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_crowd)
-
 	# Right-aligned at the strip's edge. On a vacant floor the sprite cap drops
 	# to 10, so sprite 9 ends at x = 204 and the price occupies [206, 240]:
 	# they cannot overlap.
@@ -113,21 +105,17 @@ func set_row(index: int) -> void:
 	row_index = index
 	_label.text = str(index)
 
-## Individual sprites while the row is tall enough to tell them apart; at or
-## below CROWD_BAR_BELOW they collapse into one bar whose length is the crowd
-## and whose colour is the WORST patience on the floor. The two tiers are
-## mutually exclusive. The count is never affected and is always exact.
+## Everyone waiting, drawn as squares. There used to be a second tier -- below a
+## 40-unit row the sprites collapsed into a single crowd bar -- because rows
+## shrank as the building grew and eventually could not hold a chip. Rows are a
+## fixed 88 units now, so that tier could never fire again, and a representation
+## that never appears is worse than no representation. The count beside them is
+## still exact regardless of how many are drawn.
 func set_waiting(passengers: Array) -> void:
 	var total: int = passengers.size()
 	_count.text = "" if total <= 0 else str(total)
 
 	var cap: int = VACANT_MAX_INDIVIDUALS if _price.visible else MAX_INDIVIDUALS
-	if size.y <= CROWD_BAR_BELOW:
-		_hide_sprites()
-		_draw_crowd_bar(total, cap)
-		return
-
-	_crowd.visible = false
 	var area := Vector2(
 		(VACANT_STRIP_RIGHT if _price.visible else STRIP_RIGHT) - SPRITE_X,
 		size.y)
@@ -150,28 +138,6 @@ func set_waiting(passengers: Array) -> void:
 				CALL_DOWN if p.direction() < 0 else CALL_UP)
 		else:
 			_sprites[i].recycle()
-
-func _hide_sprites() -> void:
-	for s in _sprites:
-		s.recycle()
-
-## Length is the crowd measured against the same 12-passenger cap, saturating
-## beyond it: a floor with 12 waiting and one with 40 draw the same bar, and
-## the exact count beside it is what distinguishes them.
-func _draw_crowd_bar(total: int, cap: int) -> void:
-	if total <= 0:
-		_crowd.visible = false
-		return
-	_crowd.visible = true
-	var span := CROWD_SPAN
-	var fraction := clampf(float(total) / float(cap), 0.0, 1.0)
-	_crowd.position = Vector2(SPRITE_X, (size.y - 9.0) * 0.5)
-	_crowd.size = Vector2(maxf(span * fraction, 3.0), 9.0)
-
-## Called with the worst remaining patience on the floor so the crowd bar can
-## colour itself; separate from set_waiting so the caller does the min once.
-func set_crowd_colour(worst_fraction: float) -> void:
-	_crowd.color = RED.lerp(GREEN, clampf(worst_fraction, 0.0, 1.0))
 
 ## Three states in one 4-unit bar.
 ##   tenanted   -- filled proportional to satisfaction, red->green

@@ -27,40 +27,43 @@ const DRAG_THRESHOLD := 12.0
 var _coords: BoardCoords
 var _active := false
 var _panning := false
-var _press_y := 0.0
-var _last_y := 0.0
-var _pan_delta := 0.0
+var _press_pos := Vector2.ZERO
+var _last_pos := Vector2.ZERO
+var _pan_delta := Vector2.ZERO
 var _selected_row := 0
 
 func _init(coords: BoardCoords) -> void:
 	_coords = coords
 
-func press(y: float, car_floor: int) -> void:
+func press(pos: Vector2, car_floor: int) -> void:
 	_active = true
 	_panning = false
-	_press_y = y
-	_last_y = y
-	_pan_delta = 0.0
+	_press_pos = pos
+	_last_pos = pos
+	_pan_delta = Vector2.ZERO
 	_selected_row = car_floor
 
-func move(y: float) -> void:
+## Panning is TWO-dimensional: a building is taller than the screen and, with
+## eight shafts, wider than it too. Looking around is one gesture in both axes
+## rather than a vertical drag plus a pair of pager buttons.
+func move(pos: Vector2) -> void:
 	if not _active:
 		return
-	if not _panning and absf(y - _press_y) > DRAG_THRESHOLD:
+	if not _panning and _press_pos.distance_to(pos) > DRAG_THRESHOLD:
 		_panning = true
 		# The travel that PROVED it was a pan belongs to the pan, or the board
 		# jumps by the threshold the moment panning starts.
-		_pan_delta += _press_y - _last_y
+		_pan_delta += _press_pos - _last_pos
 	if _panning:
-		_pan_delta += _last_y - y
-	_last_y = y
+		_pan_delta += _last_pos - pos
+	_last_pos = pos
 
 ## How far to move the board since this was last asked, and then zero. The view
 ## adds each report to the offset, so returning a cumulative total would
 ## accelerate the board away from the thumb.
-func take_pan_delta() -> float:
+func take_pan_delta() -> Vector2:
 	var d := _pan_delta
-	_pan_delta = 0.0
+	_pan_delta = Vector2.ZERO
 	return d
 
 func release() -> int:
@@ -68,7 +71,7 @@ func release() -> int:
 		return Result.NONE
 	var out := Result.PAN if _panning else Result.TAP
 	if out == Result.TAP:
-		_selected_row = _coords.y_to_floor(_press_y)
+		_selected_row = _coords.y_to_floor(_press_pos.y)
 	_active = false
 	_panning = false
 	return out

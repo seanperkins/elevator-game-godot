@@ -35,7 +35,9 @@ const ROW_HEIGHT := 88.0
 
 var _state: GameState
 var _coords: BoardCoords
-var _scroll_index: int = 0
+## Continuous, in units, not whole columns. Panning is smooth and the pager
+## still works by stepping it a column at a time.
+var _shaft_offset: float = 0.0
 
 var _shaft_viewport: Control
 var _ghost_row: Control
@@ -108,6 +110,21 @@ func scroll_board_by(delta: float) -> void:
 	_coords.scroll_by(delta)
 	_reposition_floors()
 
+## One gesture, both axes.
+func pan_board_by(delta: Vector2) -> void:
+	if not is_zero_approx(delta.x):
+		scroll_shafts_by(delta.x)
+	if not is_zero_approx(delta.y):
+		scroll_board_by(delta.y)
+
+func scroll_shafts_by(delta: float) -> void:
+	_shaft_offset = clampf(_shaft_offset + delta, 0.0, _max_shaft_offset())
+	_position_columns()
+
+func _max_shaft_offset() -> float:
+	return maxf(float(slot_count()) * SHAFT_WIDTH
+		- float(visible_shafts()) * SHAFT_WIDTH, 0.0)
+
 func board_scroll_offset() -> float:
 	return _coords.scroll_offset
 
@@ -176,9 +193,9 @@ func _build_slots() -> void:
 func _position_slots(owned: int) -> void:
 	var buyable := owned if owned < Building.MAX_SHAFTS else -1
 	for i in range(_slots.size()):
-		var index := _scroll_index + i
+		var index := first_visible_shaft() + i
 		var slot := _slots[i]
-		slot.position = Vector2(float(i) * SHAFT_WIDTH, 0)
+		slot.position = Vector2(float(index) * SHAFT_WIDTH - _shaft_offset, 0)
 		var bg: ColorRect = slot.get_meta("bg")
 		bg.position = Vector2(0, _coords.floor_to_y(_coords.top_floor))
 		bg.size = Vector2(SHAFT_WIDTH - 4.0, _coords.content_height())
@@ -213,19 +230,22 @@ func _build_columns() -> void:
 			func() -> int: return _state.building.cars[index].current_row())
 		col.dispatch_requested.connect(_on_dispatch)
 		col.surge_requested.connect(_on_surge)
-		col.pan_requested.connect(scroll_board_by)
+		col.pan_requested.connect(pan_board_by)
 		_columns.append(col)
-	_scroll_index = clampi(_scroll_index, 0, max_scroll())
+	_shaft_offset = clampf(_shaft_offset, 0.0, _max_shaft_offset())
 	_position_columns()
 
 ## Paged-out columns are HIDDEN, not merely clipped. Godot's documentation says
 ## a clipped child receives no input either, but that was never verified on 4.7
 ## and hiding costs nothing.
 func _position_columns() -> void:
-	var last := _scroll_index + visible_shafts()
+	var window := _shaft_viewport.size.x
 	for i in range(_columns.size()):
-		_columns[i].position = Vector2(float(i - _scroll_index) * SHAFT_WIDTH, 0)
-		_columns[i].visible = i >= _scroll_index and i < last
+		var x := float(i) * SHAFT_WIDTH - _shaft_offset
+		_columns[i].position = Vector2(x, 0)
+		# Hidden rather than merely clipped, so a column scrolled out of the
+		# window cannot take a tap through the people strip beside it.
+		_columns[i].visible = x + SHAFT_WIDTH > 0.0 and x < window
 	_position_slots(_state.building.cars.size())
 
 func visible_shafts() -> int:
@@ -240,14 +260,14 @@ func max_scroll() -> int:
 	return maxi(slot_count() - visible_shafts(), 0)
 
 func first_visible_shaft() -> int:
-	return _scroll_index
+	return clampi(int(round(_shaft_offset / SHAFT_WIDTH)), 0, max_scroll())
 
+## The pager steps the same offset a whole column at a time.
 func scroll_by(delta: int) -> void:
-	_scroll_index = clampi(_scroll_index + delta, 0, max_scroll())
-	_position_columns()
+	scroll_shafts_by(float(delta) * SHAFT_WIDTH)
 
 func scroll_to_end() -> void:
-	_scroll_index = max_scroll()
+	_shaft_offset = _max_shaft_offset()
 	_position_columns()
 
 func _on_dispatch(shaft_index: int, floor_index: int) -> void:
@@ -298,16 +318,9 @@ func refresh() -> void:
 			_state.tenancy.is_moving_out(i),
 			_state.tenancy.move_out_ticks_left(i), price)
 		_rows[i].set_waiting(waiting)
-		_rows[i].set_crowd_colour(_worst_patience(waiting))
 	if _ghost_label != null:
 		var row_cost := _state.upgrades.cost_of("row")
 		_ghost_label.text = "+ BUILD FLOOR  $%s" % NumberFormat.compact(row_cost)
 		_ghost_label.add_theme_color_override("font_color",
 			Color("4ade80") if _state.economy.can_afford(row_cost) else Color("4a5563"))
 	_position_slots(_state.building.cars.size())
-
-func _worst_patience(waiting: Array) -> float:
-	var worst := 1.0
-	for p in waiting:
-		worst = minf(worst, p.patience_fraction())
-	return worst

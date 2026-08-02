@@ -539,3 +539,38 @@ func test_a_debug_board_never_writes_over_a_save() -> void:
 	root._saving_enabled = false
 	root.save_now()
 	assert_false(SaveStore.has_save(), "nothing written")
+
+func test_a_sideways_drag_pans_across_the_shafts() -> void:
+	# Eight shafts are wider than the screen just as a tall building is taller
+	# than it. Looking around is one gesture in both axes.
+	root.state.economy.accrue(1e12)
+	for i in range(5):
+		root.state.buy("shaft")
+	await wait_physics_frames(2)
+	view.scroll_shafts_by(-9999.0)          # back to the first shaft
+	await wait_physics_frames(2)
+	assert_eq(view.first_visible_shaft(), 0)
+	await do_drag(column_x(1), floor_centre_y(2), floor_centre_y(2))
+	# a purely horizontal drag: same y, different x
+	press_at(column_x(1), floor_centre_y(2))
+	await wait_physics_frames(2)
+	drag_to(column_x(1) - 200.0, floor_centre_y(2))
+	await wait_physics_frames(2)
+	release_at(column_x(1) - 200.0, floor_centre_y(2))
+	await wait_physics_frames(2)
+	assert_gt(view.first_visible_shaft(), 0, "the strip moved sideways")
+
+func test_a_sideways_pan_does_not_dispatch() -> void:
+	root.state.economy.accrue(1e12)
+	for i in range(5):
+		root.state.buy("shaft")
+	await wait_physics_frames(2)
+	var before: int = root.state.building.cars[0].target_row
+	press_at(column_x(0), floor_centre_y(3))
+	await wait_physics_frames(2)
+	drag_to(column_x(0) - 250.0, floor_centre_y(3))
+	await wait_physics_frames(2)
+	release_at(column_x(0) - 250.0, floor_centre_y(3))
+	await wait_physics_frames(2)
+	assert_eq(root.state.building.cars[0].target_row, before,
+		"looking sideways is not commanding either")
