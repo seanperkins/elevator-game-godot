@@ -141,3 +141,13 @@ func test_structural_upgrades_have_no_effect_value() -> void:
 	assert_false(up.has_effect("shaft"))
 	assert_false(up.has_effect("row"))
 	assert_false(up.is_zero_delta("shaft"), "never blocks a structural purchase")
+
+func test_a_fresh_car_matches_the_curve_at_level_zero() -> void:
+	# The starting car is never _sync_car'd -- it runs on ElevatorCar's own
+	# defaults -- so those defaults and the level-0 upgrade values have to agree.
+	# They did only by coincidence, which is the kind of thing that silently
+	# drifts the first time somebody tunes one of them.
+	var fresh := ElevatorCar.new(0)
+	assert_almost_eq(fresh.rows_per_tick, up.effect_value("speed", 0), 1e-9, "speed")
+	assert_eq(fresh.door_ticks, int(up.effect_value("doors", 0)), "doors")
+	assert_eq(fresh.capacity, int(up.effect_value("capacity", 0)), "capacity")

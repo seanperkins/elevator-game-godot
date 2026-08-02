@@ -13,6 +13,10 @@ const START_SEED := 20260802
 const HUD_HEIGHT := 96.0
 const TOUCH_MIN := 88.0          # 48pt at the 0.546 iPhone scale
 
+## Insets the hardware has already claimed -- Dynamic Island, home indicator,
+## rounded corners. Zero on desktop and on the web build in a browser tab.
+var _safe: Vector4 = Vector4.ZERO
+
 var state: GameState
 var _view: BuildingView
 var _management: ManagementView
@@ -26,6 +30,7 @@ var _pager_label: Label
 var _last_shape := Vector2i.ZERO
 
 func _ready() -> void:
+	_safe = SafeArea.current(size)
 	var rows := START_ROWS
 	var shafts := START_SHAFTS
 	var override := _debug_board_override()
@@ -42,17 +47,18 @@ func _ready() -> void:
 
 	_cash_label = Label.new()
 	_cash_label.add_theme_font_size_override("font_size", 28)
-	_cash_label.position = Vector2(16, 10)
+	_cash_label.position = Vector2(16 + _safe.x, 10 + _safe.y)
 	add_child(_cash_label)
 
 	_rate_label = Label.new()
 	_rate_label.add_theme_font_size_override("font_size", 16)
-	_rate_label.position = Vector2(16, 48)
+	_rate_label.position = Vector2(16 + _safe.x, 48 + _safe.y)
 	add_child(_rate_label)
 
 	_view = BuildingView.new()
-	_view.position = Vector2(0, HUD_HEIGHT)
-	_view.size = Vector2(size.x, size.y - HUD_HEIGHT)
+	_view.position = Vector2(_safe.x, HUD_HEIGHT + _safe.y)
+	_view.size = Vector2(size.x - _safe.x - _safe.z,
+		size.y - HUD_HEIGHT - _safe.y - _safe.w)
 	add_child(_view)
 	_view.bind(state)
 	_view.floor_purchase_requested.connect(func() -> void: state.buy("row"))
@@ -60,8 +66,9 @@ func _ready() -> void:
 	_view.relet_requested.connect(_on_relet_requested)
 
 	_management = ManagementView.new()
-	_management.position = Vector2(0, HUD_HEIGHT)
-	_management.size = Vector2(size.x, size.y - HUD_HEIGHT)
+	_management.position = Vector2(_safe.x, HUD_HEIGHT + _safe.y)
+	_management.size = Vector2(size.x - _safe.x - _safe.z,
+		size.y - HUD_HEIGHT - _safe.y - _safe.w)
 	_management.visible = false
 	add_child(_management)
 	_management.bind(state)
@@ -75,13 +82,13 @@ func _ready() -> void:
 	# Paging the shaft strip is a tap, never a swipe: the dispatch drag is
 	# vertical and arcs sideways by more than half a column (§2.1), so any
 	# horizontal read on the board itself would steal the primary verb.
-	_prev_shaft = _pager_button("<", 236.0, func() -> void: _view.scroll_by(-1))
-	_next_shaft = _pager_button(">", 420.0, func() -> void: _view.scroll_by(1))
+	_prev_shaft = _pager_button("<", 236.0 + _safe.x, func() -> void: _view.scroll_by(-1))
+	_next_shaft = _pager_button(">", 420.0 + _safe.x, func() -> void: _view.scroll_by(1))
 
 	_pager_label = Label.new()
 	_pager_label.add_theme_font_size_override("font_size", 14)
 	_pager_label.add_theme_color_override("font_color", Color("7c8899"))
-	_pager_label.position = Vector2(328, 38)
+	_pager_label.position = Vector2(328 + _safe.x, 38 + _safe.y)
 	_pager_label.size = Vector2(88, 20)
 	_pager_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_pager_label)
@@ -93,7 +100,7 @@ func _ready() -> void:
 	_view_button.text = "MANAGE"
 	_view_button.add_theme_font_size_override("font_size", 20)
 	_view_button.size = Vector2(200, TOUCH_MIN)
-	_view_button.position = Vector2(size.x - 208, 4)
+	_view_button.position = Vector2(size.x - 208 - _safe.z, 4 + _safe.y)
 	_view_button.pressed.connect(_on_toggle_view)
 	add_child(_view_button)
 
@@ -125,7 +132,7 @@ func _pager_button(label: String, x: float, on_press: Callable) -> Button:
 	b.text = label
 	b.add_theme_font_size_override("font_size", 24)
 	b.size = Vector2(TOUCH_MIN, TOUCH_MIN)
-	b.position = Vector2(x, 4)
+	b.position = Vector2(x, 4 + _safe.y)
 	b.pressed.connect(on_press)
 	b.pressed.connect(_refresh_pager)
 	add_child(b)

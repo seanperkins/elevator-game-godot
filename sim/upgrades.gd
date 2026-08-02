@@ -7,7 +7,7 @@ extends RefCounted
 
 const DOOR_TICKS_BASE := 20
 const DOOR_TICKS_MIN := 4
-const SPEED_BASE := 0.1
+const SPEED_BASE := 0.04      # must match ElevatorCar.rows_per_tick
 const CAPACITY_BASE := 4
 const SPRING_BASE := 4.0        # a launched car travels four times as fast
 

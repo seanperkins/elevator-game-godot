@@ -13,7 +13,14 @@ var state: int = State.IDLE
 var riders: Array[Passenger] = []
 
 var capacity: int = 4
-var rows_per_tick: float = 0.1
+## 0.04 rows per tick is 0.8 floors a second at 20Hz -- about 1.25s a floor.
+## It was 0.1, i.e. two floors a second, which read as a lift on a wire rather
+## than one carrying people, and left the speed upgrade with nothing to buy.
+##
+## This MUST match Upgrades.SPEED_BASE: the starting car is never _sync_car'd,
+## so it runs on this default while every later car runs on the upgrade curve.
+## A test pins the two together.
+var rows_per_tick: float = 0.04
 var door_ticks: int = 20
 
 ## The lobby launch spring: a mechanical assist that throws the car from the

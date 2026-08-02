@@ -23,6 +23,12 @@ const SHAFT_AREA_X := FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH   # 240
 const SHAFT_WIDTH := 160.0
 const RELET_SPAN := SHAFT_AREA_X # the vacant-floor tap reaches the whole gutter+strip
 
+## The ghost floor is a fixed band, not a full row. As a row it took 1/7th of a
+## six-floor board -- a fifth of the screen to say "+ BUILD FLOOR" -- and every
+## real floor paid for it. 88 units is 48pt at the iPhone scale, so it still
+## clears the 44pt touch floor with room to spare, and the floors keep the rest.
+const GHOST_HEIGHT := 88.0
+
 var _state: GameState
 var _coords: BoardCoords
 var _ghost_height: float = 0.0
@@ -63,13 +69,12 @@ func rebuild() -> void:
 
 func _build_all() -> void:
 	var floors := _state.building.row_count
-	var ghost := 1 if floors < Building.MAX_ROWS else 0
-	var h := size.y / float(floors + ghost)
-	_ghost_height = h * float(ghost)
+	_ghost_height = GHOST_HEIGHT if floors < Building.MAX_ROWS else 0.0
+	var h := (size.y - _ghost_height) / float(floors)
 	_coords = BoardCoords.new(floors, h)
 
 	_build_rows()
-	if ghost == 1:
+	if _ghost_height > 0.0:
 		_build_ghost_floor()
 
 	# The viewport spans the FLOORS only. That frees the ghost band for its own
