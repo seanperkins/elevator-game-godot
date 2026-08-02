@@ -9,6 +9,7 @@ const SPRITE_PITCH := 14.0
 const RIGHT_MARGIN := 6.0
 
 var row_index: int = 0
+var individual_budget: int = MAX_INDIVIDUALS
 
 var _label: Label
 var _crowd: Label
@@ -40,12 +41,17 @@ func set_row(index: int) -> void:
 	row_index = index
 	_label.text = str(index)
 
+## How many sprites the board can spare room for right now. The columns grow
+## rightward as shafts are bought and eventually take the whole width.
+func set_individual_budget(n: int) -> void:
+	individual_budget = clampi(n, 0, MAX_INDIVIDUALS)
+
 ## Individuals above the cap collapse into a count, so the worst case stays
 ## bounded no matter how badly the player is doing. Sprites are pooled per row
 ## and laid out from the right edge inward, which keeps them clear of the
 ## shaft columns while the building is still narrow.
 func set_waiting(passengers: Array) -> void:
-	var shown: int = mini(passengers.size(), MAX_INDIVIDUALS)
+	var shown: int = mini(passengers.size(), individual_budget)
 	while _sprites.size() < shown:
 		var s := PassengerSprite.new()
 		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -60,12 +66,14 @@ func set_waiting(passengers: Array) -> void:
 			_sprites[i].show_for(p.patience_fraction())
 		else:
 			_sprites[i].recycle()
-	var overflow: int = passengers.size() - MAX_INDIVIDUALS
-	_crowd.text = "" if overflow <= 0 else "+%d" % overflow
-	# Immediately left of the run it counts, not parked in the row-index gutter.
+	# The count is authoritative and always shown: at the shaft cap there is no
+	# room left for sprites at all, and "how many are waiting up there" is the
+	# whole basis of a dispatch decision.
+	var total: int = passengers.size()
+	_crowd.text = "" if total <= 0 else str(total)
 	_crowd.position = Vector2(
-		size.x - RIGHT_MARGIN - float(shown) * SPRITE_PITCH - 34.0,
-		(size.y - 16.0) * 0.5)
+		size.x - RIGHT_MARGIN - float(shown) * SPRITE_PITCH - 24.0,
+		(size.y - 16.0) * 0.5) if shown > 0 else Vector2(26, 3)
 
 func _build_tenant_widgets() -> void:
 	_bar = ColorRect.new()
