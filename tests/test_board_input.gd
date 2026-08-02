@@ -52,9 +52,16 @@ func after_each() -> void:
 	root = null
 	view = null
 
-## Board-frame y of the centre of a floor's band.
+## Board-frame y of the centre of a floor's band. The ghost band no longer
+## offsets this: the board scrolls, so the ghost row rides the same transform as
+## every floor and there is one frame again.
 func floor_centre_y(f: int) -> float:
-	return root.HUD_HEIGHT + view._ghost_height + view.coords().band_centre_y(f)
+	return root.HUD_HEIGHT + view.coords().band_centre_y(f)
+
+## The "+ BUILD FLOOR" band sits one row above the top floor and scrolls with it.
+func ghost_centre_y() -> float:
+	return root.HUD_HEIGHT + view.coords().floor_to_y(view.coords().top_floor) \
+		- BuildingView.ROW_HEIGHT * 0.5
 
 func column_x(slot: int) -> float:
 	return BuildingView.SHAFT_AREA_X + float(slot) * BuildingView.SHAFT_WIDTH + 40.0
@@ -108,6 +115,8 @@ func test_the_board_under_test_is_the_board_that_ships() -> void:
 	# and a no-op look identical from the sim's side.
 	assert_eq(root.size, BOARD_SIZE, "720x1280, not GUT's container")
 	assert_eq(view.visible_shafts(), 3, "three columns on a 160-unit pitch")
+	assert_almost_eq(view.coords().row_height, BuildingView.ROW_HEIGHT, 0.01,
+		"rows are a fixed height now, not squeezed to fit")
 	var col: ShaftColumn = view._columns[0]
 	assert_true(col.get_global_rect().has_point(
 		Vector2(column_x(0), floor_centre_y(1))),
@@ -162,14 +171,14 @@ func test_the_rail_marker_agrees_with_the_selected_floor() -> void:
 func test_a_tap_in_the_ghost_band_buys_a_floor() -> void:
 	root.state.economy.accrue(1e6)
 	var before: int = root.state.building.row_count
-	await do_tap(400.0, root.HUD_HEIGHT + view._ghost_height * 0.5)
+	await do_tap(400.0, ghost_centre_y())
 	assert_eq(root.state.building.row_count, before + 1,
 		"the ghost band is tappable at x=400, where the columns used to be")
 
 func test_a_tap_in_the_ghost_band_does_not_dispatch() -> void:
 	root.state.economy.accrue(1e6)
 	var before: int = root.state.building.cars[0].target_row
-	await do_tap(400.0, root.HUD_HEIGHT + view._ghost_height * 0.5)
+	await do_tap(400.0, ghost_centre_y())
 	assert_eq(root.state.building.cars[0].target_row, before,
 		"a floor purchase is not a dispatch: the columns stop below the band")
 
@@ -398,7 +407,7 @@ func thumb_tap(x: float, y: float) -> void:
 func test_one_thumb_tap_buys_exactly_one_floor() -> void:
 	root.state.economy.accrue(1e9)
 	var before: int = root.state.building.row_count
-	await thumb_tap(400.0, root.HUD_HEIGHT + view._ghost_height * 0.5)
+	await thumb_tap(400.0, ghost_centre_y())
 	assert_eq(root.state.building.row_count, before + 1,
 		"one thumb, one floor -- touch emulation delivers the tap twice")
 

@@ -86,5 +86,11 @@ func is_dragging() -> bool:
 ## of the screen. The rule stays symmetric because asymmetry would be a special
 ## case with no benefit.
 func _is_beyond_edge(y: float) -> bool:
+	# Asked of the transform rather than assumed. The column used to span exactly
+	# floor_count * h from y = 0; it no longer does -- a short building stands on
+	# the ground with sky above it, and a tall one scrolls -- so hard-coding that
+	# extent read every drag on the lobby as a drag off the board.
 	var h := _coords.row_height
-	return y < -h * 0.5 or y > h * (float(_coords.floor_count) + 0.5)
+	var top := _coords.floor_to_y(_coords.top_floor)
+	var bottom := _coords.floor_to_y(_coords.bottom_floor) + h
+	return y < top - h * 0.5 or y > bottom + h * 0.5

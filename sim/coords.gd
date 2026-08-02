@@ -73,9 +73,17 @@ func scroll_to(offset: float) -> void:
 func scroll_by(delta: float) -> void:
 	scroll_to(scroll_offset + delta)
 
+## A building STANDS ON THE GROUND. When it is shorter than the window, the
+## slack goes above it -- the lobby stays at the bottom of the screen and the
+## empty space is sky, which is also where the "+ BUILD FLOOR" band lives. Left
+## unhandled, a six-floor tower hangs from the top of the board with a void
+## beneath it and the ghost row off-screen entirely.
+func _ground_offset() -> float:
+	return maxf(_viewport_height - content_height(), 0.0)
+
 ## Top edge of floor f's band, in the scrolled window.
 func floor_to_y(f: int) -> float:
-	return _unscrolled_y(f) - scroll_offset
+	return _unscrolled_y(f) + _ground_offset() - scroll_offset
 
 func band_centre_y(f: int) -> float:
 	return floor_to_y(f) + row_height * 0.5
@@ -83,12 +91,13 @@ func band_centre_y(f: int) -> float:
 ## Continuous form, for a car at a fractional floor like 2.4 -- or -1.5, on the
 ## way into the basement. Agrees with floor_to_y bit-for-bit at integers.
 func car_y(position_row: float) -> float:
-	return (float(top_floor) - position_row) * row_height - scroll_offset
+	return (float(top_floor) - position_row) * row_height \
+		+ _ground_offset() - scroll_offset
 
 ## The floor whose band contains y, by comparison against the same edges
 ## floor_to_y returns, so the round trip is exact by construction.
 func y_to_floor(y: float) -> int:
-	var local := y + scroll_offset
+	var local := y + scroll_offset - _ground_offset()
 	var k := 0
 	while k < floor_count - 1 and local >= _edges[k + 1]:
 		k += 1

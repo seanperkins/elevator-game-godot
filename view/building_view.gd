@@ -4,10 +4,15 @@ extends Control
 ## Renders the sim and routes input back as explicit commands. Owns no
 ## coordinate arithmetic: every floor<->y conversion goes through BoardCoords.
 ##
-## Frames: BoardCoords is COLUMN-LOCAL (y=0 is the top floor). This view works
-## in the BOARD frame, which is offset downward by the ghost band --
-## board_y = ghost_height + local_y. A naive use of the local transform here
-## draws the top floor inside the ghost band and leaves the bottom band empty.
+## The board SCROLLS and its rows are a fixed height, so legibility no longer
+## depends on how much has been built. BoardCoords carries the scroll offset,
+## which means this view and the columns share one frame again -- there is no
+## ghost-band offset to add, because the ghost row now scrolls with the building
+## like everything else.
+##
+## Columns do NOT scroll: they are fixed full-height touch strips, and what moves
+## inside them is the car, positioned by the same scrolled transform. That is why
+## a column's local y can be handed straight to y_to_floor.
 
 signal floor_purchase_requested()
 signal shaft_purchase_requested()
@@ -23,15 +28,13 @@ const SHAFT_AREA_X := FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH   # 240
 const SHAFT_WIDTH := 160.0
 const RELET_SPAN := SHAFT_AREA_X # the vacant-floor tap reaches the whole gutter+strip
 
-## The ghost floor is a fixed band, not a full row. As a row it took 1/7th of a
-## six-floor board -- a fifth of the screen to say "+ BUILD FLOOR" -- and every
-## real floor paid for it. 88 units is 48pt at the iPhone scale, so it still
-## clears the 44pt touch floor with room to spare, and the floors keep the rest.
-const GHOST_HEIGHT := 88.0
+## Every row, always. 88 units is 48pt at the 0.546 iPhone scale -- the same
+## touch floor every other control uses -- and it no longer shrinks as the
+## building grows, because the board scrolls instead of squeezing.
+const ROW_HEIGHT := 88.0
 
 var _state: GameState
 var _coords: BoardCoords
-var _ghost_height: float = 0.0
 var _scroll_index: int = 0
 
 var _shaft_viewport: Control
@@ -46,6 +49,9 @@ func coords() -> BoardCoords:
 
 func bind(state: GameState) -> void:
 	_state = state
+	# The board scrolls, so rows exist above and below the window. Without this
+	# they draw straight over the HUD.
+	clip_contents = true
 	_shaft_viewport = Control.new()
 	_shaft_viewport.clip_contents = true
 	add_child(_shaft_viewport)
@@ -68,26 +74,47 @@ func rebuild() -> void:
 	move_child(_shaft_viewport, get_child_count() - 1)
 
 func _build_all() -> void:
-	var floors := _state.building.row_count
-	_ghost_height = GHOST_HEIGHT if floors < Building.MAX_ROWS else 0.0
-	var h := (size.y - _ghost_height) / float(floors)
-	_coords = BoardCoords.new(floors, h)
+	var previous := _coords.scroll_offset if _coords != null else 0.0
+	_coords = BoardCoords.fixed(0, _state.building.row_count - 1, ROW_HEIGHT)
+	_coords.set_viewport_height(size.y)
+	# Buying a floor must not throw away where the player was looking.
+	_coords.scroll_to(previous)
 
 	_build_rows()
-	if _ghost_height > 0.0:
+	if _state.building.row_count < Building.MAX_ROWS:
 		_build_ghost_floor()
 
-	# The viewport spans the FLOORS only. That frees the ghost band for its own
-	# tap and keeps Gesture's cancel edge off the lobby's band.
-	_shaft_viewport.position = Vector2(SHAFT_AREA_X, _ghost_height)
-	_shaft_viewport.size = Vector2(size.x - SHAFT_AREA_X, size.y - _ghost_height)
+	_shaft_viewport.position = Vector2(SHAFT_AREA_X, 0.0)
+	_shaft_viewport.size = Vector2(size.x - SHAFT_AREA_X, size.y)
 	_build_slots()
 	_build_columns()
+	# The ghost band sits in the sky above the roof, where the full-height
+	# columns also reach. It is added last so a tap there buys a floor rather
+	# than dispatching a car it happens to overlap.
+	if _ghost_row != null:
+		move_child(_ghost_row, get_child_count() - 1)
+	_reposition_floors()
+
+## Scrolls the board and moves everything that rides on the offset. Called on
+## every scroll and every rebuild, so there is one place that knows what moves.
+func _reposition_floors() -> void:
+	for i in range(_rows.size()):
+		_rows[i].position = Vector2(0, _coords.floor_to_y(i))
+	if _ghost_row != null:
+		_ghost_row.position = Vector2(0,
+			_coords.floor_to_y(_coords.top_floor) - ROW_HEIGHT)
+
+func scroll_board_by(delta: float) -> void:
+	_coords.scroll_by(delta)
+	_reposition_floors()
+
+func board_scroll_offset() -> float:
+	return _coords.scroll_offset
 
 func _build_rows() -> void:
 	for i in range(_state.building.row_count):
 		var row := FloorRow.new()
-		row.position = Vector2(0, _ghost_height + _coords.floor_to_y(i))
+		row.position = Vector2(0, _coords.floor_to_y(i))
 		row.size = Vector2(size.x, _coords.row_height)
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(row)
@@ -98,8 +125,7 @@ func _build_rows() -> void:
 ## floor is always visibly there; at the cap the term simply leaves the divisor.
 func _build_ghost_floor() -> void:
 	_ghost_row = Control.new()
-	_ghost_row.position = Vector2.ZERO
-	_ghost_row.size = Vector2(size.x, _ghost_height)
+	_ghost_row.size = Vector2(size.x, ROW_HEIGHT)
 	add_child(_ghost_row)
 
 	var bg := ColorRect.new()
@@ -110,7 +136,7 @@ func _build_ghost_floor() -> void:
 
 	var label := Label.new()
 	label.add_theme_font_size_override("font_size", 15)
-	label.position = Vector2(FloorRow.LABEL_X, (_ghost_height - 20.0) * 0.5)
+	label.position = Vector2(FloorRow.LABEL_X, (ROW_HEIGHT - 20.0) * 0.5)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ghost_row.add_child(label)
 	_ghost_label = label
@@ -132,13 +158,13 @@ func _build_slots() -> void:
 
 		var bg := ColorRect.new()
 		bg.color = Color("151b23")
-		bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(bg)
+		slot.set_meta("bg", bg)
 
 		var label := Label.new()
 		label.add_theme_font_size_override("font_size", 12)
-		label.position = Vector2(6, 8)
+		label.position = Vector2(6, 8)   # repositioned with the shaft each frame
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(label)
 
@@ -153,7 +179,11 @@ func _position_slots(owned: int) -> void:
 		var index := _scroll_index + i
 		var slot := _slots[i]
 		slot.position = Vector2(float(i) * SHAFT_WIDTH, 0)
+		var bg: ColorRect = slot.get_meta("bg")
+		bg.position = Vector2(0, _coords.floor_to_y(_coords.top_floor))
+		bg.size = Vector2(SHAFT_WIDTH - 4.0, _coords.content_height())
 		var label: Label = slot.get_meta("label")
+		label.position = Vector2(6, bg.position.y + 8.0)
 		if index == buyable:
 			slot.mouse_filter = Control.MOUSE_FILTER_STOP
 			label.text = "+ SHAFT\n$%s" % NumberFormat.compact(
@@ -233,9 +263,9 @@ func _gui_input(event: InputEvent) -> void:
 	if not _is_tap(event):
 		return
 	var local: Vector2 = event.position
-	if local.x >= RELET_SPAN or local.y < _ghost_height:
+	if local.x >= RELET_SPAN:
 		return
-	var floor_index := _coords.y_to_floor(local.y - _ghost_height)
+	var floor_index := _coords.y_to_floor(local.y)
 	if _state.tenancy.is_vacant(floor_index):
 		relet_requested.emit(floor_index)
 
@@ -247,6 +277,7 @@ func _is_tap(event: InputEvent) -> bool:
 func refresh() -> void:
 	if _state == null:
 		return
+	_reposition_floors()
 	for i in range(_columns.size()):
 		var car: ElevatorCar = _state.building.cars[i]
 		_columns[i].set_car_position(car.position_row)

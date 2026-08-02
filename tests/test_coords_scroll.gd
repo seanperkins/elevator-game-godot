@@ -103,3 +103,36 @@ func test_y_above_the_building_clamps_to_the_top_floor() -> void:
 
 func test_y_below_the_building_clamps_to_the_bottom_floor() -> void:
 	assert_eq(tower(5, -3).y_to_floor(9999.0), -3)
+
+# --- a building stands on the ground ---------------------------------------
+
+func test_a_short_building_sits_at_the_bottom_of_the_screen() -> void:
+	# Left unhandled, a six-floor tower hangs from the top of the board with a
+	# void beneath it -- and the "+ BUILD FLOOR" band off-screen above.
+	var c := tower(5)
+	c.set_viewport_height(1184.0)
+	assert_almost_eq(c.floor_to_y(0) + H, 1184.0, 1e-9,
+		"the lobby's bottom edge is the bottom of the window")
+
+func test_the_slack_goes_above_the_building_not_below_it() -> void:
+	var c := tower(5)
+	c.set_viewport_height(1184.0)
+	assert_gt(c.floor_to_y(5), 0.0, "there is sky above the top floor")
+
+func test_a_building_taller_than_the_window_starts_at_the_roof() -> void:
+	var c := tower(39)
+	c.set_viewport_height(1184.0)
+	assert_almost_eq(c.floor_to_y(39), 0.0, 1e-9, "no slack to distribute")
+
+func test_the_round_trip_survives_the_ground_offset() -> void:
+	var c := tower(5)
+	c.set_viewport_height(1184.0)
+	for f in range(6):
+		assert_eq(c.y_to_floor(c.floor_to_y(f)), f, "floor %d" % f)
+		assert_eq(c.y_to_floor(c.band_centre_y(f)), f, "floor %d centre" % f)
+
+func test_the_car_still_agrees_with_the_row_on_the_ground() -> void:
+	var c := tower(5)
+	c.set_viewport_height(1184.0)
+	for f in range(6):
+		assert_eq(c.car_y(float(f)), c.floor_to_y(f), "floor %d" % f)

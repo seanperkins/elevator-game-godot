@@ -64,6 +64,7 @@ var shaft_index: int = 0
 var _gesture: Gesture
 var _coords: BoardCoords
 var _selector: FloorSelector
+var _shaft_bg: ColorRect
 var _car_rect: ColorRect
 var _car_label: Label
 var _door_left: ColorRect
@@ -79,11 +80,14 @@ func setup(index: int, coords: BoardCoords, car_floor_provider: Callable) -> voi
 	_car_floor_provider = car_floor_provider
 	_gesture = Gesture.new(coords)
 
-	var shaft_bg := ColorRect.new()
-	shaft_bg.color = Color("1b2430")
-	shaft_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shaft_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(shaft_bg)
+	# The column CONTROL spans the whole board so its local y is board y and can
+	# be handed straight to y_to_floor -- one frame, no offset arithmetic. What
+	# is DRAWN is only the building: a shaft that runs up through the sky above
+	# the roof reads as scaffolding rather than a lift.
+	_shaft_bg = ColorRect.new()
+	_shaft_bg.color = Color("1b2430")
+	_shaft_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_shaft_bg)
 
 	_car_rect = ColorRect.new()
 	_car_rect.color = Color("4cc2ff")
@@ -136,6 +140,8 @@ func door_width() -> float:
 	return _door_left.size.x if _door_left != null else 0.0
 
 func set_car_position(position_row: float) -> void:
+	_shaft_bg.position = Vector2(0, _coords.floor_to_y(_coords.top_floor))
+	_shaft_bg.size = Vector2(size.x, _coords.content_height())
 	_car_rect.position = Vector2(3, _coords.car_y(position_row) + 2.0)
 	_car_rect.size = Vector2(size.x - 6.0, _coords.row_height - 4.0)
 	_car_label.size = _car_rect.size
