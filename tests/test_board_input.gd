@@ -34,6 +34,9 @@ var root: Control
 var view: BuildingView
 
 func before_each() -> void:
+	# game_root loads a save on start, so a real one left by playing the game
+	# would silently become the fixture for every test in this file.
+	SaveStore.clear()
 	var layer := CanvasLayer.new()
 	layer.layer = GUT_GUI_LAYER + 1
 	add_child_autofree(layer)
@@ -478,3 +481,30 @@ func test_a_shaft_bought_on_the_board_gets_a_toggle() -> void:
 	await open_management()
 	assert_gte(root._management._shaft_buttons.size(), 2,
 		"the new shaft turns up in the dispatch list")
+
+# --- persistence, end to end -----------------------------------------------
+
+func test_the_building_survives_a_restart() -> void:
+	# The whole point: quitting must not cost you what you built.
+	root.state.economy.accrue(1e6)
+	assert_true(root.state.buy("row"))
+	assert_true(root.state.buy("shaft"))
+	var floors: int = root.state.building.row_count
+	var shafts: int = root.state.building.cars.size()
+	var cash: float = root.state.economy.cash
+	root.save_now()
+
+	var reloaded := SaveStore.load_state()
+	assert_not_null(reloaded, "a save was written")
+	assert_eq(reloaded.building.row_count, floors)
+	assert_eq(reloaded.building.cars.size(), shafts)
+	assert_almost_eq(reloaded.economy.cash, cash, 1e-6)
+
+func test_a_debug_board_never_writes_over_a_save() -> void:
+	# --board is for screenshots. Letting it save would mean taking one costs
+	# somebody their building.
+	SaveStore.clear()
+	root.state.economy.accrue(1e6)
+	root._saving_enabled = false
+	root.save_now()
+	assert_false(SaveStore.has_save(), "nothing written")

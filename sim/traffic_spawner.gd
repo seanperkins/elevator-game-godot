@@ -12,8 +12,16 @@ var base_fare: float = 4.0
 
 var _rng := RandomNumberGenerator.new()
 
+var _seed: int = 0
+
 func _init(p_seed: int) -> void:
+	_seed = p_seed
 	_rng.seed = p_seed
+
+## The seed a save has to record: traffic is deterministic from it, so a reload
+## that forgot it would quietly become a different building.
+func seed_value() -> int:
+	return _seed
 
 func load_curve(path: String) -> bool:
 	if not FileAccess.file_exists(path):

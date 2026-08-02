@@ -42,6 +42,14 @@ func load_defs(path: String) -> bool:
 		_levels[id] = 0
 	return true
 
+## Restores levels from a save WITHOUT applying effects. The car values are
+## saved beside them and are the authority; re-applying here would double the
+## structural upgrades and build the building a second time.
+func restore_levels(levels: Dictionary) -> void:
+	for id in levels.keys():
+		if _defs.has(id):
+			_levels[id] = maxi(int(levels[id]), 0)
+
 func ids() -> PackedStringArray:
 	var out := PackedStringArray()
 	for id in _defs.keys():

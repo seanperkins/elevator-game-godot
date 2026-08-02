@@ -17,6 +17,12 @@ const TOUCH_MIN := 88.0          # 48pt at the 0.546 iPhone scale
 ## rounded corners. Zero on desktop and on the web build in a browser tab.
 var _safe: Vector4 = Vector4.ZERO
 
+## Real seconds between autosaves. Frequent enough that a crash costs a few
+## seconds, rare enough that a phone is not writing JSON every frame.
+const AUTOSAVE_SECONDS := 10.0
+var _since_save := 0.0
+var _saving_enabled := true
+
 var state: GameState
 var _view: BuildingView
 var _management: ManagementView
@@ -37,7 +43,15 @@ func _ready() -> void:
 	if override != Vector2i.ZERO:
 		rows = override.x
 		shafts = override.y
-	state = GameState.new(rows, shafts, START_SEED)
+	# A debug board is a throwaway: it neither loads a save nor overwrites one,
+	# so taking a screenshot cannot cost somebody their building.
+	if override != Vector2i.ZERO:
+		_saving_enabled = false
+		state = GameState.new(rows, shafts, START_SEED)
+	else:
+		state = SaveStore.load_state()
+		if state == null:
+			state = GameState.new(rows, shafts, START_SEED)
 
 	var bg := ColorRect.new()
 	bg.color = Color("101418")
@@ -176,7 +190,24 @@ func _refresh_pager() -> void:
 	_next_shaft.disabled = first >= _view.max_scroll()
 	_pager_label.text = "shafts %d-%d of %d" % [first + 1, maxi(last, first + 1), total]
 
+## Saving on a timer AND on the way out. iOS suspends an app without warning,
+## and NOTIFICATION_APPLICATION_PAUSED is the last moment anything runs.
+func _notification(what: int) -> void:
+	match what:
+		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST, \
+		NOTIFICATION_WM_GO_BACK_REQUEST, NOTIFICATION_EXIT_TREE:
+			save_now()
+
+func save_now() -> void:
+	if _saving_enabled and state != null:
+		SaveStore.save(state)
+
 func _physics_process(delta: float) -> void:
+	_since_save += delta
+	if _since_save >= AUTOSAVE_SECONDS:
+		_since_save = 0.0
+		save_now()
+
 	var ticks := state.clock.take_ticks(delta)
 	if ticks > 0:
 		state.tick(ticks)

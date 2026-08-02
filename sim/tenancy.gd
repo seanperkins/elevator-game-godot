@@ -41,6 +41,15 @@ func add_row() -> void:
 func rows() -> int:
 	return _satisfaction.size()
 
+## Restores one row from a save. Satisfaction scales rent and a vacancy is a
+## debt, so neither can be inferred from anything else in the file.
+func restore_row(row: int, satisfaction: float, vacant: bool, move_out_left: int) -> void:
+	if not _valid(row):
+		return
+	_satisfaction[row] = clampf(satisfaction, 0.0, 1.0)
+	_vacant[row] = vacant
+	_move_out_left[row] = maxi(move_out_left, 0)
+
 func note_delivery(row: int) -> void:
 	if not _valid(row) or _vacant[row]:
 		return
