@@ -1,3 +1,9 @@
+You are The Executor. Scrutinize implementation-level correctness: shell/exit-code handling, race conditions, file I/O, error propagation, edge cases, and concrete failure modes. Be specific and cite exact lines/commands. Flag what will actually break at runtime.
+
+READ-ONLY REVIEW — HARD RULE: You are reviewing a implementation plan, nothing more. Do NOT create, edit, write, move, rename, or delete any file, and do NOT run any command that mutates the filesystem or repository (no patches, no fixes applied in place). You have read-only access only. Output your review as text in your reply — that text is the entire deliverable. Any write attempt is denied by the sandbox and only wastes the round.
+
+Review this implementation plan:
+
 # Elevator Incremental — Design Spec
 
 **Date:** 2026-08-01 (revised 2026-08-02, rounds 2 and 3 of multi-model review)
@@ -40,8 +46,8 @@ double-tap timing (which also collides with mobile Safari's zoom heuristics).
 
 The motivating geometry: at the §3 ceiling of 40 rows in a 1280-unit viewport a
 row is exactly 32 units, and `canvas_items`+`expand` at a 720x1280 base scales by
-min(393/720, 852/1280) = 0.546 on an iPhone 15 — so a row is roughly **17.5 pt**, and less once the HUD
-takes its share. That is 2.5–3x under Apple's ~44 pt
+about 0.51 on an iPhone 15 — so a row is roughly **16.5 pt**, and under 14 pt on
+an iPhone SE or once the HUD takes its share. That is 2.5–3x under Apple's ~44 pt
 floor, not marginally under it. Any design requiring a tap on a car, or verb
 disambiguation by tap rate, degrades exactly when rows are thinnest — which is
 when surge is supposed to matter most.
@@ -52,21 +58,13 @@ with detents at each row, and a magnified row label follows the thumb, offset
 above it so the finger does not occlude the choice. Drag to a row; release to
 dispatch.
 
-**The mapping is absolute: detent *i* sits at row *i*'s screen position.** Any row
-is one short drag away, and the cancel gesture stays unambiguous. A *relative*
-mapping — finger displacement driving detent displacement — would make a lobby-to-
-top dispatch require 39 x 32 = 1,248 units of travel on a 1,280-unit board, which
-is physically unreachable, and every long dispatch would run into the board edge
-and trigger cancel.
-
-**Release-in-place is surge because the drag threshold was not crossed**, not
-because of where the rail was anchored. That makes the threshold load-bearing:
-it must be **strictly under 16 units** (half a row), or dispatching to the row your
-thumb is already on — the most common intent, "there is a passenger *there*" —
-becomes unreachable. §13 owns the exact value under that constraint.
-
-The rail highlights the car's current row on appearance, so the player can see what
-a no-op would be; that is presentation, not behaviour.
+**The rail's initial detent is the car's current row, not the pressed row.**
+This matters: if the initial detent were the press point, then "press on row R and
+release" would be indistinguishable from a tap, so dispatching a car to the row
+your thumb is already on — the most common intent, "there is a passenger *there*"
+— would require dragging away and back. Anchoring at the car's current row makes
+release-in-place a genuine no-op, so classifying it as surge is unambiguous, and
+dispatching to any row including the pressed one is always a real drag.
 
 **The pointer is captured on drag-start.** Horizontal position is ignored until
 release. A vertical thumb drag traces an arc that routinely exceeds ±22 pt — half
@@ -93,15 +91,13 @@ Two UI constants bound the board, and both are design inputs rather than
 incidental limits:
 
 - **40 rows maximum.** The board never scrolls.
-- **8 shafts maximum.** At a 720-unit base width, 44 pt is 44/0.546 = 80.6 units on
-  an iPhone 15, so the screen fits 720/80.6 = 8.9 columns edge-to-edge and
-  realistically **6–7**
+- **8 shafts maximum.** At a 720-unit base width, 44 pt is about 85 units on an
+  iPhone 15, so the screen fits 8 columns edge-to-edge and realistically **6–7**
   once a row-label gutter and margins exist. Because §2.1's touch guarantee is
   stated in pt, shaft count is capped by it. Shaft purchases therefore stop at the
-  cap; capacity growth past that point comes from **cars per shaft** — itself
-  capped, for the same node-budget reason (§8.5) — plus speed, capacity, and door
-  time, which the express-shaft and zoning mechanics (§6, §5.4) support without
-  needing more columns. A test asserts shaft purchases stop at the cap.
+  cap; capacity growth past that point comes from **cars per shaft**, speed,
+  capacity, and door time, which the express-shaft and zoning mechanics (§6, §5.4)
+  support without needing more columns.
 
 A row always means "one stop," but what a stop *is* inflates each era. This is how
 the building reaches orbit while staying readable.
@@ -125,8 +121,8 @@ Each era starts at 6 rows and expands as the player buys floors.
 earlier draft claimed era N+1 always begins shorter in metres than era N ended;
 that is false for two of four transitions (Highrise→Megatower begins at 1,050 m
 versus 560 m; Stratosphere→Orbital begins at 480,000 m versus 40,000 m) and is
-*unachievable at any playable row count* for Orbital Tether — even a 1-row board is
-80 km against the 40 km it would have to beat. What resets, and what carries the felt reset, is the **board** (6 of 40
+*unachievable at any integer row count* for Orbital Tether, which would need half
+a row. What resets, and what carries the felt reset, is the **board** (6 of 40
 rows), cash, and per-run upgrades — not absolute metres.
 
 Growth factors are deliberately uneven, so Blueprint thresholds are tuned per era
@@ -260,26 +256,8 @@ registers a `visibilitychange` listener via `JavaScriptBridge.get_interface`
 plus `create_callback` under an `OS.has_feature("web")` guard, with
 `NOTIFICATION_APPLICATION_FOCUS_OUT` as the desktop fallback.
 
-**The hidden-save runs synchronously inside the JS callback, and forces the
-filesystem sync from the JS side.** Two engine facts make this mandatory rather
-than stylistic. Godot's web main loop is `emscripten_set_main_loop(..., -1, ...)`
-— pure `requestAnimationFrame`, with no timer fallback — and §7.1's own premise is
-that rAF stops when hidden, so a flag "consumed at the top of the next
-`_physics_process`" is consumed *at resume*, and a tab evicted while hidden dies
-having never saved. Worse, `FileAccess.close()` only sets `idb_needs_sync`; the
-actual `godot_js_os_fs_sync()` call happens in `OS_Web::main_loop_iterate()` — the
-same stopped loop — so even a synchronous write is not durable without forcing the
-sync explicitly from the glue.
-
-Serialisation *reads* sim state and does not mutate it, so running it inline is
-compatible with the rule below. **Only sim-state mutation — the §7.2
-reconciliation — defers**, via a flag consumed at the top of the next
-`_physics_process`. Nothing mutates sim state inside a JS callback.
-
-Without this, every hidden-kill silently reverts up to 30 seconds of play
-including purchases, and the sim-clock anchor *masks* it economically by
-re-crediting the time — so the symptom is an untraceable "my upgrade vanished" on
-the most common way to leave the game.
+**The JS callback fires outside the Godot main loop.** It sets a flag consumed at
+the top of the next `_physics_process`; it never mutates sim state inline.
 
 **There is no reliable quit event on the primary target.** A tab killed from the
 app switcher fires neither `NOTIFICATION_WM_CLOSE_REQUEST` nor a dependable
@@ -289,48 +267,12 @@ timer**; save-on-quit is a desktop nicety, not a guarantee.
 ### 7.2 The catch-up model
 
 **The catch-up window is anchored on the sim clock, never on the save timestamp.**
-
-`sim_wall_time` is **a wall-clock instant in Unix-epoch seconds: the moment up to
-which time has been economically credited.** It is persisted, and it advances in
-exactly two places — forward by `0.05` per executed tick, and by the atomic commit
-below. It is *not* a duration accumulator; an accumulator would start near zero
-while `now` is ~1.7e9, so `now - sim_wall_time` would clamp to the full cap on
-every cold start and force-quit-relaunch would be free money.
+`sim_wall_time` advances only by *executed* ticks (`ticks_executed x 0.05`).
+Everywhere — resume, cold start, after a hitch — the window is:
 
 ```
 elapsed = clampf(now - sim_wall_time, 0.0, offline_cap)
 ```
-
-**Clock domains.** `sim_wall_time` lives in the epoch domain. At session start the
-pair `(unix_now, ticks_msec_now)` is captured; in-session `now` is derived as
-`unix_at_start + (ticks_msec() - ticks_at_start)/1000`, so the monotonic clock
-supplies only the *delta* and DST/NTP/manual changes cannot move an in-session
-window. Cold start reads `Time.get_unix_time_from_system()` directly. A single
-persisted field cannot be the subtrahend for two different epochs, which is why
-the delta is reconciled into the epoch domain rather than the field being stored
-in tick-space.
-
-**Catch-up commits the watermark atomically:** applying a window sets
-`sim_wall_time = now - residual` in the *same* step that credits it. Credit and
-commit are one transaction, so no coalesced save can snapshot credited cash
-against a stale watermark. Without this the anchor reintroduces the exact defect
-it was adopted to close: catch-up executes no ticks, so under a
-ticks-only rule the watermark never moves and the next boundary re-credits the
-same window.
-
-**Time beyond the cap is forfeited,** which the commit rule delivers for free:
-because the watermark jumps to `now - residual` rather than to
-`old + credited`, an eight-hour cap after a three-day absence credits eight hours
-and discards the remaining sixty-four. Under the alternative — advancing only by
-the credited amount — twenty hours would stay on the books after a capped
-twenty-four-hour absence, and five one-second background cycles would harvest all
-of it in about five seconds. **On a window truncated by the clamp the residual is
-zeroed rather than carried**, or the discarded excess leaks back in through the
-residual field.
-
-The governing invariant, which §9.2 tests directly: over any sequence of
-hide/resume cycles, total credited sim-seconds is at most real elapsed seconds,
-and at most `cycles x offline_cap`.
 
 `saved_at` is a diagnostic field, not an economic input. This single choice closes
 four separate defects an earlier draft had: catch-up had no committed watermark
@@ -360,28 +302,6 @@ unbounded, so with a peak merely 2x the daily mean, saving at the rush peak and
 returning four hours later paid eight hours of mean earnings — a trivial exploit
 (quit at 8:55 am daily), invisible to the player.
 
-**Steps are phase-aligned to curve buckets.** The integrator advances to the next
-bucket boundary as a partial step, then whole buckets, then banks the tail as the
-residual. Fixed 60-second strides from an arbitrary phase would straddle every
-boundary and read only the starting bucket, misattributing `phase x (curve_end -
-curve_start)` per window — up to ~4e-3 relative on a 240-minute window, which is
-six orders of magnitude past §9.1's bound and would make Test A pass only if
-authored at a bucket boundary, i.e. only by avoiding the case that breaks it.
-
-**The minute index is integer arithmetic** — `ticks_executed / 1200`, never a
-float accumulator. After 1200 additions of 0.05 the accumulated value differs
-from 60.0 by ~1e-13, and 60.0 is exactly the bucket comparison point, so one tick
-lands in the wrong bucket and costs ~8e-5 at a 10% inter-bucket step.
-
-**`catchup_residual_seconds` is bounded to `[0, 60)` and rejected outside it,** and
-the step loop is independently bounded by `(offline_cap + 60) / 60`. It is
-persisted, therefore devtools-editable, shared-origin-writable, and importable —
-and `offline_cap` clamps `elapsed` but not the residual, so an unvalidated
-`1e18` buys ~1.7e16 coarse steps and hangs the game at load, before any UI exists
-to escape it. A hostile far-*future* `sim_wall_time` is the mirror case: it makes
-`now - sim_wall_time` permanently negative so catch-up never pays again. Both are
-in the §9.2 hostile-input matrix.
-
 **The sub-minute remainder is carried, never dropped or rounded up.**
 `catchup_residual_seconds` persists in the save (the offline analogue of the live
 fractional-tick accumulator). On resume, `total = residual + elapsed`, run
@@ -392,51 +312,31 @@ exploit structurally identical to the one this model was rewritten to kill.
 Carrying the residual makes 120 background cycles of 29 seconds equal one
 58-minute absence, which is §9's test.
 
-**Discrete state is reconciled as a property of catch-up, not of the Hidden
-transition.** Whenever catch-up runs with `elapsed` above a threshold on the
-patience scale (minutes), **every** passenger — waiting *and* in-car — is cleared
-and folded into the window's statistics, and cars are parked at their current
-interpolated position. Below the threshold, discrete state resumes intact and the
-gap rides as sim-time lag, which the anchor credits at the next boundary.
-
-Anchoring this to elapsed time rather than to the hide event matters three ways.
-It cannot run at hide-time at all (no main-loop iteration executes while hidden,
-per §7.1), and it must not run inside the JS callback under the no-inline-mutation
-rule. It would miss every path that never passes through Hidden — a 30-second timer
-save during active play, followed by a tab crash or an OOM reload, leaves a save
-full of seconds-scale patience timers that cold-start loads into an hours-older
-world. And clearing on *every* hide would punish a three-second app-switch by
-wiping the board and voiding in-flight fares.
-
-Clearing in-car passengers matters as much as waiting ones: they are roughly a
-fifth of the population, they carry the same draining patience, §8.3's order
-expires them with no exemption for riders, and §6's combo decays on a *single* bad
-delivery — so one surviving in-car expiry defeats the whole reconciliation.
-
-Because reconciliation keys on elapsed rather than on the transition, the Hidden
-and cold-start paths are identical by construction, which is what §9.2's path-
-equivalence test asserts.
+**Discrete state is reconciled at the boundary, in both directions.** On Hidden,
+the waiting passenger population is cleared and folded into the catch-up window's
+statistics, and cars are parked idle at their last stop. Without this, resume
+restarts the live sim from a discrete state whose patience timers are on a
+seconds-to-minutes scale but which is now hours old — so the first live ticks after
+*every* resume produce a mass-expiry event: satisfaction craters and the combo
+dies, punishing the player for the single most common daily action. The
+welcome-back summary would report a healthy window and then the screen would fill
+with expiring passengers. **Where §8.6's continuation state and the catch-up model
+disagree, catch-up wins on the Hidden→Resumed path**; continuation state exists so
+a *cold start with no elapsed time* resumes identically, not to survive catch-up.
 
 **Other rules:**
 
 - Offline rate is never the instantaneous rate at save time.
-- **Offline pays `offline_efficiency x ceiling`, where `offline_efficiency`
-  starts well below 1 and is raised by the Automation branch toward a stated
-  maximum that is still below 1.** The analytic model computes a *throughput
-  ceiling* — by definition at least what any real dispatcher achieves — so paying
-  100% of it would make idling weakly better than playing for every player whose
-  dispatch is below optimal, which is every player on the Nearest-car tier and
-  anyone simply playing badly. An earlier draft deleted the efficiency fraction to
-  keep §9's fidelity test clean; that removed the only term that can hold the
-  no-exploit property, so it is restored deliberately. Automation upgrades then
-  read as "my building runs better without me," which is the fantasy anyway.
+- Base offline rate is **100% of the analytic model**; the Automation branch
+  raises the *cap*, not the rate. (An upgradeable rate fraction would make offline
+  differ from live by design and muddle §9's fidelity test.)
 - For Hidden→Resumed the process never died, so `Time.get_ticks_msec()` is
   monotonic and available and is used; `Time.get_unix_time_from_system()` is
   reserved for cold start. This removes DST/NTP and in-session clock manipulation
   entirely from the common path.
 - The model evolves tenancy state, not just cash: satisfaction decay, move-out
   countdowns, capacity as a throughput ceiling.
-- Catch-up runs strictly after §8.6 step 7 (construction), on validated values — `clampf(NAN, …)`
+- Catch-up runs strictly after §8.6 step 6, on validated values — `clampf(NAN, …)`
   propagates `NAN`, and a `NAN` reaching the earnings integrator poisons every
   downstream currency.
 
@@ -483,21 +383,14 @@ belongs in the test matrix.
 that accepts a document *another person* authored, so the envelope is pinned:
 
 - Export is `Marshalls.utf8_to_base64(JSON.stringify(state))`; import is
-  `base64_to_utf8()` then `JSON.parse_string()`. **`Marshalls.variant_to_base64`,
-  `Marshalls.base64_to_variant`, `var_to_bytes` and `bytes_to_var` are forbidden on
-  both sides** — named explicitly because a ban list is what gets grepped, and
-  because the compact-looking export encoding is exactly what pulls an implementer
-  toward the import call §8.6 bans.
+  `base64_to_utf8()` then `JSON.parse_string()`. **`variant_to_base64` and
+  `bytes_to_var` are forbidden on both sides** — the compact-looking option is
+  exactly the call §8.6 bans, and banning it only on the load side leaves the trap
+  armed on the export side.
 - A hard byte cap enforced *before* base64-decode, and a decoded-size cap before
-  parse. Over-length input is the real exhaustion risk. **Excess nesting depth is
-  not** — verified on 4.7.stable, depths of 1,500 / 5,000 / 100,000 all return
-  `null` cleanly from a parser depth guard rather than overflowing the stack, so
-  step 2's null-rejection already covers it. Do not build a pre-parse depth scanner
-  on the assumption of a crash. A cheap container-count pre-scan is still worth
-  having, since a legitimate save for this schema has a small bounded count.
-- A malformed base64 paste is safe: `base64_to_utf8` on non-base64 input returns an
-  empty string with a logged error and does not crash, so it degrades into a step-2
-  rejection.
+  parse. Godot's JSON parser is recursive-descent, so an over-long or deeply
+  nested paste is a memory kill or stack overflow — a hard crash, which means the
+  "reject cleanly" path never runs.
 - Import backs up the existing save, requires explicit confirmation (it is a total
   irreversible replacement), and is single-flight against the §8.6 save mutex.
 
@@ -595,15 +488,14 @@ before collapsing into a crowd bar. Counting *nodes* rather than passengers, sin
 | crowd bars (40 x 2) | 80 |
 | tenant widgets (40 x 3) | 120 |
 | cars (8 shafts x 2 cars x 2) | 32 |
-| **subtotal** | **~1,672** |
+| **worst case** | **~1,672** |
 
-Add the 40 `floor_row` and 8 `shaft_column` containers, the HUD and panels, and
-passengers rendered inside cars, and the real ceiling is ~1,850. That is thousands,
-not hundreds — roughly 2.8x an earlier estimate that assumed one node per passenger, and past the threshold where Control-node layout cost on GL
+That is thousands, not hundreds — roughly 2.8x an earlier estimate that assumed one
+node per passenger, and past the threshold where Control-node layout cost on GL
 Compatibility in mobile Safari stops being free. The per-row cap is therefore a
-**tunable constant with a global node ceiling above it**, and ~1,850 nodes is
-measured on the target iPhone before Milestone 3. The car term is bounded because
-§3 caps both shafts and cars per shaft.
+**tunable constant with a global node ceiling above it**, and ~1,700 nodes is
+measured on the target iPhone before Milestone 3. The car term is bounded only
+because §3 caps shafts.
 
 **Big numbers.** GDScript floats reach ~1e308, ample *provided nothing compounds
 without a cap* — hence §6's combo cap and §13's per-era peak-magnitude estimates.
@@ -626,15 +518,9 @@ version inside the document cannot be read before parsing it.)
 1. Reject before reading if the input exceeds `SAVE_MAX_BYTES` (1 MiB is generous
    for this schema). Missing file is a normal path, not an error.
 2. `JSON.parse_string`. A `null` return or non-Dictionary root is a rejection.
-3. Read and check `version` before interpreting any other field. **Godot's JSON
-   parser returns every number as `TYPE_FLOAT`** — verified on 4.7.stable,
-   `JSON.parse_string('{"version": 1}')` yields a float, and `1` and `1.0` are
-   indistinguishable after parse. The gate is therefore *`TYPE_FLOAT` and integral
-   (`v == floor(v)`) and within `[migration_floor, current]`*. A `TYPE_INT` check
-   would refuse every save the game itself wrote and latch `writes_disabled` on
-   first launch — bricking persistence while §9.2's "non-integer version refuses"
-   test still passed. A version above the newest known, below the migration floor,
-   absent, or non-integral routes through refuse-and-backup.
+3. Read and check `version` before interpreting any other field. A version above
+   the newest known, *below the oldest migration floor*, absent, or non-integer all
+   route through the same refuse-and-backup path.
 4. **Structural and version-specific validation only**: types, collection sizes,
    nesting. Not current-schema semantics — validating string ids against today's
    `data/` before migration would reject a legitimate v1 save whose ids migration
@@ -668,27 +554,11 @@ depth is structurally unreachable.
 write path checks it — timer, visibility-hidden, focus-out, quit, manual save.
 Scoping the disable to "autosave" would be defeated within seconds: the first thing
 a player does when a blocking error appears is switch apps to look it up, firing
-the immediate hidden-save. **The backup write happens before the latch is set and
-is exempt from it**, or the backup the recovery path depends on is never written.
-
-Only an explicit user action clears the latch, and the choices offered depend on
-*why* the load was refused:
-
-- **Version above the newest known** — the routine post-deploy service-worker skew
-  case (§7.3). This is a perfectly good save that a reload will read, so the
-  message is "the game has updated; reload to continue," ideally triggering the
-  service-worker update. Discard is **not** offered here. Offering destruction as
-  the only actionable button during an ordinary deploy would let a confused player
-  delete a healthy building.
-- **Genuinely unmigratable** — discard-and-start-fresh is offered.
-
-**The blocking message offers the backup as an export string, not a filename.** On
-web the backup lives in IndexedDB, so naming a path a player can neither browse nor
-retrieve is not an affordance; the §7.3 codec already exists, so the recovery path
-has something to consume. Import remains available while the latch is set, since it
-*is* the recovery path, and a successful validated import clears the latch and any
-pending dirty flag — otherwise a deferred coalesced snapshot would serialise
-pre-import state over the save the player just recovered.
+the immediate hidden-save. Only an explicit user action clears the latch —
+"discard the unreadable save and start fresh," or a successful validated import
+(which must remain available while the latch is set, since import is the recovery
+path). The blocking message names the backup file, since a web player cannot browse
+`user://`.
 
 **Writes are atomic and coalescing.** Serialise to a temp file, flush, close,
 validate, then replace. A save requested while one is in flight sets a dirty flag
@@ -755,17 +625,11 @@ self-consistency across step sizes (1-minute versus 1-second steps of the same
 integrator). This is a legitimate float bound and a real regression guard — on
 expected spawn count and integrated rate, not on realised earnings.
 
-**Test B — the no-exploit property.** Over a named matrix of dispatch policy tiers
-and upgrade states, and for every `t₀` phase in the day cycle,
-`catch-up / lived <= 1.0`. **Active play must never be worse than idling, for any
-player state.** This is the property the round-1 exploit finding was really about,
-and it is checkable because §7.2's `offline_efficiency` sits below the ceiling by
-construction.
-
-An earlier draft asked instead for ±5% agreement with "the mean of N seeded live
-runs." That was unwritable: it named no dispatch policy or upgrade state for the
-runs, and it compared a throughput *ceiling* against realised dispatch, so the
-ratio was structurally above 1 and grew as the player's dispatch got worse.
+**Test B — economic fidelity and the no-exploit property.** Catch-up earnings over
+any window are within a stated engineering budget (±5%) of the mean of N seeded
+live runs, and — the property that actually matters — `max over t₀ of
+(catch-up / lived) <= 1.0 + δ`. A ratio bound is what protects the economy and is
+what the round-1 exploit finding was really about.
 
 ### 9.2 Named tests
 
@@ -787,9 +651,6 @@ Before Milestone 1 ships:
 Before Milestone 6 ships:
 
 9. Catch-up boundaries: `elapsed <= 0`, exactly at the cap, far beyond the cap.
-    Then the conservation invariant across *successive* resumes: two resumes after
-    a 24 h absence with a 4 h cap credit 4 h total, not 8 h — total credited
-    sim-seconds never exceed real elapsed seconds.
 10. Residual conservation: 120 resumes of 29 s equals one 58-minute absence.
 11. Path equivalence: hidden-for-N-then-resumed equals cold-start-after-N, for N
     of 0, sub-minute, at the cap, and beyond.
@@ -800,13 +661,10 @@ Before Milestone 6 ships:
     across *every* write path, and writes a backup.
 14. Hostile-input matrix: wrong type per schema field, `1e400`, negative counts,
     counts above the era's range, unknown string ids, oversized input,
-    over-length import string, non-base64 import string, `NAN` or a far-future value
-    in `sim_wall_time`, and `catchup_residual_seconds` outside `[0, 60)`.
+    deep nesting, over-length import string, non-base64 import string, `NAN` in
+    `saved_at`.
 15. Atomic write: inject a failure between temp-write and replace; assert the live
     save is byte-identical to before.
-17. A freshly-written save loads — the positive case that would have caught a
-    `TYPE_INT` version gate refusing every save the game wrote.
-18. Shaft and cars-per-shaft purchases stop at the §3 caps.
 16. "No save found" is a normal startup path.
 
 ## 10. Delivery
@@ -915,16 +773,11 @@ Required before Milestone 1. Exact shell logic belongs in the implementation pla
   converts every failure to success. Run `--import` **twice and require the second
   to exit 0** — the clean-checkout condition is first-run-only by definition, so
   the second run's status is a genuine signal that needs no documented exit code.
-  This is an empirical claim and must be confirmed locally before it becomes a hard
-  gate, or the first push turns CI red.
 - **Gate `exclude_filter`, don't just set it.** `exclude_filter="tests/*,addons/
   gut/*"` without an assertion repeats the exact shape of the unreachable control
   it replaces — a typo'd glob silently ships the suite again. The `.pck` path table
   is greppable: assert `! grep -qa 'res://tests/' build/web/index.pck` and the same
   for `res://addons/gut/`.
-- **`actions/checkout` sets `persist-credentials: false`.** The same threat model
-  that pins GUT to a SHA — `EditorPlugin` code executing inside the job — says that
-  code can read the `GITHUB_TOKEN` checkout otherwise leaves in `.git/config`.
 - **Add `export_credentials.cfg` to `.gitignore`.** Godot writes keystore and
   notarisation secrets there; it is currently unignored, and a later signing preset
   would drop credentials into a public repo on `git add -A`.
@@ -986,3 +839,7 @@ artifact and owes what this one deliberately does not carry: file-by-file change
 class APIs and method signatures, error-return contracts, the exact CI shell logic
 for each §10.2 commitment, the save schema field list with per-field types and
 ranges, and per-milestone task sequencing.
+
+Be specific and actionable. If it is solid and ready to implement, end your review with exactly: VERDICT: APPROVED
+
+If changes are needed, end with exactly: VERDICT: REVISE

@@ -1,16 +1,20 @@
-My two substantive concerns are addressed, and I'll acknowledge them directly rather than re-litigate:
+Both of my round-2 findings are addressed, and I'll confirm that specifically before closing:
 
-**Finding 2 (fuzzy tolerance) — resolved.** Coarse-stepping the same time-of-day curves at 1/min is the fix, not a lobby for more babysitting. The earlier rate-snapshot model is deleted and its unbounded error ratio is documented as the reason. With both paths integrating the same curve, the 1e-9 relative tolerance is float-rounding-only — a real bound, and cheaper (240 steps vs. 288k ticks) than the replay it replaces. Nothing in the test is now fuzzy machinery; it's a cheap, meaningful backstop. My objection had been to a threshold enforcing that one *wrong model* match another; the model is no longer wrong.
+**Finding 2 (the fuzzy tolerance) — resolved correctly, and better than I asked for.** §9.1 does exactly the separation I would have demanded: an *integrator-exactness* test (Test A, 1e-9) that is now legitimate because §5.1's piecewise-constant one-minute buckets make both paths evaluate the *same finite sum* — a real float bound on expected spawn count, not a babysat economy threshold — and a separate *economic-fidelity* test (Test B) at ±5% of seeded live runs plus the ratio bound `max(catch-up/lived) <= 1 + δ`, which is the property the exploit finding was actually about. And it owns the quadrature/step-size reasoning instead of hand-waving a single number. Nothing here is fuzzy machinery anymore.
 
-**Finding 1 (determinism guarantee vs. assertion style) — correctly split.** The revised §8.3 makes the guarantee hard and complete: fixed written intra-tick order, deliver-before-expire pinned at exact-zero patience, seeded RNG, and — from Codex's point — RNG state, tick counter, and fractional accumulator in the save schema. §8.6's load sequence is now implementable (parse → version → validate → migrate → re-validate → construct), and the refusal path disables autosave and backs up instead of destroying the newer save. And §9 adopts exactly the style I was actually advocating — exact equality on integer counts, relative epsilon on floats — rather than the brittle exact-N single integer. The "nothing lost" overclaim is gone, replaced by an honest "nothing load-bearing lost."
+**Finding 1 (determinism) — fully adopted.** Hard requirement, written intra-tick order with deliver-before-expire pinned, RNG/tick/fractional-accumulator in the save schema, and §9 now asserts exact ints / relative epsilons rather than the brittle exact-N I had objected to.
 
-**On my lane specifically (machinery that earns nothing):** the revised plan has gotten *longer* but not *heavier* — nearly every addition maps to a named failure mode (the 7-day ITP deletion, sub-HIG targets, infinitely compounding combo, the impossible "version before parse," the probe that reports ok in its own failure modes, the unreachable SharedArrayBuffer grep). I hunted the usual suspects and none survive:
+Two things I flagged only in passing last round were also corrected independently: the false "absolute height is monotone" claim (§3) is deleted in favour of the true board-reset statement, and §5.3's two no-fail rules — which I hadn't even caught cancelled each other — collapsed into one reachable rule.
 
-- Determinism, the written tick order, and continuation-state-in-save are now all load-bearing, not stylistic.
-- The catch-up model evolves tenancy state because the welcome-back screen promises to report tenants lost — the machinery tracks a stated feature, not a hypothetical.
-- The generated 98-entry suffix ladder is genuinely simpler than hand-writing it.
-- The one candidate I'd flag is §7.3's manual save export/import (insurance on top of the PWA exemption), but it's small, directly serves the non-installed majority, and doesn't carry recurring cost — not worth a REVISE.
+That's the last review round, and rather than manufacture further refinements, here's the honest check for newly-broken items:
 
-There is nothing left in my lane that I can name as deletable without losing something real. Both of my prior objections are resolved by the revision.
+- Catch-up anchored on the sim clock (§7.2) genuinely closes the double-apply/watermark/jank-over-credit family; nothing in the discrete sim path conflicts with it — stalls just lag wall-clock and catch-up stays off that path, which is consistent.
+- The sim-clock anchor and §8.6's persistence of `sim_wall_time` and `catchup_residual_seconds` agree; residual conservation is now a named test (120 × 29 s = one 58-min absence), not an assertion.
+- The reconciliation rule ("catch-up wins on Hidden→Resumed; continuation state serves zero-elapsed cold start") resolves the only real tension between §8.6 and §7.2 without leaving a gap.
+- Test 11's path-equivalence (hidden-then-resumed vs cold-start) is exactly the guard that would catch a divergence between those two entry points.
+
+I could not find anything newly broken, and nothing in my lane — machinery that earns nothing, redundant indirection, phases that could collapse — survived the rewrite. The refinements in §10.2 (pinning all actions, the reachable grep, the double `--import`, excluding GUT/tests from the shipped `.pck`, the gitignore'd credentials) all target real, named failure modes rather than process ornament.
+
+This is solid and ready for the implementation plan that §14 correctly names as the next artifact.
 
 VERDICT: APPROVED

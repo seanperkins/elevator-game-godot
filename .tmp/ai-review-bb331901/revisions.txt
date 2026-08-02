@@ -1,64 +1,151 @@
-- INPUT MODEL (new §2.1): replaced tap-car-then-tap-floor with press-and-drag on the
-  shaft COLUMN. Target is the full-height column (>=44pt wide), never the 32px moving
-  car. Verbs separate by gesture not cadence: drag = dispatch (floor-selector rail,
-  detents, magnified label offset above thumb), tap = surge, events draw their own
-  oversized control. Resolves the sub-HIG moving-target collision.
-- CATCH-UP MODEL (§7.2): replaced rate-sampling with coarse-step integration of the
-  same time-of-day curves at 1 step per simulated minute (4h = 240 steps). Kills the
-  quit-at-rush-peak exploit (error ratio r(t0)/mean(r) was unbounded). §9's tolerance
-  is now a real 1e-9 relative bound instead of an unachievable "stated tolerance".
-  Elapsed clamped to [0, cap]; backwards clock treated as zero. Model evolves tenancy
-  state, not just cash.
-- LIFECYCLE (§7.1): three states, not two. Added HIDDEN (visibilitychange) since iOS
-  Safari backgrounds without unloading and fires no reliable quit event. Save on
-  hidden/focus-out + 30s timer; save-on-quit demoted to a desktop nicety. Resume and
-  cold start share one catch-up path.
-- STORAGE DURABILITY (§7.3): NEW. Safari ITP deletes IndexedDB after 7 days of Safari
-  use without site interaction; home-screen apps are exempt. Adopted: enable PWA
-  export, prompt Add to Home Screen, save export/import string, treat "no save" as a
-  normal tested path. Also documented the shared github.io origin exposure.
-- TICK MODEL (§8.3): physics stays 60Hz, game_root runs a 0.05s fixed-step
-  accumulator. Previously ambiguous and would have run the sim 3x fast. Added the
-  written intra-tick order (spawn -> move/doors -> deliver -> expire -> accrue ->
-  combo), with deliver-before-expire pinned at exact-zero patience. Wall-clock
-  authoritative for earnings, ticks for sim state.
-- PERSISTENCE (§8.6): fixed the impossible "version checked before parse" with an
-  explicit 6-step load sequence (parse -> version -> validate -> migrate ->
-  re-validate -> construct). Refused load now DISABLES autosave + backs up the file
-  (previously the 30s timer would overwrite a newer save with a blank). Atomic
-  single-flight writes via temp+replace. RNG state, tick counter, and fractional
-  accumulator added to the save schema. Save treated as untrusted input: JSON only,
-  never str_to_var/bytes_to_var, never ResourceLoader.load on a user:// path,
-  is_finite() on every numeric, counts clamped, string ids checked against data/.
-- MILESTONE 0 REOPENED (§10.1): the probe writes before reading in the same session,
-  so on Godot web (memory-backed FS synced to IndexedDB) it reports ok even when
-  storage is denied. The "round-trips a save" claim was unsupported. Fix: read before
-  write, report restored yes/no, verify across reload AND Safari force-quit. Added
-  device exit criteria incl. background/foreground wall-clock delta and wasm memory.
-- CI HARDENING (§10.2): NEW. test job running GUT that build depends on; pin Godot to
-  exact patch + SHA-256 verify (was a mutable URL, sudo mv'd and executed with deploy
-  privileges); per-job permissions (pages:write/id-token:write currently leak to the
-  build job); replace the unreachable SharedArrayBuffer grep with an assertion on
-  export_presets.cfg; stop discarding import failures; exclude_filter for tests/addons;
-  gitignore export_credentials.cfg; pin actions to SHAs.
-- ERA LADDER (§3): Highrise now inflates (row = 4 floors, 4x) instead of staying 1
-  floor. Added explicit rule that origins/destinations are ROWS above Walk-Up, closing
-  the Megatower intra-district ambiguity.
-- NO-FAIL-STATE (§5.3): now guaranteed rather than asserted. Lobby row never vacates;
-  first re-lease is free when no tenanted rows remain. Closes the terminal
-  all-vacant-and-broke state.
-- PRESTIGE (§4): demolish gated on yielding >=1 Blueprint, with projected yield shown.
-- COMBO (§6): hard cap added. Uncapped 1%/delivery hits INF at ~71,270 deliveries.
-- FORMATTER (§8.5): suffix ladder generated (98 two-letter entries), magnitude chosen
-  AFTER rounding (999,950 -> "1.0M", not "1000.0K").
-- SPRITES (§8.5): worst case multiplied out (40x12 = 480 + bars/cars/widgets ~600
-  nodes); per-row cap is now a tunable with a global ceiling, measured on device.
-- PAYLOAD (§10): corrected 39MB -> ~10.3MB transferred (gzip -9 verified at
-  10,052,184 bytes; Pages serves gzip). Added wasm-compilation memory as the real risk.
-- §8.1: removed the false claim that offline is "the same code run differently" —
-  it contradicted §8.4. They are two paths validated against each other.
-- §8.4/§8.7: bbcode takes only literal markup (dynamic text via Label/[lb]-escape);
-  Resources are res://-only; data/ holds numeric coefficients, never Expression strings.
-- §9: added 9 named must-have tests; exact equality on ints, relative epsilon on floats.
-- §13: Orbital Tether's economic model now explicitly owned (cargo has no tenants, so
-  4 core systems need era-5 substitutes).
+ROUND 3 REVISION — responding to round-2 findings from codex, codex-regression,
+claude-fable-skeptic-r2, claude-opus-skeptic-r2, claude-pentester-r2.
+
+STRUCTURAL FIX THAT CLOSES FOUR FINDINGS AT ONCE (§7.2):
+- Catch-up is now anchored on a SIM CLOCK (sim_wall_time, advanced only by executed
+  ticks), never on saved_at. This closes: the missing atomic watermark (re-saving
+  after catch-up with an old saved_at awarded the same hour twice); §8.3's
+  "surrender to catch-up" having no interface into a saved_at-only entry point;
+  the ~25% over-credit on desktop Chrome's throttled-but-not-stopped hidden tabs;
+  and the overlapping-authority double-apply after a stall. saved_at is now a
+  diagnostic field, not an economic input.
+- In-session stalls NEVER route through the earnings-bearing catch-up model. Sim
+  time simply lags wall-clock and deliveries land late. Routing jank through
+  catch-up double-paid (analytic credit for passengers still in the discrete sim
+  who then get delivered again), making income scale with jank.
+
+§9 TOLERANCE — replaced the unachievable 1e-9 with two real tests:
+- Test A (integrator exactness, 1e-9): §5.1 curves are now PIECEWISE-CONSTANT on
+  1-simulated-minute buckets and the live spawner reads curve[floor(sim_minute)],
+  so the integrated rate over whole minutes is the SAME FINITE SUM in both paths.
+  1e-9 is legitimate there — on integrated rate/expected spawn count only.
+- Test B (economic fidelity): +/-5% vs the mean of N seeded live runs, PLUS the
+  property that actually matters: max over t0 of (catch-up/lived) <= 1.0 + delta,
+  a no-exploit ratio bound.
+- Rationale recorded: 1200x step mismatch is a different quadrature rule (7.9e-7
+  for a pure daily sinusoid, 1.8e-3 for a rush ramp); stochastic floor is 1/sqrt(N)
+  = 3.2e-4 even at 1e7 passengers; and live earnings vs a throughput ceiling are
+  different quantities.
+- Base offline rate pinned at 100% of the analytic model; Automation raises the
+  CAP, not the rate (an upgradeable fraction would make offline differ from live
+  by design and muddle the fidelity test).
+
+§7.2 SUB-MINUTE REMAINDER: catchup_residual_seconds now persists and is carried.
+Truncating meant a 45s app-switch earned zero forever; rounding up was a new
+press-home-and-reopen free-money exploit. 120 cycles of 29s now equals one 58min
+absence, and that is a named test.
+
+§7.2 RESUME RECONCILIATION: on Hidden, the waiting passenger population is cleared
+and folded into catch-up statistics; cars park idle. Otherwise every resume
+restarted a discrete state whose patience timers are seconds-scale but hours old,
+producing a mass-expiry event on the most common daily action. Stated explicitly
+that catch-up wins over continuation state on the Hidden->Resumed path.
+
+§7.1 VISIBILITYCHANGE MECHANISM: verified against Godot 4.7 web platform source
+that only blur/focus are registered and nothing reads visibilityState. The plan
+now names JavaScriptBridge.get_interface + create_callback under an
+OS.has_feature("web") guard, with NOTIFICATION_APPLICATION_FOCUS_OUT as desktop
+fallback, and a flag-and-consume rule since the JS callback fires outside the main
+loop. §10.1 now requires the device check be done via PHONE LOCK, not app-switch.
+
+§8.6 VALIDATION — rebuilt as a 7-step sequence:
+- Structural/version-specific validation BEFORE migration; current-schema
+  validation AFTER. Validating ids against today's data/ first would reject a
+  legitimate v1 save whose ids migration exists to rename.
+- TYPE-check before VALUE-check. is_finite() on {"cash": {}} raises during
+  validation, i.e. before construction, so the refusal path never engages and the
+  backup is never written -- the protection died before it ran.
+- Collection size bounds checked before iterating; explicit known-key descent so
+  unexpected nesting depth is structurally unreachable.
+- Construction from an explicit key allowlist; never mass-assign into Object.set().
+- REJECT rather than clamp on untrusted paths; clamping belongs only inside a
+  migration step. Clamping shafts:99999 turns a hostile document into a legal save.
+- Version below the migration floor / absent / non-integer now route through the
+  same refuse-and-backup path.
+- SAVE_MAX_BYTES checked before reading.
+
+§8.6 WRITES_DISABLED LATCH: a refused load now latches EVERY write path (timer,
+visibility-hidden, focus-out, quit, manual). Scoping it to "autosave" was defeated
+in seconds -- a confused player switches apps to look up the error, firing the
+immediate hidden-save. Import stays available while latched, since it is the
+recovery path, and a successful validated import clears the latch.
+
+§8.6 COALESCING SAVES: a save requested during an in-flight write sets a dirty flag
+and runs one coalesced snapshot after. Blocking it discarded the most important
+save in the design (timer save running -> buy upgrade -> background -> hidden-save
+dropped -> tab killed -> pre-purchase state restored).
+
+§7.3 IMPORT ENVELOPE: export is utf8_to_base64(JSON.stringify()); import is
+base64_to_utf8 then JSON.parse_string. variant_to_base64/bytes_to_var forbidden on
+BOTH sides -- banning it only on load left the trap armed on the export side, which
+is where the pressure toward the compact-looking call comes from. Byte cap before
+base64-decode, decoded-size cap before parse, backup + explicit confirmation,
+single-flight against the save mutex.
+
+§7.3 A2HS GUIDED MIGRATION: home-screen apps get their OWN storage container, so an
+unguarded install prompt opens an empty building while the Safari save ages toward
+ITP deletion -- the mitigation causing the loss it prevents. Now: export before
+prompting, and offer paste-your-save on first standalone launch. Container
+isolation added to the §10.1 device checks. Also: PWA icon fields must be
+populated; ensure_cross_origin_isolation_headers stays false; service-worker
+version skew makes the refusal path an ordinary post-deploy event.
+
+§2.1 RELEASE-IN-PLACE: the rail's initial detent is now the CAR'S CURRENT ROW, not
+the pressed row. Previously press-and-release on row R was surge, so dispatching to
+the row under your thumb -- the most common intent -- required dragging away and
+back on 32-unit rows. Also: pointer captured on drag-start and horizontal position
+ignored, because a vertical thumb arc routinely exceeds the +/-22pt half-width and
+would self-cancel the primary verb. Cancel is now drag past the board edge.
+Corrected the units-vs-pt error: a row is ~16.5pt on an iPhone 15, not 32pt.
+
+§3 SHAFT CEILING: 8 shafts stated as a board constant alongside the 40-row ceiling
+(44pt is ~85 base units at 720 wide, so 8 edge-to-edge and realistically 6-7).
+Capacity growth past the cap comes from cars-per-shaft, speed, capacity, doors.
+
+§3 ERA INVARIANT DELETED: "era N+1 begins shorter in metres" was false for
+Highrise->Megatower (1050m vs 560m) and Stratosphere->Orbital (480km vs 40km), and
+impossible for Orbital at any integer row count (needs 0.5 rows). Replaced with the
+true statement: the BOARD resets; absolute height is not monotone.
+
+§5.3 ONE NO-FAIL RULE, NOT TWO: lobby-never-vacant made the free-re-lease guard
+("no other tenanted row") unreachable, and made §9's recovery test unwritable
+because its setup was forbidden. Now: re-leasing is free whenever zero rows are
+tenanted; any row may vacate.
+
+§8.5 NODE RECOUNT: ~1,672 nodes, not ~600 -- §2 gives each passenger a body, a
+bubble, and a patience meter, so 40x12x3 = 1,440 for passengers alone. Car term is
+bounded only because §3 now caps shafts. "Thousands, not hundreds."
+
+§10.1 PROBE FIX MADE STRUCTURAL: `restored` is computed exactly once in _ready()
+before any write and is immutable. Respecifying _ready() alone was insufficient --
+_test_persistence() is also called from _on_tap(), so the first tap would read
+after a same-session write and flip restored to yes, reproducing the exact false
+positive the milestone was reopened for. Also: bbcode_enabled = false on the probe
+readout, since §10.1 asked it to display a value from a file any other site on the
+shared origin can write, in a scene §11 keeps permanently -- the plan was violating
+its own newest rule (§8.4) in shipped code.
+
+§10.2 CI: pin ALL actions incl. actions/* (the previous wording said "third-party"
+and all four actions are first-party, so it pinned nothing); GUT pinned to a commit
+SHA not a tag; noted configure-pages runs in build and needs pages:read or should
+move to deploy, else the per-job split breaks CI; run --import TWICE and require the
+second to exit 0 (no documented exit code needed); GATE exclude_filter by grepping
+the .pck rather than just setting it; SharedArrayBuffer count corrected 8 -> 9.
+
+§10 PAYLOAD: corrected to ~10.2MB served -- gzip -9 (10,052,184) is the floor but
+Pages fronts with Fastly at a default level, so ~10.11MB for the wasm.
+
+§9 TEST LIST: expanded to 16 named tests, split Milestone-1 vs Milestone-6, and now
+covers the gesture classifier (previously dismissed as "thin UI" when it is a pure
+state machine with named boundaries), the atomic write, the hostile-input matrix,
+path equivalence, residual conservation, resume reconciliation, and "no save found".
+
+§8.2: added economy(combo)/prestige/gesture/catch_up/save_codec/a2hs_prompt, which
+had named tests or sections but no module.
+
+§12: recorded accepted clock-manipulation residue. §13: added the no-fail guarantee
+as a fifth era-5 casualty. §14 NEW: explicitly names what the implementation plan
+owes (file-by-file changes, APIs, error contracts, exact CI shell logic, save schema
+field list), answering the standing P0 that this is a design spec rather than an
+implementation plan -- correctly, because the implementation plan is the next
+artifact.

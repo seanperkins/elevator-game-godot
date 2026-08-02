@@ -1,0 +1,31 @@
+Spec round-3 fixes: sim-clock semantics, offline efficiency, hidden-save
+
+Round-3 review (opus/fable skeptics, pentester, deepseek) found the round-2
+sim-clock fix had two unlimited-money defects and several tests that could not
+pass as written. All verified against Godot 4.7.stable.
+
+- sim_wall_time is now a Unix-epoch INSTANT, not a duration accumulator, with a
+  stated dual-anchor rule. As written it was defined as an accumulator and used
+  as an instant, so cold start would clamp to the full cap every launch.
+- Catch-up commits the watermark atomically (sim_wall_time = now - residual) and
+  forfeits beyond-cap time. Without it, five 1s background cycles harvested a
+  capped 24h absence. Residual is zeroed on a truncated window.
+- Offline pays offline_efficiency x ceiling, efficiency < 1 and upgradeable.
+  Paying 100% of a throughput ceiling made idling beat playing for anyone below
+  optimal dispatch. Test B is now: catch-up/lived <= 1.0 across a policy matrix.
+- Hidden-save runs synchronously in the JS callback and forces the FS sync from
+  JS. Godot's web loop is pure rAF and the IndexedDB sync lives in
+  main_loop_iterate, so a flag consumed at the next physics frame is consumed at
+  resume -- a tab evicted while hidden never saved.
+- Reconciliation keys on elapsed, not on the Hidden transition, and clears
+  in-car passengers too (one in-car expiry kills the combo).
+- Catch-up steps are phase-aligned to curve buckets and the minute index is
+  integer; both were required for the 1e-9 bound to be real.
+- Version gate is TYPE_FLOAT + integral. Verified: JSON.parse_string gives
+  TYPE_FLOAT for a version of 1, so a TYPE_INT check would refuse every save the
+  game wrote and latch writes_disabled on first launch.
+- Rail mapping pinned absolute; drag threshold constrained under 16 units.
+- Version-skew refusal offers reload, not discard; backup precedes the latch and
+  is offered as an export string.
+- Corrected: JSON depth is guarded in 4.7 (returns null cleanly, no overflow);
+  residual bounded to [0,60); scale factor 0.546; node ceiling ~1,850.

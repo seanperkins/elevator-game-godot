@@ -1,4 +1,5 @@
 [codex-regression] Ensuring acpx session for 'codex'...
 [codex-regression] Session ready.
 [codex-regression] Submitting plan to codex via acpx (timeout: 900s)...
-[codex-regression] Review received.
+[codex-regression] acpx failed (exit 1).
+[codex-regression] stderr: [acpx] error: RUNTIME QUEUE_NOT_ACCEPTING_REQUESTS Session queue owner is running but not accepting queue requests
