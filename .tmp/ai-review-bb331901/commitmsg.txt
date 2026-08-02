@@ -1,31 +1,33 @@
-Spec round-3 fixes: sim-clock semantics, offline efficiency, hidden-save
+Fix residual double-count and bucket-index severance found in verification
 
-Round-3 review (opus/fable skeptics, pentester, deepseek) found the round-2
-sim-clock fix had two unlimited-money defects and several tests that could not
-pass as written. All verified against Godot 4.7.stable.
+Verification pass (opus + pentester) on the round-3 fixes. Pentester APPROVED
+both its MAJORs closed, with the version gate re-executed across a full
+accept/refuse matrix on 4.7.stable (no false accept; floor(INF)==INF is true, so
+the range clause is load-bearing). Opus closed 9 of 10 and withdrew its TYPE_INT
+claim after verifying the engine agrees with the plan. Two regressions found:
 
-- sim_wall_time is now a Unix-epoch INSTANT, not a duration accumulator, with a
-  stated dual-anchor rule. As written it was defined as an accumulator and used
-  as an instant, so cold start would clamp to the full cap every launch.
-- Catch-up commits the watermark atomically (sim_wall_time = now - residual) and
-  forfeits beyond-cap time. Without it, five 1s background cycles harvested a
-  capped 24h absence. Residual is zeroed on a truncated window.
-- Offline pays offline_efficiency x ceiling, efficiency < 1 and upgradeable.
-  Paying 100% of a throughput ceiling made idling beat playing for anyone below
-  optimal dispatch. Test B is now: catch-up/lived <= 1.0 across a policy matrix.
-- Hidden-save runs synchronously in the JS callback and forces the FS sync from
-  JS. Godot's web loop is pure rAF and the IndexedDB sync lives in
-  main_loop_iterate, so a flag consumed at the next physics frame is consumed at
-  resume -- a tab evicted while hidden never saved.
-- Reconciliation keys on elapsed, not on the Hidden transition, and clears
-  in-car passengers too (one in-car expiry kills the combo).
-- Catch-up steps are phase-aligned to curve buckets and the minute index is
-  integer; both were required for the 1e-9 bound to be real.
-- Version gate is TYPE_FLOAT + integral. Verified: JSON.parse_string gives
-  TYPE_FLOAT for a version of 1, so a TYPE_INT check would refuse every save the
-  game wrote and latch writes_disabled on first launch.
-- Rail mapping pinned absolute; drag threshold constrained under 16 units.
-- Version-skew refusal offers reload, not discard; backup precedes the latch and
-  is offered as an export string.
-- Corrected: JSON depth is guarded in 4.7 (returns null cleanly, no overflow);
-  residual bounded to [0,60); scale factor 0.546; node ceiling ~1,850.
+- CRITICAL: the round-3 watermark rule carried the sub-minute residual twice --
+  sim_wall_time = now - residual leaves the watermark behind by the residual, so
+  the next elapsed already contains it and total = residual + elapsed adds it
+  again. Reproduced independently: 120 cycles of 29s credited 119 steps instead
+  of 58 (2.05x), and 3600 cycles of 1s credited 899 instead of 60 (15x). Fixed
+  by committing sim_wall_time = now and carrying the residual in one place only;
+  verified exactly conservative at 29s, 1s and 60s cycles.
+- MAJOR: redefining sim_wall_time as an epoch instant severed the identity that
+  gave catch-up its curve-bucket index (round 3 had it as ticks x 0.05, so the
+  index was sim_wall_time/60 by definition). Catch-up now advances the sim-minute
+  index by one per step, and that index -- not the watermark -- selects the
+  bucket. Test A's bound needs both paths indexing the same buckets.
+- §8.3 now states that clamp-discarded time is forfeited (sim_wall_time snaps to
+  now), resolving a contradiction where the doc asserted both that nothing is
+  surrendered to catch-up and that stall lag is credited at the next boundary.
+  Forfeiting keeps elapsed meaning hidden duration only, so accrued lag cannot
+  trip the reconciliation threshold on a three-second app-switch.
+- offline_efficiency's binding constraint written down (min over the Test B
+  matrix of lived/ceiling, not merely "below 1") and added to §13.
+- §10.1 now requires restored:yes after phone-lock plus app-switcher kill --
+  the only on-device check that the synchronous hidden-save actually landed.
+- Corrected drift constant to the measured 1.27e-12; deep nesting restored to
+  the hostile-input matrix as a guard on engine behaviour the design relies on;
+  shaft cap stated as 8 with the gutter budget; tests renumbered 1-18 with the
+  cap test moved to the Milestone-1 block.

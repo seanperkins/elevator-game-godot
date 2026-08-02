@@ -94,9 +94,9 @@ incidental limits:
 
 - **40 rows maximum.** The board never scrolls.
 - **8 shafts maximum.** At a 720-unit base width, 44 pt is 44/0.546 = 80.6 units on
-  an iPhone 15, so the screen fits 720/80.6 = 8.9 columns edge-to-edge and
-  realistically **6–7**
-  once a row-label gutter and margins exist. Because §2.1's touch guarantee is
+  an iPhone 15, so the screen fits 720/80.6 = 8.9 columns edge-to-edge. Eight
+  survives a row-label gutter of up to 75 units (41 pt), which is ample; dropping to
+  seven would need an 85 pt gutter and six a 129 pt one, a third of the screen. Because §2.1's touch guarantee is
   stated in pt, shaft count is capped by it. Shaft purchases therefore stop at the
   cap; capacity growth past that point comes from **cars per shaft** — itself
   capped, for the same node-budget reason (§8.5) — plus speed, capacity, and door
@@ -311,12 +311,21 @@ the delta is reconciled into the epoch domain rather than the field being stored
 in tick-space.
 
 **Catch-up commits the watermark atomically:** applying a window sets
-`sim_wall_time = now - residual` in the *same* step that credits it. Credit and
-commit are one transaction, so no coalesced save can snapshot credited cash
-against a stale watermark. Without this the anchor reintroduces the exact defect
-it was adopted to close: catch-up executes no ticks, so under a
-ticks-only rule the watermark never moves and the next boundary re-credits the
-same window.
+`sim_wall_time = now` in the *same* step that credits it, and the unstepped
+remainder is carried **only** in `catchup_residual_seconds`. Credit and commit are
+one transaction, so no coalesced save can snapshot credited cash against a stale
+watermark. Without the commit the anchor reintroduces the exact defect it was
+adopted to close: catch-up executes no ticks, so under a ticks-only rule the
+watermark never moves and the next boundary re-credits the same window.
+
+**The residual is carried in exactly one place.** Committing
+`sim_wall_time = now - residual` instead would leave the watermark behind by the
+residual, so the next boundary's `elapsed = now - sim_wall_time` would already
+contain it and `total = residual + elapsed` would count it twice. That
+over-credits badly at short cycles — 120 hide/resume cycles of 29 s yield 119
+steps instead of 58, and 3,600 cycles of 1 s yield 899 instead of 60, a 15x
+inflation from an action players perform constantly. With `sim_wall_time = now`
+both cases are exactly conservative.
 
 **Time beyond the cap is forfeited,** which the commit rule delivers for free:
 because the watermark jumps to `now - residual` rather than to
@@ -324,9 +333,8 @@ because the watermark jumps to `now - residual` rather than to
 and discards the remaining sixty-four. Under the alternative — advancing only by
 the credited amount — twenty hours would stay on the books after a capped
 twenty-four-hour absence, and five one-second background cycles would harvest all
-of it in about five seconds. **On a window truncated by the clamp the residual is
-zeroed rather than carried**, or the discarded excess leaks back in through the
-residual field.
+of it in about five seconds. Beyond-cap excess is discarded by the commit itself, so the residual needs no
+special case on a truncated window.
 
 The governing invariant, which §9.2 tests directly: over any sequence of
 hide/resume cycles, total credited sim-seconds is at most real elapsed seconds,
@@ -368,10 +376,18 @@ curve_start)` per window — up to ~4e-3 relative on a 240-minute window, which 
 six orders of magnitude past §9.1's bound and would make Test A pass only if
 authored at a bucket boundary, i.e. only by avoiding the case that breaks it.
 
-**The minute index is integer arithmetic** — `ticks_executed / 1200`, never a
-float accumulator. After 1200 additions of 0.05 the accumulated value differs
-from 60.0 by ~1e-13, and 60.0 is exactly the bucket comparison point, so one tick
-lands in the wrong bucket and costs ~8e-5 at a 10% inter-bucket step.
+**The minute index is integer arithmetic, and catch-up advances it too.** The live
+path indexes buckets by `ticks_executed / 1200`; **catch-up advances the same
+sim-minute index by one per executed step**, and it is that index — not
+`sim_wall_time` — that selects the bucket. Catch-up steps are not "executed ticks"
+for the purposes of the watermark rule above, so they do not also advance
+`sim_wall_time` by 0.05 each. Stating this matters because round 3 defined the
+watermark as `ticks_executed x 0.05`, which made the bucket index
+`sim_wall_time / 60` by identity; redefining it as an epoch instant removed that
+identity, and Test A's bound requires both paths to index the same buckets. Never a
+float accumulator: After 1200 additions of 0.05 the accumulated value lands
+1.27e-12 *below* 60.0 — measured — and 60.0 is exactly the bucket comparison point,
+so a `>= 60.0` test fires one tick late and costs ~8e-5 at a 10% inter-bucket step.
 
 **`catchup_residual_seconds` is bounded to `[0, 60)` and rejected outside it,** and
 the step loop is independently bounded by `(offline_cap + 60) / 60`. It is
@@ -396,8 +412,8 @@ Carrying the residual makes 120 background cycles of 29 seconds equal one
 transition.** Whenever catch-up runs with `elapsed` above a threshold on the
 patience scale (minutes), **every** passenger — waiting *and* in-car — is cleared
 and folded into the window's statistics, and cars are parked at their current
-interpolated position. Below the threshold, discrete state resumes intact and the
-gap rides as sim-time lag, which the anchor credits at the next boundary.
+interpolated position. Below the threshold, discrete state resumes intact and the gap is credited once, by
+this same boundary.
 
 Anchoring this to elapsed time rather than to the hide event matters three ways.
 It cannot run at hide-time at all (no main-loop iteration executes while hidden,
@@ -537,7 +553,8 @@ res://
   view/    building_view, shaft_column, elevator_car, passenger_sprite,
            floor_row, floor_selector
   ui/      hud, upgrade_panel, prestige_panel, event_toast, a2hs_prompt
-  tests/   GUT specs against sim/ and game/save_codec
+  tests/   GUT specs against sim/, game/save_codec, game/save_manager,
+           and game/util/
 ```
 
 `gesture` and `catch_up` live under `sim/` deliberately: both are pure logic with
@@ -552,9 +569,23 @@ callback would run the sim at 3x speed with every rate constant mistuned.
 Accumulating preserves render smoothness instead of dropping the whole game to
 20 Hz.
 
-The accumulator is clamped per frame. Beyond the clamp, **sim time lags wall-clock
-and nothing is surrendered to the catch-up model** (§7.2). `sim_wall_time` is the
-single authority for how much time has been economically credited.
+The accumulator is clamped per frame, and **time the clamp discards is forfeited:
+`sim_wall_time` snaps to `now`.** Nothing is surrendered to the catch-up model
+(§7.2); the discarded window is simply never paid.
+
+This has to be stated, because `sim_wall_time` advances only by executed ticks and
+clamped-away frames are ticks that never execute — so without the snap the field
+would fall permanently behind `now`, and the accumulated lag would silently ride
+into `elapsed` at the next Hidden→Resumed boundary. That would contradict "nothing
+is surrendered," and worse, it would inflate `elapsed` with in-session lag, so a
+long session on a janky device could trip §7.2's minutes-scale reconciliation
+threshold on a three-second app-switch — wiping the board and voiding in-flight
+fares, the exact outcome the elapsed-keyed design exists to avoid.
+
+Forfeiting is the right side of the choice: the sim genuinely did not run for that
+window, cars still complete their trips (late), and `elapsed` at a boundary keeps
+its clean meaning of *hidden duration only*. `sim_wall_time` is the single
+authority for how much time has been economically credited.
 
 **Intra-tick order is fixed and written down**, because determinism is meaningless
 without it:
@@ -634,7 +665,9 @@ version inside the document cannot be read before parsing it.)
    would refuse every save the game itself wrote and latch `writes_disabled` on
    first launch — bricking persistence while §9.2's "non-integer version refuses"
    test still passed. A version above the newest known, below the migration floor,
-   absent, or non-integral routes through refuse-and-backup.
+   absent, non-integral, or of the wrong Variant type routes through
+   refuse-and-backup. Only the above-newest case is treated as version skew
+   (§8.6's reload path); the rest are unmigratable.
 4. **Structural and version-specific validation only**: types, collection sizes,
    nesting. Not current-schema semantics — validating string ids against today's
    `data/` before migration would reject a legitimate v1 save whose ids migration
@@ -702,7 +735,10 @@ and synced to IndexedDB asynchronously. A write may not survive an immediate kil
 the timer plus save-on-hide is the mitigation.
 
 **The save schema includes sim continuation state** — RNG state, tick counter,
-fractional-tick accumulator, `catchup_residual_seconds`, and `sim_wall_time`.
+fractional-tick accumulator, `catchup_residual_seconds`, and `sim_wall_time`. The watermark is serialised at full precision (or as integer
+seconds plus a fraction): `JSON.stringify` defaults to ~15 significant digits, which
+at epoch magnitude loses ~4 microseconds per save/load — economically nil, but an
+economic invariant now reads that field.
 
 **The save is untrusted input** — editable from Safari devtools, writable by any
 other site on the shared origin, and (via import) authored by another person:
@@ -758,9 +794,15 @@ expected spawn count and integrated rate, not on realised earnings.
 **Test B — the no-exploit property.** Over a named matrix of dispatch policy tiers
 and upgrade states, and for every `t₀` phase in the day cycle,
 `catch-up / lived <= 1.0`. **Active play must never be worse than idling, for any
-player state.** This is the property the round-1 exploit finding was really about,
-and it is checkable because §7.2's `offline_efficiency` sits below the ceiling by
-construction.
+player state in the matrix** — and the matrix's worst tier is defined to be the
+floor of supported play.
+
+The binding constraint is `offline_efficiency <= min over the matrix of
+(lived / ceiling)`. Efficiency merely being below 1 is *not* sufficient: lived
+throughput is not bounded below by any fraction of the ceiling, and tends to zero
+for a player who never dispatches. So the matrix produces the constant by tuning;
+writing that down is what makes Test B a gate rather than a coin flip at
+Milestone 6.
 
 An earlier draft asked instead for ±5% agreement with "the mean of N seeded live
 runs." That was unwritable: it named no dispatch policy or upgrade state for the
@@ -783,31 +825,34 @@ Before Milestone 1 ships:
 6. Combo rise, decay on a bad delivery, and the cap.
 7. Tenant satisfaction exactly at the move-out threshold, both directions.
 8. Dispatch policies: fixed-scenario tests asserting which car each policy assigns.
+9. Shaft and cars-per-shaft purchases stop at the §3 caps (Milestone 3 sells them,
+   so the guard ships with the feature rather than three milestones later).
 
 Before Milestone 6 ships:
 
-9. Catch-up boundaries: `elapsed <= 0`, exactly at the cap, far beyond the cap.
+10. Catch-up boundaries: `elapsed <= 0`, exactly at the cap, far beyond the cap.
     Then the conservation invariant across *successive* resumes: two resumes after
     a 24 h absence with a 4 h cap credit 4 h total, not 8 h — total credited
     sim-seconds never exceed real elapsed seconds.
-10. Residual conservation: 120 resumes of 29 s equals one 58-minute absence.
-11. Path equivalence: hidden-for-N-then-resumed equals cold-start-after-N, for N
+11. Residual conservation: 120 resumes of 29 s equals one 58-minute absence.
+12. Path equivalence: hidden-for-N-then-resumed equals cold-start-after-N, for N
     of 0, sub-minute, at the cap, and beyond.
-12. Resume reconciliation: no mass-expiry event in the first live ticks after a
+13. Resume reconciliation: no mass-expiry event in the first live ticks after a
     multi-hour resume.
-13. Refused-load: unknown future version, version below the migration floor,
-    absent version, non-integer version — each refuses, latches `writes_disabled`
+14. Refused-load: unknown future version, version below the migration floor,
+    absent version, non-integral version, wrong-typed version — each refuses, latches `writes_disabled`
     across *every* write path, and writes a backup.
-14. Hostile-input matrix: wrong type per schema field, `1e400`, negative counts,
+15. Hostile-input matrix: wrong type per schema field, `1e400`, negative counts,
     counts above the era's range, unknown string ids, oversized input,
-    over-length import string, non-base64 import string, `NAN` or a far-future value
-    in `sim_wall_time`, and `catchup_residual_seconds` outside `[0, 60)`.
-15. Atomic write: inject a failure between temp-write and replace; assert the live
+    over-length import string, non-base64 import string, deep nesting (a guard on the
+    engine's parser depth behaviour, which the design now relies on), `NAN` or a
+    far-future value in `sim_wall_time`, and `catchup_residual_seconds` outside
+    `[0, 60)`.
+16. Atomic write: inject a failure between temp-write and replace; assert the live
     save is byte-identical to before.
 17. A freshly-written save loads — the positive case that would have caught a
     `TYPE_INT` version gate refusing every save the game wrote.
-18. Shaft and cars-per-shaft purchases stop at the §3 caps.
-16. "No save found" is a normal startup path.
+18. "No save found" is a normal startup path.
 
 ## 10. Delivery
 
@@ -872,6 +917,10 @@ integer the probe parsed and range-checked, never as the raw string.
 - `restored: yes` after a Safari force-quit and relaunch.
 - Background/foreground cycle logs a sane wall-clock delta — exercised via **phone
   lock**, not just app-switch, since that is the path `blur` may not cover.
+- **`restored: yes` after a phone-lock followed by killing the tab from the app
+  switcher without ever resuming.** This is the only on-device check that the
+  synchronous hidden-save and its forced IndexedDB sync actually landed; a
+  wall-clock delta alone does not test the mechanism §7.1 was rewritten for.
 - A2HS container check: create a save in Safari, install to home screen, and
   record whether the save appears (validates §7.3's migration requirement).
 - Memory: no tab reload during wasm compilation.
@@ -971,7 +1020,11 @@ Owned, not blocking:
 - Fare, rent, and upgrade cost curves.
 - Patience durations per era and tenant tier.
 - Traffic curve shapes per era (piecewise-constant, one-minute buckets).
-- Surge magnitude and cooldown; drag threshold and detent feel.
+- Surge magnitude and cooldown; drag threshold (strictly under 16 units, §2.1) and
+  detent feel.
+- **`offline_efficiency`** — starting value and Automation-upgraded maximum, both
+  bounded by `min over the §9.1 Test B matrix of (lived / ceiling)`. This is a
+  tuning result the matrix produces, not a property that holds by construction.
 - Combo hard cap, and expected peak magnitude per era so §8.5's float-headroom
   claim is checkable.
 - **Orbital Tether's economic model.** Cargo climbers have no tenants, so tenancy,
