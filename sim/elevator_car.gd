@@ -58,17 +58,25 @@ func _open_doors() -> void:
 	state = State.DOORS
 	_door_remaining = door_ticks
 
-## How far through the door dwell, 0.0 the instant they open to 1.0 as they
-## shut. 1.0 for a car whose doors are not open at all, so "shut" is one value.
+## A stop has three phases: the doors slide open, people move, the doors slide
+## shut. `door_ticks` is the WHOLE stop, and these split it.
 ##
-## This is DATA, not animation: the sim states how much dwell is left and the
-## view decides what that looks like. Door dwell dominates trip time early on,
-## which is what makes Faster Doors a strong first purchase -- and an upgrade
-## whose effect is invisible is one the player has to take on trust.
-func door_progress() -> float:
-	if state != State.DOORS or door_ticks <= 0:
-		return 1.0
-	return clampf(1.0 - float(_door_remaining) / float(door_ticks), 0.0, 1.0)
+## Boarding before the doors are open is a rule violation, not a cosmetic one --
+## it was simply invisible until the doors were drawn, at which point passengers
+## were seen stepping through shut panels.
+##
+## A quarter of the stop each end, but never so much that the open window
+## vanishes: at a one-tick stop the doors are already open, because a stop
+## nobody can board is worse than one with no animation.
+func door_opening_ticks() -> int:
+	return mini(maxi(door_ticks / 4, 1), maxi(door_ticks - 1, 0))
+
+func door_closing_ticks() -> int:
+	return clampi(door_ticks / 4, 0, maxi(door_ticks - door_opening_ticks() - 1, 0))
+
+## Ticks since this stop began. Meaningful only while the doors are in play.
+func door_elapsed_ticks() -> int:
+	return door_ticks - _door_remaining
 
 ## A car parked at a floor answers a call there by opening its doors.
 ##
@@ -88,9 +96,15 @@ func answer_call() -> bool:
 func current_row() -> int:
 	return int(roundf(position_row))
 
-## Boarding and alighting happen only while the doors are open.
+## Boarding and alighting happen only while the doors are OPEN -- not merely
+## while the car is stopped. The window excludes the opening and closing slides,
+## so what the player sees and what the sim allows are the same thing.
 func is_available() -> bool:
-	return state == State.DOORS
+	if state != State.DOORS:
+		return false
+	var elapsed := door_elapsed_ticks()
+	return elapsed >= door_opening_ticks() \
+		and elapsed < door_ticks - door_closing_ticks()
 
 func board(p: Passenger) -> bool:
 	if not is_available() or riders.size() >= capacity:

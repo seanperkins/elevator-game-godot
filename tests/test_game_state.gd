@@ -266,7 +266,8 @@ func test_a_parked_car_opens_its_doors_for_someone_on_its_own_floor() -> void:
 	st.tick(1)
 	assert_eq(car.state, ElevatorCar.State.IDLE, "parked at the lobby")
 	st.building.enqueue(Passenger.new(0, 4, 900, 4.0))
-	st.tick(1)
+	# The doors have to finish opening first: a stop is open, board, shut.
+	st.tick(car.door_opening_ticks() + 1)
 	assert_eq(car.riders.size(), 1, "they got on")
 	assert_true(st.building.waiting_at(0).is_empty(), "and left the queue")
 

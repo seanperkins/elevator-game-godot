@@ -12,11 +12,9 @@ extends Control
 ## the floor-purchase target. That inset is what keeps Gesture's cancel edge
 ## from falling inside the lobby's dispatch band.
 
-## The car is a set of SEATS, not a box with a number on it. Every seat is
-## drawn: occupied ones hold the same chip the passenger had in the hall (now
-## showing the floor they pressed), empty ones are dim outlines, so "how many
-## more fit" is a glance rather than arithmetic. Capacity starts at four and
-## upgrades to twelve, which is three rows of four.
+signal dispatch_requested(shaft_index: int, floor_index: int)
+signal surge_requested(shaft_index: int)
+
 ## The car is a rack of seats. Each one is the same little square the passenger
 ## was in the hall, now showing the floor they pressed instead of a call arrow:
 ## the destination is learned by picking someone up.
@@ -38,28 +36,28 @@ const SEAT_FREE := Color("1b6d92")
 ## The doors, as the player sees them: two panels that part over the car.
 ##
 ## The dwell is otherwise invisible -- a stop looks exactly like standing still
-## -- so the upgrade that dominates early trip time has nothing on screen. The
-## panels slide over DOOR_SLIDE of the dwell at each end and hold open between,
-## so a 20-tick door takes 0.22s to part and a 4-tick door blinks. That
-## difference IS the purchase.
+## -- so the upgrade that dominates early trip time has nothing on screen.
+##
+## The phases come from ElevatorCar, which owns them because "you cannot board
+## through a shut door" is a rule. This only maps ticks to a panel width, and
+## the mapping is pinned to the rule by test: the panels are wide open exactly
+## when, and only when, the car will accept someone.
 ##
 ## They are translucent on purpose. Opaque panels would hide the seat rack for
 ## the ~95% of the time a car is shut, which is most of when the player needs to
 ## read who is aboard and where they are going.
-const DOOR_SLIDE := 0.22
 const DOOR_COLOUR := Color("0b2a3a", 0.55)
 
 ## 0.0 shut, 1.0 wide open. Pure, so the shape is testable without a car.
-static func aperture_for(progress: float) -> float:
-	var p := clampf(progress, 0.0, 1.0)
-	if p < DOOR_SLIDE:
-		return p / DOOR_SLIDE
-	if p > 1.0 - DOOR_SLIDE:
-		return (1.0 - p) / DOOR_SLIDE
+static func aperture_for(elapsed: int, total: int, opening: int, closing: int) -> float:
+	if total <= 0:
+		return 0.0
+	var e := clampi(elapsed, 0, total)
+	if e < opening:
+		return float(e) / float(opening)
+	if closing > 0 and e >= total - closing:
+		return clampf(float(total - e) / float(closing), 0.0, 1.0)
 	return 1.0
-
-signal dispatch_requested(shaft_index: int, floor_index: int)
-signal surge_requested(shaft_index: int)
 
 var shaft_index: int = 0
 
