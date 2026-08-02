@@ -17,31 +17,25 @@ extends Control
 ## showing the floor they pressed), empty ones are dim outlines, so "how many
 ## more fit" is a glance rather than arithmetic. Capacity starts at four and
 ## upgrades to twelve, which is three rows of four.
-## The car reads as a header line plus a rack of seats.
+## The car is a rack of seats. Each one is the same little square the passenger
+## was in the hall, now showing the floor they pressed instead of a call arrow:
+## the destination is learned by picking someone up.
 ##
-## The FLOORS live in the header, not on the seats. A shaft column is 92 units
-## -- 50.2 pt on the iPhone -- so four seats across leaves each about 11 pt of
-## width, and two digits in that space land near 6 pt whatever font is chosen.
-## Moving the numbers to a full-width line buys roughly 9 pt of type without
-## giving up a visible shaft.
-##
-## Seats therefore carry no text, which is what lets them be short: 12 units
-## instead of 20. That is why the grid survives to about 30 floors rather than
-## 17. Filled means taken and is tinted by that rider's patience; hollow means
-## free, so remaining room is a glance rather than a subtraction.
-const SEAT_SIZE := Vector2(20.0, 12.0)
-const SEAT_PITCH := Vector2(22.0, 14.0)
+## There is NO occupancy count while the rack is drawn. Four filled squares of
+## four is the count -- printing "4/4" beside it says the same thing twice and
+## spends the only line of type the car has. The count returns only when the row
+## is too short to draw seats at all, which is the one case where the picture is
+## gone and the number is all there is.
+const SEAT_SIZE := Vector2(34.0, 26.0)
+const SEAT_PITCH := Vector2(37.0, 30.0)
+const SEAT_FONT := 22
 const SEATS_PER_ROW := 4
 const HEADER_HEIGHT := 20.0
 const HEADER_FONT := 16
-## Characters that fit across an 86-unit car at HEADER_FONT. Destinations are
-## listed until the budget runs out and then collapse to a tail count, so a
-## twelve-seat car cannot push the line past the column.
-const HEADER_BUDGET := 11
+## Characters that fit across the car at HEADER_FONT, in the no-room fallback.
+const HEADER_BUDGET := 16
 
 const SEAT_FREE := Color("1b6d92")
-const GREEN := Color("4ade80")
-const RED := Color("ef4444")
 
 signal dispatch_requested(shaft_index: int, floor_index: int)
 signal surge_requested(shaft_index: int)
@@ -54,6 +48,7 @@ var _selector: FloorSelector
 var _car_rect: ColorRect
 var _car_label: Label
 var _seats: Array[ColorRect] = []
+var _chips: Array[PassengerSprite] = []
 var _listed: PackedStringArray = PackedStringArray()
 var _car_floor_provider: Callable
 
@@ -97,45 +92,57 @@ func set_car_position(position_row: float) -> void:
 	_car_rect.size = Vector2(size.x - 6.0, _coords.row_height - 4.0)
 	_car_label.size = _car_rect.size
 
-## What is aboard, where it is going, and how much room is left.
+## What is aboard, where it is going, and how much room is left -- as a picture
+## when there is room to draw one, and as a line of text when there is not.
 ##
 ## Capacity starts at FOUR, so a car is routinely full and "is there room"
-## decides whether dispatching here does anything at all.
-##
-## The grid is dropped when it will not fit -- at the 40-floor cap the car is
-## 25.6 units tall, which is one line of text and nothing else. The header stays
-## at every size, so the count and the floors are never lost, only the picture.
+## decides whether dispatching here does anything at all. Hollow seats answer
+## that at a glance; a subtraction does not.
 func set_riders(riders: Array, capacity: int) -> void:
+	var rows := int(ceil(float(maxi(capacity, 1)) / float(SEATS_PER_ROW)))
+	if float(rows) * SEAT_PITCH.y > _car_rect.size.y:
+		_draw_header_only(riders, capacity)
+		return
+
+	_car_label.text = ""
+	_grow_pools(capacity)
+	_listed = PackedStringArray()
+	var across := float(mini(capacity, SEATS_PER_ROW))
+	var grid_w := (across - 1.0) * SEAT_PITCH.x + SEAT_SIZE.x
+	var grid_h := float(rows) * SEAT_PITCH.y - (SEAT_PITCH.y - SEAT_SIZE.y)
+	var left := maxf((_car_rect.size.x - grid_w) * 0.5, 0.0)
+	var top := maxf((_car_rect.size.y - grid_h) * 0.5, 0.0)
+	for i in range(_seats.size()):
+		if i >= capacity:
+			_seats[i].visible = false
+			_chips[i].recycle()
+			continue
+		var at := Vector2(
+			left + float(i % SEATS_PER_ROW) * SEAT_PITCH.x,
+			top + float(i / SEATS_PER_ROW) * SEAT_PITCH.y)
+		if i < riders.size():
+			_seats[i].visible = false
+			var p: Passenger = riders[i]
+			_chips[i].position = at
+			_chips[i].show_as(p.patience_fraction(), str(p.destination_row))
+			_listed.append(str(p.destination_row))
+		else:
+			_chips[i].recycle()
+			_seats[i].visible = true
+			_seats[i].position = at
+
+## The row is too short for even one rank of seats -- at the 40-floor cap the
+## car is 25.6 units tall. The picture is gone, so the count comes back, with as
+## many destinations as the line can hold.
+func _draw_header_only(riders: Array, capacity: int) -> void:
+	for seat in _seats:
+		seat.visible = false
+	for chip in _chips:
+		chip.recycle()
 	_car_label.text = _header_for(riders, capacity)
 	_car_label.position = Vector2(0, 1)
 	_car_label.size = Vector2(_car_rect.size.x, HEADER_HEIGHT)
 
-	var rows := int(ceil(float(maxi(capacity, 1)) / float(SEATS_PER_ROW)))
-	if HEADER_HEIGHT + float(rows) * SEAT_PITCH.y > _car_rect.size.y:
-		for seat in _seats:
-			seat.visible = false
-		return
-
-	_grow_seats(capacity)
-	var grid_w := float(mini(capacity, SEATS_PER_ROW)) * SEAT_PITCH.x \
-		- (SEAT_PITCH.x - SEAT_SIZE.x)
-	var left := maxf((_car_rect.size.x - grid_w) * 0.5, 0.0)
-	for i in range(_seats.size()):
-		if i >= capacity:
-			_seats[i].visible = false
-			continue
-		_seats[i].visible = true
-		_seats[i].position = Vector2(
-			left + float(i % SEATS_PER_ROW) * SEAT_PITCH.x,
-			HEADER_HEIGHT + float(i / SEATS_PER_ROW) * SEAT_PITCH.y)
-		if i < riders.size():
-			var p: Passenger = riders[i]
-			_seats[i].color = RED.lerp(GREEN, clampf(p.patience_fraction(), 0.0, 1.0))
-		else:
-			_seats[i].color = SEAT_FREE
-
-## "2/4  5 12". Destinations are listed until the character budget runs out,
-## then collapse to a tail count, because the line cannot grow past the column.
 func _header_for(riders: Array, capacity: int) -> String:
 	_listed = PackedStringArray()
 	var head := "%d/%d" % [riders.size(), capacity]
@@ -151,7 +158,7 @@ func _header_for(riders: Array, capacity: int) -> String:
 		tail += "+%d" % (riders.size() - _listed.size())
 	return head + tail
 
-func _grow_seats(capacity: int) -> void:
+func _grow_pools(capacity: int) -> void:
 	while _seats.size() < capacity:
 		var seat := ColorRect.new()
 		seat.color = SEAT_FREE
@@ -160,21 +167,28 @@ func _grow_seats(capacity: int) -> void:
 		_car_rect.add_child(seat)
 		_seats.append(seat)
 
-## The destinations the header is actually showing, in boarding order.
+		var chip := PassengerSprite.new()
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_car_rect.add_child(chip)
+		chip.set_chip(SEAT_SIZE, SEAT_FONT)
+		chip.recycle()
+		_chips.append(chip)
+
+## Destinations the car is actually showing, in boarding order.
 func rider_destinations() -> PackedStringArray:
 	return _listed
 
 func seats_taken() -> int:
 	var n := 0
-	for seat in _seats:
-		if seat.visible and seat.color != SEAT_FREE:
+	for chip in _chips:
+		if chip.visible:
 			n += 1
 	return n
 
 func free_slots_shown() -> int:
 	var n := 0
 	for seat in _seats:
-		if seat.visible and seat.color == SEAT_FREE:
+		if seat.visible:
 			n += 1
 	return n
 

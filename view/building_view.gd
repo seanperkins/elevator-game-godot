@@ -14,7 +14,13 @@ signal shaft_purchase_requested()
 signal relet_requested(floor_index: int)
 
 const SHAFT_AREA_X := FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH   # 240
-const SHAFT_WIDTH := 96.0        # pitch; columns draw at 92 = 50.2pt
+## Three columns across the 480-unit viewport. Five at a 96-unit pitch drew each
+## at 92 units -- 50.2pt -- which cleared the 44pt touch floor but left a car
+## 86 units wide, and four seats across that cannot hold a legible two-digit
+## floor at the 0.546 iPhone scale. At 160 the column draws at 156 (85pt) and a
+## seat is 34, which can. The cost is paging sooner: eight shafts is three pages
+## rather than two.
+const SHAFT_WIDTH := 160.0
 const RELET_SPAN := SHAFT_AREA_X # the vacant-floor tap reaches the whole gutter+strip
 
 var _state: GameState

@@ -104,7 +104,7 @@ func test_the_board_under_test_is_the_board_that_ships() -> void:
 	# Every other test in this file is vacuous if the geometry is wrong: a miss
 	# and a no-op look identical from the sim's side.
 	assert_eq(root.size, BOARD_SIZE, "720x1280, not GUT's container")
-	assert_eq(view.visible_shafts(), 5, "five columns on a 96-unit pitch")
+	assert_eq(view.visible_shafts(), 3, "three columns on a 160-unit pitch")
 	var col: ShaftColumn = view._columns[0]
 	assert_true(col.get_global_rect().has_point(
 		Vector2(column_x(0), floor_centre_y(1))),
@@ -295,35 +295,47 @@ func test_a_rider_reveals_its_destination_once_aboard() -> void:
 	board_riders([5, 2])
 	var col: ShaftColumn = view._columns[0]
 	assert_eq(col.rider_destinations(), PackedStringArray(["5", "2"]),
-		"the car names the buttons its riders pressed")
-	assert_string_contains(col.car_text(), "5")
-	assert_string_contains(col.car_text(), "2")
+		"the same little square, now showing the car button they pressed")
 
-func test_the_floors_are_in_the_header_where_there_is_room_for_type() -> void:
-	# Four seats across a 50.2pt column leaves ~11pt each, which cannot hold two
-	# legible digits. The header is full column width, so it can.
+func test_no_occupancy_count_is_printed_while_the_seats_are_drawn() -> void:
+	# Four filled squares of four IS the count. Printing "4/4" beside them says
+	# it twice and spends the only line of type the car has.
+	board_riders([5, 2])
+	assert_eq(view._columns[0].car_text(), "",
+		"the rack is the count; do not restate it")
+
+func test_seats_carry_the_floor_now_that_the_column_is_wide_enough() -> void:
 	board_riders([12, 7])
-	assert_string_contains(view._columns[0].car_text(), "12",
-		"a two-digit floor has to be readable somewhere")
+	assert_eq(view._columns[0].rider_destinations(),
+		PackedStringArray(["12", "7"]), "two digits fit on a 34-unit seat")
 
-func test_a_crowded_car_collapses_the_list_rather_than_overflowing() -> void:
-	# The line cannot grow past the column, so it lists what fits and counts the
-	# rest. Twelve two-digit floors would otherwise run into the next shaft.
-	root.state.building.cars[0].capacity = 12
-	board_riders([11, 22, 33, 24, 15, 26])
-	var text: String = view._columns[0].car_text()
+func test_the_count_returns_when_the_row_is_too_short_for_seats() -> void:
+	# At the 40-floor cap a car is 25.6 units tall: no rank of seats fits, the
+	# picture is gone, and the number is all there is.
+	var col: ShaftColumn = view._columns[0]
+	col._car_rect.size.y = 18.0
+	col.set_riders([Passenger.new(0, 5, 900, 4.0)], 4)
+	assert_eq(col.free_slots_shown(), 0, "no seats drawn")
+	assert_string_contains(col.car_text(), "1/4", "so the count comes back")
+	assert_string_contains(col.car_text(), "5", "with the floors it can fit")
+
+func test_the_fallback_line_collapses_rather_than_overflowing() -> void:
+	var col: ShaftColumn = view._columns[0]
+	col._car_rect.size.y = 18.0
+	var riders := []
+	for d in [11, 22, 33, 24, 15, 26]:
+		riders.append(Passenger.new(0, d, 900, 4.0))
+	col.set_riders(riders, 12)
+	var text: String = col.car_text()
 	assert_string_contains(text, "6/12", "the count is never dropped")
 	assert_string_contains(text, "+", "and the remainder is counted, not clipped")
-	assert_lt(text.length(), 16, "the line stays inside the column")
+	assert_lt(text.length(), 20, "the line stays inside the column")
 
-func test_seats_show_occupancy_without_carrying_text() -> void:
-	# Textless seats can be short -- 12 units instead of 20 -- which is what
-	# keeps the grid alive to ~30 floors instead of ~17.
+func test_seats_show_taken_and_free_at_a_glance() -> void:
 	board_riders([5, 2])
 	var col: ShaftColumn = view._columns[0]
 	assert_eq(col.seats_taken(), 2, "two filled")
 	assert_eq(col.free_slots_shown(), 2, "two hollow")
-	assert_lt(ShaftColumn.SEAT_SIZE.y, 16.0, "short, because it holds no glyph")
 
 func test_free_seats_are_drawn_so_capacity_is_legible_at_a_glance() -> void:
 	var car: ElevatorCar = root.state.building.cars[0]
@@ -348,13 +360,6 @@ func test_raising_capacity_adds_visible_seats() -> void:
 	assert_eq(view._columns[0].free_slots_shown(), 7,
 		"the capacity upgrade is only legible if the seats appear")
 
-func test_the_occupancy_number_sits_at_the_top_of_the_car() -> void:
-	board_riders([5])
-	var col: ShaftColumn = view._columns[0]
-	var car_height: float = col._car_rect.size.y
-	assert_lt(col._car_label.position.y, car_height * 0.25,
-		"the number reads from the top of the car, not its middle")
-	assert_string_contains(col.car_text(), "1/4")
 
 # --- what a real thumb delivers -------------------------------------------
 
