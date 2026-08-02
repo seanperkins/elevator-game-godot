@@ -285,6 +285,47 @@ annoying; it probably wants a warning first.
 
 ---
 
+## The floor that eats people
+
+**Idea.** A floor where a creature lives. Passengers delivered there are eaten.
+Feed it enough and something unlocks. Alternatively — or afterwards — you send
+knights or agents down to clear it out.
+
+**Why it is more than a joke.** It inverts the game's goal on exactly one floor.
+Everywhere else a delivered passenger is income and a lost one is a penalty;
+here delivery *is* the loss, and the loss is the currency. That makes it a
+genuine decision rather than a hazard to route around: the player chooses to
+feed it, and pays in the only resource the game has been teaching them to
+protect.
+
+It also makes the dispatch policies suddenly dangerous. "Answer calls" will
+happily carry people to a floor that eats them, and a sweep will stop there
+because it stops everywhere. Automation becomes something you have to *aim*,
+which is a real cost for a purchase that currently has none.
+
+**The knights are the better half.** Feeding is passive; clearing it out is a
+job the elevator has to do — carrying something heavy, slow and one-way to a
+specific floor. That is the freight machinery and the move-in machinery, used
+for a fight. It also gives the down-axis a verb: you do not only dig toward the
+creature, you have to ship an answer to it.
+
+**What it touches.**
+- A floor gains a kind that is neither tenant nor vacancy — a third state the
+  tenancy model does not have.
+- `GameState._deliver` currently pays a fare and raises satisfaction for every
+  arrival. An eaten passenger does neither, and probably damages the building's
+  reputation instead, which is the reputation gate's first real pressure.
+- The stairs penalty and the no-fail guarantee both assume losing a passenger is
+  always bad. Here it is bought on purpose, so the guard has to distinguish
+  "lost through neglect" from "spent deliberately".
+
+**Open question.** Does the creature floor generate hall calls — people who want
+to go there — or does the player have to carry victims to it? The first is
+sinister and passive; the second makes the player unambiguously complicit, which
+is more interesting and much darker.
+
+---
+
 ## Build-your-own dispatch algorithm
 
 **Idea.** A screen where players assemble a policy from the blocks they own.
