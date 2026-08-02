@@ -7,22 +7,60 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# Never let two deploys race; a superseded build is not worth finishing.
 concurrency:
   group: pages
   cancel-in-progress: true
 
 env:
   GODOT_VERSION: "4.7"
+  GODOT_ZIP_SHA256: "0b1a6c54c2c619c12e169fe9241edda4b81080b519451cec2984bf0d2c6cb73c"
+  GODOT_TPZ_SHA256: "9714459dc071907c0f3d5f17d608faf69e7cda21331fc5d39c4503ffa4e99eec"
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Godot
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
+          curl -fsSL -o godot.zip "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          echo "${GODOT_ZIP_SHA256}  godot.zip" | sha256sum -c -
+          unzip -q godot.zip
+          sudo mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+
+      - name: Import assets
+        run: |
+          set -euo pipefail
+          godot --headless --import
+          godot --headless --import
+
+      - name: Run GUT
+        run: godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Assert the export is threadless
+        run: |
+          grep -qx 'variant/thread_support=false' export_presets.cfg \
+            || { echo "threaded export would 404 on COOP/COEP under Pages"; exit 1; }
 
       - name: Install Godot and export templates
         run: |
@@ -30,29 +68,20 @@ jobs:
           base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
           curl -fsSL -o godot.zip "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
           curl -fsSL -o templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          echo "${GODOT_ZIP_SHA256}  godot.zip" | sha256sum -c -
+          echo "${GODOT_TPZ_SHA256}  templates.tpz" | sha256sum -c -
           unzip -q godot.zip
           sudo mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
           sudo chmod +x /usr/local/bin/godot
           unzip -q templates.tpz
           mkdir -p "$HOME/.local/share/godot/export_templates"
           mv templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
-          godot --version
 
-      # Import populates .godot/; it reports a nonzero status on a clean
-      # checkout even when it succeeds, so its result is checked by whether
-      # the export below works, not by its exit code.
       - name: Import assets
-        run: godot --headless --import || true
-
-      - name: Verify export templates are where Godot looks for them
         run: |
-          dir="$HOME/.local/share/godot/export_templates"
-          echo "--- $dir ---"
-          ls -la "$dir" || echo "MISSING"
-          echo "--- version.txt ---"
-          cat "$dir/${GODOT_VERSION}.stable/version.txt" || echo "MISSING"
-          echo "--- web templates present ---"
-          ls "$dir/${GODOT_VERSION}.stable" | grep web || echo "NO WEB TEMPLATES"
+          set -euo pipefail
+          godot --headless --import
+          godot --headless --import
 
       - name: Export web build
         run: |
@@ -63,32 +92,32 @@ jobs:
           test -f build/web/index.wasm
           test -f build/web/index.pck
 
-      # GitHub Pages cannot set COOP/COEP headers, so a threaded export would
-      # load and then fail on the phone. Report what was actually produced.
-      - name: Report build shape
+      - name: Assert tests and GUT are not in the shipped pck
         run: |
-          echo "--- files ---"
-          ls -la build/web
-          echo "--- SharedArrayBuffer references ---"
-          grep -l "SharedArrayBuffer" build/web/*.js build/web/*.html 2>/dev/null || echo "none (good: threadless)"
-          echo "--- total size ---"
-          du -sh build/web
+          set -euo pipefail
+          ! grep -qa 'res://tests/' build/web/index.pck
+          ! grep -qa 'res://addons/gut/' build/web/index.pck
+          echo "pck is clean"
 
-      # Pages serves via Jekyll by default, which drops files beginning with _.
-      - name: Disable Jekyll processing
-        run: touch build/web/.nojekyll
+      - name: Report build size
+        run: du -sh build/web && ls -la build/web
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - run: touch build/web/.nojekyll
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: build/web
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

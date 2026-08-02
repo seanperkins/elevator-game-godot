@@ -11,16 +11,20 @@ extends Control
 ## and persistence to user:// (which is IndexedDB on web, and the single most
 ## likely thing to be broken on iOS).
 
+const SAVE_PATH := "user://pipeline_check.save"
+
 var _taps := 0
 var _elapsed := 0.0
 var _car: ColorRect
 var _readout: RichTextLabel
+var _restored := "no"
 var _persist_status := "not tested"
 
 
 func _ready() -> void:
+	_read_previous_session()   # MUST run before any write this session
 	_build_ui()
-	_test_persistence()
+	_write_current()
 
 
 func _process(delta: float) -> void:
@@ -73,8 +77,11 @@ func _build_ui() -> void:
 	button.pressed.connect(_on_tap)
 	root.add_child(button)
 
+	# bbcode stays OFF: §11 keeps this scene permanently and the readout shows a
+	# value read from a file any other site on the shared github.io origin can
+	# write, so a planted [img] would become an outbound beacon.
 	_readout = RichTextLabel.new()
-	_readout.bbcode_enabled = true
+	_readout.bbcode_enabled = false
 	_readout.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_readout.add_theme_font_size_override("normal_font_size", 20)
 	root.add_child(_readout)
@@ -82,7 +89,7 @@ func _build_ui() -> void:
 
 func _on_tap() -> void:
 	_taps += 1
-	_test_persistence()
+	_write_current()   # writes only; never re-reads, never touches _restored
 
 
 func _readout_text() -> String:
@@ -95,29 +102,39 @@ func _readout_text() -> String:
 		"dpi scale  %.2f" % DisplayServer.screen_get_scale(),
 		"fps        %d" % Engine.get_frames_per_second(),
 		"taps       %d" % _taps,
-		"user:// rw %s" % _persist_status,
+		"restored   %s" % _restored,
+		"user:// w  %s" % _persist_status,
 	])
 
 
-## user:// on web is IndexedDB and is the likeliest thing to fail on iOS,
-## so the check writes and reads back rather than assuming.
-func _test_persistence() -> void:
-	var path := "user://pipeline_check.save"
-	var payload := {"taps": _taps}
-	var out := FileAccess.open(path, FileAccess.WRITE)
+## Computed exactly once, before any write. Immutable thereafter.
+## A same-session write-then-read is served from the in-memory FS, so it would
+## report ok even when IndexedDB is denied, quota-refused, or silently failing.
+func _read_previous_session() -> void:
+	if not FileAccess.file_exists(SAVE_PATH):
+		_restored = "no (first run)"
+		return
+	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if f == null:
+		_restored = "READ FAILED (%d)" % FileAccess.get_open_error()
+		return
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("taps"):
+		_restored = "MALFORMED"
+		return
+	var prev: Variant = parsed["taps"]
+	if typeof(prev) != TYPE_FLOAT and typeof(prev) != TYPE_INT:
+		_restored = "WRONG TYPE"
+		return
+	_restored = "yes (prev taps: %d)" % int(prev)
+
+
+func _write_current() -> void:
+	var out := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if out == null:
 		_persist_status = "WRITE FAILED (%d)" % FileAccess.get_open_error()
 		return
-	out.store_string(JSON.stringify(payload))
+	out.store_string(JSON.stringify({"taps": _taps}))
 	out.close()
-
-	var inp := FileAccess.open(path, FileAccess.READ)
-	if inp == null:
-		_persist_status = "READ FAILED (%d)" % FileAccess.get_open_error()
-		return
-	var parsed: Variant = JSON.parse_string(inp.get_as_text())
-	inp.close()
-	if typeof(parsed) == TYPE_DICTIONARY and parsed.get("taps") == _taps:
-		_persist_status = "ok"
-	else:
-		_persist_status = "ROUND-TRIP MISMATCH"
+	_persist_status = "written"
