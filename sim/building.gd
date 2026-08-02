@@ -2,8 +2,14 @@ class_name Building
 extends RefCounted
 
 ## Board constants are design inputs, not incidental limits (spec §3).
-## 40 rows because the board never scrolls; 8 shafts because a 44pt column at
-## a 720-unit base width is ~80.6 units, so ~8.9 columns fit edge to edge.
+##
+## 40 rows because the board never scrolls VERTICALLY. 8 shafts is a design
+## choice rather than a consequence of the screen: an earlier docstring derived
+## it from "a 44pt column is ~80.6 units, so ~8.9 fit edge to edge", which
+## stopped being a derivation once the shaft strip paged. Five columns are
+## visible on a 96-unit pitch and any number could be reachable by paging; eight
+## is where the cap sits because past it a building stops reading as one board,
+## and a later era could raise it without any geometry changing.
 
 const MAX_ROWS := 40
 const MAX_SHAFTS := 8

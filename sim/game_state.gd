@@ -7,7 +7,12 @@ extends RefCounted
 ## exactly 0.0 patience as the doors open pays and extends the combo, or
 ## expires and breaks it.
 ##
-##   spawn -> move/doors -> deliver -> expire -> accrue rent -> update combo
+##   advance metrics -> spawn -> move/doors -> deliver -> expire
+##     -> accrue rent -> update combo
+##
+## Metrics advances FIRST so the bucket a tick's events land in is the bucket
+## that tick just rolled into, and no event is written to a bucket about to be
+## cleared.
 ##
 ## This class never touches the scene tree. It talks to the view by signal only.
 
@@ -22,6 +27,7 @@ var spawner: TrafficSpawner
 var economy: Economy
 var tenancy: Tenancy
 var upgrades: Upgrades
+var metrics: Metrics
 
 func _init(rows: int, shafts: int, p_seed: int) -> void:
 	clock = SimClock.new()
@@ -32,6 +38,7 @@ func _init(rows: int, shafts: int, p_seed: int) -> void:
 	tenancy = Tenancy.new(rows)
 	upgrades = Upgrades.new()
 	upgrades.load_defs("res://data/upgrades.json")
+	metrics = Metrics.new()
 
 ## Buying a row extends the board, so tenancy must grow with it.
 ##
@@ -44,6 +51,26 @@ func buy(id: String) -> bool:
 		while tenancy.rows() < building.row_count:
 			tenancy.add_row()
 	return ok
+
+## Re-lease a vacant floor. Until now nothing in the game charged for this:
+## Tenancy.relet() restores a tenant without touching Economy and
+## Tenancy.relet_cost() had no caller outside tests, so wiring the view straight
+## to tenancy would have made re-leasing free forever -- hollowing out §5.3's
+## guarantee, which is that re-leasing is free CONDITIONALLY.
+##
+## The cost is read BEFORE the relet: relet_cost derives from tenanted_count,
+## and relet() increments it, so the order decides whether the last row costs
+## nothing or forty dollars.
+func relet(row: int) -> bool:
+	if row < 0 or row >= building.row_count:
+		return false
+	if not tenancy.is_vacant(row):
+		return false
+	var cost := tenancy.relet_cost(row)
+	if not economy.spend(cost):
+		return false
+	tenancy.relet(row)
+	return true
 
 func dispatch(shaft_index: int, row: int) -> bool:
 	if shaft_index < 0 or shaft_index >= building.cars.size():
@@ -58,6 +85,7 @@ func tick(n: int) -> void:
 		_tick_once()
 
 func _tick_once() -> void:
+	metrics.advance()      # first: clears the bucket this tick will write into
 	_spawn()
 	_move_and_doors()
 	_deliver()
@@ -88,6 +116,7 @@ func _deliver() -> void:
 			var paid := economy.credit_delivery(p.fare)
 			# The destination row's tenant is the one whose visitor arrived.
 			tenancy.note_delivery(p.destination_row)
+			metrics.record_delivery(p.waited_ticks())
 			passenger_delivered.emit(p, paid)
 		var seats := car.capacity - car.riders.size()
 		for p in building.take_boardable(car.current_row(), seats):
@@ -104,6 +133,7 @@ func _expire() -> void:
 			if p.is_expired():
 				economy.note_expiry()
 				tenancy.note_expiry(p.origin_row)
+				metrics.record_expiry()
 				passenger_expired.emit(p)
 			else:
 				survivors.append(p)

@@ -38,10 +38,10 @@ The touch target is always the **shaft column** — full board height, at least
 distinguished by **gesture**, never by tap cadence, so nothing depends on
 double-tap timing (which also collides with mobile Safari's zoom heuristics).
 
-The motivating geometry: at the §3 ceiling of 40 rows in a 1280-unit viewport a
-row is exactly 32 units, and `canvas_items`+`expand` at a 720x1280 base scales by
-min(393/720, 852/1280) = 0.546 on an iPhone 15 — so a row is roughly **17.5 pt**, and less once the HUD
-takes its share. That is 2.5–3x under Apple's ~44 pt
+The motivating geometry: at the §3 ceiling of 40 rows the board is **1184 units**,
+not the full 1280 — the HUD takes 96 — so a row is **29.6 units**, and
+`canvas_items`+`expand` at a 720x1280 base scales by min(393/720, 852/1280) =
+0.546 on an iPhone 15, making a row **16.16 pt**. That is 2.5–3x under Apple's ~44 pt
 floor, not marginally under it. Any design requiring a tap on a car, or verb
 disambiguation by tap rate, degrades exactly when rows are thinnest — which is
 when surge is supposed to matter most.
@@ -55,15 +55,23 @@ dispatch.
 **The mapping is absolute: detent *i* sits at row *i*'s screen position.** Any row
 is one short drag away, and the cancel gesture stays unambiguous. A *relative*
 mapping — finger displacement driving detent displacement — would make a lobby-to-
-top dispatch require 39 x 32 = 1,248 units of travel on a 1,280-unit board, which
-is physically unreachable, and every long dispatch would run into the board edge
-and trigger cancel.
+top dispatch require 39 x 29.6 = 1,154 units of travel on an 1,184-unit board,
+which is physically unreachable, and every long dispatch would run into the board
+edge and trigger cancel.
 
-**Release-in-place is surge because the drag threshold was not crossed**, not
-because of where the rail was anchored. That makes the threshold load-bearing:
-it must be **strictly under 16 units** (half a row), or dispatching to the row your
-thumb is already on — the most common intent, "there is a passenger *there*" —
-becomes unreachable. §13 owns the exact value under that constraint.
+**A detent is a floor's whole band**, not the nearest multiple of the row height:
+anchoring on a band edge would make a thumb over a floor's own label select its
+neighbour. The inversion that maps a band to a floor lives in exactly one place,
+`sim/coords.gd`, and compares against a stored edge table rather than dividing —
+`N-1-floor(y/h)` is not an identity in IEEE double, and twelve of the forty floor
+counts have at least one floor that fails it.
+
+**Release-in-place is also a dispatch**, resolved against the press point — a tap
+on a floor means "send the car here". (An earlier draft made it surge; see §4.1 of
+the UI design spec for why that changed and what surge needs instead.) The drag
+threshold stays load-bearing either way: it must be **strictly under 14.8 units**
+(half a row at the real 1184-unit board), or a drag that means "the floor I am
+already on" cannot resolve there. §13 owns the exact value under that constraint.
 
 The rail highlights the car's current row on appearance, so the player can see what
 a no-op would be; that is presentation, not behaviour.
@@ -74,12 +82,14 @@ of a minimum-width column — so treating "left the column horizontally" as canc
 would make the primary verb self-cancel. Cancel is a deliberate gesture: drag past
 the top or bottom of the board.
 
-**Surge — tap a column.** A press and release without crossing the drag threshold
-surges that shaft's car: a temporary speed boost on a cooldown.
+**Surge — gesture to be decided.** A temporary speed boost on a cooldown. It held
+the tap until the tap became a dispatch, and it has no gesture now; long-press is
+the candidate, and unlike double-tap it does not fight Safari's zoom. `Result.SURGE`
+and `surge_requested` stay wired so re-enabling it is a change in one place.
 
 **Event response — tap the event's own control.** An active event (§6) draws a
-distinct oversized control on the affected column and suppresses surge there while
-it is up, so there is never an ambiguous tap.
+distinct oversized control on the affected column, so there is never an ambiguous
+tap.
 
 The gesture classifier is a state machine over a point stream (press → threshold →
 detent quantisation → release), it is pure logic with no scene-tree dependency,
@@ -92,12 +102,15 @@ and it is unit-tested like `sim/` rather than left to manual play (§9).
 Two UI constants bound the board, and both are design inputs rather than
 incidental limits:
 
-- **40 rows maximum.** The board never scrolls.
-- **8 shafts maximum.** At a 720-unit base width, 44 pt is 44/0.546 = 80.6 units on
-  an iPhone 15, so the screen fits 720/80.6 = 8.9 columns edge-to-edge. Eight
-  survives a row-label gutter of up to 75 units (41 pt), which is ample; dropping to
-  seven would need an 85 pt gutter and six a 129 pt one, a third of the screen. Because §2.1's touch guarantee is
-  stated in pt, shaft count is capped by it. Shaft purchases therefore stop at the
+- **40 rows maximum.** The board never scrolls *vertically*. The shaft strip does
+  page horizontally, by tap; the floors never move.
+- **8 shafts maximum.** This is a **design choice, not a consequence of the
+  screen.** An earlier draft derived it from "44 pt is 80.6 units, so 720/80.6 =
+  8.9 columns fit edge to edge", which stopped being a derivation once the strip
+  paged: five columns are visible on a 96-unit pitch, drawn at 92 units (50.2 pt),
+  and any number of them could be reachable by paging. Eight is where the cap sits
+  because beyond it a building stops being legible as one board, and a later era
+  could raise it without any geometry changing. Shaft purchases stop at the
   cap; capacity growth past that point comes from **cars per shaft** — itself
   capped, for the same node-budget reason (§8.5) — plus speed, capacity, and door
   time, which the express-shaft and zoning mechanics (§6, §5.4) support without
@@ -569,13 +582,15 @@ same curve data, validated against the live sim per §9.
 res://
   sim/     game_state, building, elevator, passenger, traffic_spawner,
            tenancy, dispatcher, economy (cash, fares, combo), prestige,
-           catch_up, gesture (input classifier)
+           catch_up, gesture (input classifier), coords (row<->y transform),
+           metrics (rolling service-quality window)
   data/    eras, upgrades, tenants, traffic curves
   game/    game_root (owns sim, pumps ticks), save_manager, save_codec
            (export/import), lifecycle (visibility/focus), util/number_format
   view/    building_view, shaft_column, elevator_car, passenger_sprite,
            floor_row, floor_selector
-  ui/      hud, upgrade_panel, prestige_panel, event_toast, a2hs_prompt
+  ui/      hud, management_view, relet_confirm, prestige_panel, event_toast,
+           a2hs_prompt
   tests/   GUT specs against sim/, game/save_codec, game/save_manager,
            and game/util/
 ```
@@ -614,12 +629,21 @@ authority for how much time has been economically credited.
 without it:
 
 ```
-spawn → move/doors → deliver → expire → accrue rent → update combo
+advance metrics → spawn → move/doors → deliver → expire → accrue rent
+  → update combo
 ```
 
 Deliver precedes expire, so a passenger reaching exactly 0.0 patience on the tick
-its doors open is **delivered**, pays, and extends the combo. A passenger spawned
-on tick T first decays on tick T+1. Both boundaries are pinned by test.
+its doors open is **delivered**, pays, and extends the combo. That boundary is
+pinned by test, in both `test_passenger.gd` and `test_game_state.gd`.
+
+An earlier draft also claimed "a passenger spawned on tick T first decays on tick
+T+1", and that both boundaries were pinned. Neither half was true: no test pinned
+either, and `_tick_once` spawns and expires **within the same call**, so a
+passenger spawned on tick T decays on tick T. `test_a_spawned_passenger_first_
+decays_on_the_next_tick` now pins one tick of decay per tick of waiting. One tick
+in a ~900-tick patience budget moves no number here; the point is that the
+document and the code no longer disagree.
 
 **Determinism is a hard requirement**, with a seeded RNG for spawns.
 
@@ -639,24 +663,38 @@ passes a `meta_clicked` payload to `OS.shell_open()`.
 
 ### 8.5 Designed-around risks
 
-**Node count.** Sprites come from a pool; each row renders at most 12 individuals
-before collapsing into a crowd bar. Counting *nodes* rather than passengers, since
-§2 gives each passenger a body, a destination bubble, and a patience meter:
+**Node count.** Sprites come from a pool. A row renders at most 12 individuals,
+and **collapses into a crowd bar when the row is 40 units or shorter — not when
+the crowd exceeds 12.** The trigger is row height, so the two representations are
+**mutually exclusive**: a row draws sprites or a bar, never both. That caps the
+sprite tier at 28 floors (1184/29 = 40.83 units, sprites; 1184/30 = 39.47, bar),
+which is where the passenger term peaks. Counting *nodes* rather than passengers,
+since §2 gives each passenger a body, a destination bubble, and a patience meter:
 
 | component | nodes |
 | --- | --- |
-| passengers (40 rows x 12 x 3) | 1,440 |
-| crowd bars (40 x 2) | 80 |
-| tenant widgets (40 x 3) | 120 |
+| passengers (28 rows x 12 x 3, the sprite tier's ceiling) | 1,008 |
+| crowd bars — excluded at the peak, since the tiers are exclusive | 0 |
+| tenant widgets (28 x 3) | 84 |
 | cars (8 shafts x 2 cars x 2) | 32 |
-| **subtotal** | **~1,672** |
+| **subtotal at the peak, N = 28** | **~1,124** |
 
-Add the 40 `floor_row` and 8 `shaft_column` containers, the HUD and panels, and
-passengers rendered inside cars, and the real ceiling is ~1,850. That is thousands,
-not hundreds — roughly 2.8x an earlier estimate that assumed one node per passenger, and past the threshold where Control-node layout cost on GL
-Compatibility in mobile Safari stops being free. The per-row cap is therefore a
-**tunable constant with a global node ceiling above it**, and ~1,850 nodes is
-measured on the target iPhone before Milestone 3. The car term is bounded because
+An earlier draft counted 1,440 passenger nodes *and* 80 crowd bars as coexisting
+across 40 rows, for ~1,672. Under the exclusive tiers the peak is **~1,124, a 33%
+drop** — not the ~5% that subtracting 80 bars would suggest. Past 28 floors the
+sprite term vanishes entirely and 40 crowd bars replace 1,008 sprite nodes, so the
+40-floor board is far cheaper than the 28-floor one. The "measured on the target
+iPhone" figure below was baselined against the old table and needs re-measuring
+against this one.
+
+Add the `floor_row` and `shaft_column` containers, the HUD, and passengers
+rendered inside cars, and the real ceiling is **~1,250 at N = 28** — down from the
+~1,850 the old table implied. That is still thousands rather than hundreds, and
+still past the threshold where Control-node layout cost on GL Compatibility in
+mobile Safari stops being free, so nothing about the mitigation changes: the
+per-row cap stays a **tunable constant with a global node ceiling above it**, and
+the ceiling is measured on the target iPhone before Milestone 3. Both the 40-unit
+tier threshold and the 12-sprite cap are the tuning knobs. The car term is bounded because
 §3 caps both shafts and cars per shaft.
 
 **Big numbers.** GDScript floats reach ~1e308, ample *provided nothing compounds
@@ -1043,8 +1081,9 @@ Owned, not blocking:
 - Fare, rent, and upgrade cost curves.
 - Patience durations per era and tenant tier.
 - Traffic curve shapes per era (piecewise-constant, one-minute buckets).
-- Surge magnitude and cooldown; drag threshold (strictly under 16 units, §2.1) and
-  detent feel.
+- Surge magnitude and cooldown, **and the gesture surge is bound to** — a tap on a
+  column now dispatches, so surge has none (UI design spec §4.1).
+- Drag threshold (strictly under 14.8 units, §2.1) and detent feel.
 - **`offline_efficiency`** — starting value and Automation-upgraded maximum, both
   bounded by `min over the §9.1 Test B matrix of (lived / ceiling)`. This is a
   tuning result the matrix produces, not a property that holds by construction.

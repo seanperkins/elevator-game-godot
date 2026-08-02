@@ -1,25 +1,33 @@
 class_name ShaftColumn
 extends Control
 
-## The touch target -- full board height, never the car. Verbs separate by
-## gesture: drag = dispatch, tap = surge.
+## The touch target -- full column height, never the car. Both verbs dispatch:
+## a drag sends the car where you release, a tap sends it where you touched.
+##
+## The surge branch below is unreachable for now -- Gesture stopped producing
+## SURGE when the tap became a dispatch. It stays wired so re-enabling surge is
+## a change in one place, once it has a gesture that does not collide.
+##
+## The column spans the FLOORS only; the ghost band is above it and belongs to
+## the floor-purchase target. That inset is what keeps Gesture's cancel edge
+## from falling inside the lobby's dispatch band.
 
-signal dispatch_requested(shaft_index: int, row: int)
+signal dispatch_requested(shaft_index: int, floor_index: int)
 signal surge_requested(shaft_index: int)
 
 var shaft_index: int = 0
 
 var _gesture: Gesture
+var _coords: BoardCoords
 var _selector: FloorSelector
 var _car_rect: ColorRect
-var _row_height: float = 32.0
-var _car_row_provider: Callable
+var _car_floor_provider: Callable
 
-func setup(index: int, row_height: float, row_count: int, car_row_provider: Callable) -> void:
+func setup(index: int, coords: BoardCoords, car_floor_provider: Callable) -> void:
 	shaft_index = index
-	_row_height = row_height
-	_car_row_provider = car_row_provider
-	_gesture = Gesture.new(row_height, row_count)
+	_coords = coords
+	_car_floor_provider = car_floor_provider
+	_gesture = Gesture.new(coords)
 
 	var shaft_bg := ColorRect.new()
 	shaft_bg.color = Color("1b2430")
@@ -35,18 +43,21 @@ func setup(index: int, row_height: float, row_count: int, car_row_provider: Call
 	_selector = FloorSelector.new()
 	_selector.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_selector)
-	_selector.configure(row_height)
+	_selector.configure(coords)
 
+## position_row is FRACTIONAL -- a car mid-trip sits at 2.4 -- so this uses the
+## continuous car_y rather than the integer floor mapping. Coercing to an int
+## would make a moving car jump between floors instead of gliding.
 func set_car_position(position_row: float) -> void:
-	_car_rect.position = Vector2(3, position_row * _row_height + 2)
-	_car_rect.size = Vector2(size.x - 6, _row_height - 4)
+	_car_rect.position = Vector2(3, _coords.car_y(position_row) + 2.0)
+	_car_rect.size = Vector2(size.x - 6.0, _coords.row_height - 4.0)
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch or event is InputEventMouseButton:
 		var pressed: bool = event.pressed
 		var local_y: float = event.position.y
 		if pressed:
-			_gesture.press(local_y, _car_row_provider.call())
+			_gesture.press(local_y, _car_floor_provider.call())
 			_selector.show_at(_gesture.selected_row())
 		else:
 			var result := _gesture.release()
