@@ -410,3 +410,30 @@ func test_a_thumb_tap_on_a_column_still_dispatches() -> void:
 	await thumb_tap(column_x(0), floor_centre_y(3))
 	assert_eq(root.state.building.cars[0].target_row, 3,
 		"dropping the duplicate must not drop the gesture itself")
+
+# --- the dwell is visible --------------------------------------------------
+
+func test_a_shut_car_has_its_doors_closed_across_the_middle() -> void:
+	view.refresh()
+	var col: ShaftColumn = view._columns[0]
+	assert_almost_eq(col.door_width(), col._car_rect.size.x * 0.5, 0.01,
+		"two panels meeting in the middle")
+
+func test_the_doors_part_while_the_car_is_boarding() -> void:
+	# The stop is otherwise indistinguishable from standing still.
+	var car: ElevatorCar = root.state.building.cars[0]
+	car.door_ticks = 20
+	car.dispatch_to(0)
+	car.step(10)                        # mid-dwell: wide open
+	view.refresh()
+	assert_almost_eq(view._columns[0].door_width(), 0.0, 0.01, "fully retracted")
+
+func test_the_doors_are_mid_slide_as_they_open() -> void:
+	var car: ElevatorCar = root.state.building.cars[0]
+	car.door_ticks = 20
+	car.dispatch_to(0)
+	car.step(2)                         # ~10% in: part way through the slide
+	view.refresh()
+	var col: ShaftColumn = view._columns[0]
+	assert_between(col.door_width(), 0.01, col._car_rect.size.x * 0.5 - 0.01,
+		"caught between shut and open, which is what makes the dwell legible")

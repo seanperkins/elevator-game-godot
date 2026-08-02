@@ -35,6 +35,29 @@ const HEADER_BUDGET := 16
 
 const SEAT_FREE := Color("1b6d92")
 
+## The doors, as the player sees them: two panels that part over the car.
+##
+## The dwell is otherwise invisible -- a stop looks exactly like standing still
+## -- so the upgrade that dominates early trip time has nothing on screen. The
+## panels slide over DOOR_SLIDE of the dwell at each end and hold open between,
+## so a 20-tick door takes 0.22s to part and a 4-tick door blinks. That
+## difference IS the purchase.
+##
+## They are translucent on purpose. Opaque panels would hide the seat rack for
+## the ~95% of the time a car is shut, which is most of when the player needs to
+## read who is aboard and where they are going.
+const DOOR_SLIDE := 0.22
+const DOOR_COLOUR := Color("0b2a3a", 0.55)
+
+## 0.0 shut, 1.0 wide open. Pure, so the shape is testable without a car.
+static func aperture_for(progress: float) -> float:
+	var p := clampf(progress, 0.0, 1.0)
+	if p < DOOR_SLIDE:
+		return p / DOOR_SLIDE
+	if p > 1.0 - DOOR_SLIDE:
+		return (1.0 - p) / DOOR_SLIDE
+	return 1.0
+
 signal dispatch_requested(shaft_index: int, floor_index: int)
 signal surge_requested(shaft_index: int)
 
@@ -45,6 +68,8 @@ var _coords: BoardCoords
 var _selector: FloorSelector
 var _car_rect: ColorRect
 var _car_label: Label
+var _door_left: ColorRect
+var _door_right: ColorRect
 var _seats: Array[ColorRect] = []
 var _chips: Array[PassengerSprite] = []
 var _listed: PackedStringArray = PackedStringArray()
@@ -77,6 +102,9 @@ func setup(index: int, coords: BoardCoords, car_floor_provider: Callable) -> voi
 	_car_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_car_rect.add_child(_car_label)
 
+	_door_left = _make_door()
+	_door_right = _make_door()
+
 	_selector = FloorSelector.new()
 	_selector.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_selector)
@@ -85,6 +113,30 @@ func setup(index: int, coords: BoardCoords, car_floor_provider: Callable) -> voi
 ## position_row is FRACTIONAL -- a car mid-trip sits at 2.4 -- so this uses the
 ## continuous car_y rather than the integer floor mapping. Coercing to an int
 ## would make a moving car jump between floors instead of gliding.
+func _make_door() -> ColorRect:
+	var d := ColorRect.new()
+	d.color = DOOR_COLOUR
+	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	d.z_index = 1               # above the seats, whatever order they were added
+	d.visible = false
+	_car_rect.add_child(d)
+	return d
+
+## `open_fraction` is 0.0 shut through 1.0 wide open. The panels meet in the
+## middle when shut and retract to the car's edges when open.
+func set_doors(open_fraction: float) -> void:
+	var half := _car_rect.size.x * 0.5
+	var w := half * (1.0 - clampf(open_fraction, 0.0, 1.0))
+	_door_left.position = Vector2.ZERO
+	_door_left.size = Vector2(w, _car_rect.size.y)
+	_door_right.position = Vector2(_car_rect.size.x - w, 0.0)
+	_door_right.size = Vector2(w, _car_rect.size.y)
+	_door_left.visible = w > 0.5
+	_door_right.visible = w > 0.5
+
+func door_width() -> float:
+	return _door_left.size.x if _door_left != null else 0.0
+
 func set_car_position(position_row: float) -> void:
 	_car_rect.position = Vector2(3, _coords.car_y(position_row) + 2.0)
 	_car_rect.size = Vector2(size.x - 6.0, _coords.row_height - 4.0)

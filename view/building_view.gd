@@ -246,6 +246,10 @@ func refresh() -> void:
 		var car: ElevatorCar = _state.building.cars[i]
 		_columns[i].set_car_position(car.position_row)
 		_columns[i].set_riders(car.riders, car.capacity)
+		# Shaping the dwell into an aperture is the view's job; the sim only
+		# says how much of the dwell is left.
+		_columns[i].set_doors(0.0 if car.state != ElevatorCar.State.DOORS
+			else ShaftColumn.aperture_for(car.door_progress()))
 	for i in range(_rows.size()):
 		var waiting := _state.building.waiting_at(i)
 		var vacant := _state.tenancy.is_vacant(i)

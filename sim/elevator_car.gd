@@ -58,6 +58,18 @@ func _open_doors() -> void:
 	state = State.DOORS
 	_door_remaining = door_ticks
 
+## How far through the door dwell, 0.0 the instant they open to 1.0 as they
+## shut. 1.0 for a car whose doors are not open at all, so "shut" is one value.
+##
+## This is DATA, not animation: the sim states how much dwell is left and the
+## view decides what that looks like. Door dwell dominates trip time early on,
+## which is what makes Faster Doors a strong first purchase -- and an upgrade
+## whose effect is invisible is one the player has to take on trust.
+func door_progress() -> float:
+	if state != State.DOORS or door_ticks <= 0:
+		return 1.0
+	return clampf(1.0 - float(_door_remaining) / float(door_ticks), 0.0, 1.0)
+
 ## A car parked at a floor answers a call there by opening its doors.
 ##
 ## It does NOT move, so this is not dispatch automation: choosing where the car
