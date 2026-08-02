@@ -16,9 +16,14 @@ extends Control
 ## co-occur. In the dense tier it would sit on the crowd bar, whose LENGTH is
 ## the encoding.
 
-const MAX_INDIVIDUALS := 12
-const VACANT_MAX_INDIVIDUALS := 10      # leaves room for the re-lease price
-const SPRITE_PITCH := 14.0
+## Eight, not twelve. A sprite now carries its destination floor, which needs
+## roughly 18 units of width to stay legible for two digits, so the fixed
+## 176-unit strip holds fewer of them. Eight legible destinations beat twelve
+## anonymous boxes: the boxes only restated the count, which is beside them and
+## always exact. Both numbers are tunable constants.
+const MAX_INDIVIDUALS := 8
+const VACANT_MAX_INDIVIDUALS := 6       # leaves room for the re-lease price
+const SPRITE_PITCH := 21.0
 const CROWD_BAR_BELOW := 40.0           # row height at or under which sprites collapse
 
 const GUTTER_WIDTH := 64.0
@@ -127,7 +132,7 @@ func set_waiting(passengers: Array) -> void:
 			_sprites[i].position = Vector2(
 				SPRITE_X + float(i) * SPRITE_PITCH,
 				(size.y - _sprites[i].size.y) * 0.5)
-			_sprites[i].show_for(p.patience_fraction())
+			_sprites[i].show_for(p.patience_fraction(), p.destination_row)
 		else:
 			_sprites[i].recycle()
 

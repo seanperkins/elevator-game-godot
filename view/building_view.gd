@@ -239,7 +239,9 @@ func refresh() -> void:
 	if _state == null:
 		return
 	for i in range(_columns.size()):
-		_columns[i].set_car_position(_state.building.cars[i].position_row)
+		var car: ElevatorCar = _state.building.cars[i]
+		_columns[i].set_car_position(car.position_row)
+		_columns[i].set_riders(car.riders, car.capacity)
 	for i in range(_rows.size()):
 		var waiting := _state.building.waiting_at(i)
 		var vacant := _state.tenancy.is_vacant(i)

@@ -252,3 +252,49 @@ func test_a_tap_past_the_strip_reaches_the_column_not_the_confirm() -> void:
 func test_a_tap_on_a_tenanted_floor_does_nothing() -> void:
 	await do_tap(100.0, floor_centre_y(3))
 	assert_false(root._relet_confirm.visible)
+
+# --- who is waiting, and where do they want to go -------------------------
+
+func test_a_waiting_passenger_shows_its_destination() -> void:
+	# Without this the dispatch decision is a guess: the board shows that someone
+	# is waiting but not the one fact you need to act on.
+	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0))
+	view.refresh()
+	var sprite: PassengerSprite = view._rows[2]._sprites[0]
+	assert_true(sprite.visible, "the passenger is drawn")
+	assert_eq(sprite.destination_text(), "5", "and says where it is going")
+
+func test_several_waiting_passengers_each_show_their_own_destination() -> void:
+	for dest in [1, 4, 3]:
+		root.state.building.enqueue(Passenger.new(2, dest, 900, 4.0))
+	view.refresh()
+	var shown := []
+	for i in range(3):
+		shown.append(view._rows[2]._sprites[i].destination_text())
+	assert_eq(shown, ["1", "4", "3"], "in queue order, FIFO like boarding")
+
+func test_the_car_shows_who_is_aboard_and_where_they_are_going() -> void:
+	# Capacity starts at 4, so "is there room, and where is this car already
+	# committed" is the whole dispatch decision once anyone is aboard.
+	var car: ElevatorCar = root.state.building.cars[0]
+	car.riders.append(Passenger.new(0, 5, 900, 4.0))
+	car.riders.append(Passenger.new(0, 3, 900, 4.0))
+	view.refresh()
+	var text: String = view._columns[0].car_text()
+	assert_string_contains(text, "2/%d" % car.capacity, "occupancy against capacity")
+	assert_string_contains(text, "5", "a rider's destination")
+	assert_string_contains(text, "3", "and the other's")
+
+func test_an_empty_car_shows_it_is_empty() -> void:
+	var car: ElevatorCar = root.state.building.cars[0]
+	assert_true(car.riders.is_empty())
+	view.refresh()
+	assert_string_contains(view._columns[0].car_text(), "0/%d" % car.capacity,
+		"an empty car still reports its capacity, so room is legible before boarding")
+
+func test_the_car_reports_a_raised_capacity() -> void:
+	# The capacity upgrade is only legible if the car actually says the new number.
+	var car: ElevatorCar = root.state.building.cars[0]
+	car.capacity = 9
+	view.refresh()
+	assert_string_contains(view._columns[0].car_text(), "0/9")
