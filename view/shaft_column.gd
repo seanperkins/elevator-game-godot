@@ -1,19 +1,17 @@
 class_name ShaftColumn
 extends Control
 
-## The touch target -- full column height, never the car. Both verbs dispatch:
-## a drag sends the car where you release, a tap sends it where you touched.
+## The touch target -- full board height, never the car. TAP dispatches to the
+## floor tapped; DRAG pans the board, because a building can now be taller than
+## the screen and looking around it is a thing you have to be able to do.
 ##
-## The surge branch below is unreachable for now -- Gesture stopped producing
-## SURGE when the tap became a dispatch. It stays wired so re-enabling surge is
-## a change in one place, once it has a gesture that does not collide.
-##
-## The column spans the FLOORS only; the ghost band is above it and belongs to
-## the floor-purchase target. That inset is what keeps Gesture's cancel edge
-## from falling inside the lobby's dispatch band.
+## The column control spans the whole board so its local y IS board y, which is
+## what lets it hand a touch straight to y_to_floor with no offset arithmetic.
+## Only its background is drawn over the building.
 
 signal dispatch_requested(shaft_index: int, floor_index: int)
 signal surge_requested(shaft_index: int)
+signal pan_requested(delta: float)
 
 ## The car is a rack of seats. Each one is the same little square the passenger
 ## was in the hall, now showing the floor they pressed instead of a call arrow:
@@ -63,7 +61,6 @@ var shaft_index: int = 0
 
 var _gesture: Gesture
 var _coords: BoardCoords
-var _selector: FloorSelector
 var _shaft_bg: ColorRect
 var _car_rect: ColorRect
 var _car_label: Label
@@ -106,11 +103,6 @@ func setup(index: int, coords: BoardCoords, car_floor_provider: Callable) -> voi
 
 	_door_left = _make_door()
 	_door_right = _make_door()
-
-	_selector = FloorSelector.new()
-	_selector.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(_selector)
-	_selector.configure(coords)
 
 ## position_row is FRACTIONAL -- a car mid-trip sits at 2.4 -- so this uses the
 ## continuous car_y rather than the integer floor mapping. Coercing to an int
@@ -249,15 +241,15 @@ func car_text() -> String:
 ## Routed through PointerEvents, which drops the synthetic mouse copy that touch
 ## emulation makes of every touch. Without it one thumb ran the state machine
 ## twice per gesture.
+## Routed through PointerEvents, which drops the synthetic mouse copy that touch
+## emulation makes of every touch. Without it one thumb ran the state machine
+## twice per gesture.
 func _gui_input(event: InputEvent) -> void:
 	if PointerEvents.is_press(event):
 		_gesture.press(event.position.y, _car_floor_provider.call())
-		_selector.show_at(_gesture.selected_row())
 	elif PointerEvents.is_release(event):
-		var result := _gesture.release()
-		_selector.hide_rail()
-		match result:
-			Gesture.Result.DISPATCH:
+		match _gesture.release():
+			Gesture.Result.TAP:
 				dispatch_requested.emit(shaft_index, _gesture.selected_row())
 			Gesture.Result.SURGE:
 				surge_requested.emit(shaft_index)
@@ -265,5 +257,7 @@ func _gui_input(event: InputEvent) -> void:
 				pass
 	elif PointerEvents.is_drag(event):
 		_gesture.move(event.position.y)
-		if _gesture.is_dragging():
-			_selector.show_at(_gesture.selected_row())
+		if _gesture.is_panning():
+			var delta := _gesture.take_pan_delta()
+			if not is_zero_approx(delta):
+				pan_requested.emit(delta)

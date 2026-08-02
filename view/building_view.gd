@@ -213,6 +213,7 @@ func _build_columns() -> void:
 			func() -> int: return _state.building.cars[index].current_row())
 		col.dispatch_requested.connect(_on_dispatch)
 		col.surge_requested.connect(_on_surge)
+		col.pan_requested.connect(scroll_board_by)
 		_columns.append(col)
 	_scroll_index = clampi(_scroll_index, 0, max_scroll())
 	_position_columns()

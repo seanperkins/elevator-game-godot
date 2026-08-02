@@ -124,13 +124,31 @@ func test_the_board_under_test_is_the_board_that_ships() -> void:
 
 # --- the mirrored-board check ---------------------------------------------
 
-func test_a_drag_onto_a_floors_band_dispatches_to_that_floor() -> void:
-	# THE check. A mirrored board is self-consistent across gesture, rail and
-	# car, so it passes casual play and every screenshot; only this catches it.
-	for target in [5, 2, 0]:
-		await do_drag(column_x(0), floor_centre_y(1), floor_centre_y(target))
-		assert_eq(root.state.building.cars[0].target_row, target,
-			"drag onto floor %d's band" % target)
+func test_a_drag_pans_the_board_and_dispatches_nothing() -> void:
+	# The verb swap: looking around is not commanding. A drag that used to send
+	# a car now moves the window.
+	root.state.economy.accrue(1e9)
+	for i in range(14):
+		root.state.buy("row")           # taller than the screen, so it can scroll
+	await wait_physics_frames(2)
+	var target: int = root.state.building.cars[0].target_row
+	var before: float = view.board_scroll_offset()
+	# Floor 12, not 6: unscrolled, a twenty-floor building puts floor 6's centre
+	# just past the bottom of the board, so the press would land on nothing.
+	await do_drag(column_x(0), floor_centre_y(12), floor_centre_y(12) - 250.0)
+	assert_ne(view.board_scroll_offset(), before, "the board moved")
+	assert_eq(root.state.building.cars[0].target_row, target,
+		"and the car did not")
+
+func test_the_board_cannot_be_panned_off_either_end() -> void:
+	root.state.economy.accrue(1e9)
+	for i in range(14):
+		root.state.buy("row")
+	await wait_physics_frames(2)
+	await do_drag(column_x(0), floor_centre_y(12), floor_centre_y(12) + 5000.0)
+	assert_almost_eq(view.board_scroll_offset(), 0.0, 0.01, "not past the ground")
+	await do_drag(column_x(0), floor_centre_y(12), floor_centre_y(12) - 5000.0)
+	assert_gt(view.board_scroll_offset(), 0.0, "and it did move the other way")
 
 func test_a_tap_on_a_column_dispatches_to_the_floor_tapped() -> void:
 	# A tap is a dispatch of zero drag length. Same bottom-up transform, so this
@@ -156,15 +174,19 @@ func test_the_car_renders_at_the_floor_it_is_on() -> void:
 	assert_almost_eq(car_y, lobby_y + 2.0, 0.01,
 		"the car at floor 0 draws in the lobby's band")
 
-func test_the_rail_marker_agrees_with_the_selected_floor() -> void:
-	press_at(column_x(0), floor_centre_y(1))
+func test_a_tap_after_scrolling_still_hits_the_floor_it_looks_like() -> void:
+	# THE mirrored-board check, now with an offset in it. A board that is wrong
+	# by a scroll offset is self-consistent on screen and catastrophic in play.
+	root.state.economy.accrue(1e9)
+	for i in range(14):
+		root.state.buy("row")
 	await wait_physics_frames(2)
-	drag_to(column_x(0), floor_centre_y(4))
+	view.scroll_board_by(300.0)
 	await wait_physics_frames(2)
-	var marker_y: float = view._columns[0]._selector._marker.position.y
-	assert_almost_eq(marker_y, view.coords().floor_to_y(4), 0.01)
-	release_at(column_x(0), floor_centre_y(4))
-	await wait_physics_frames(2)
+	for target in [4, 9, 12]:
+		await do_tap(column_x(0), floor_centre_y(target))
+		assert_eq(root.state.building.cars[0].target_row, target,
+			"tap on floor %d after scrolling" % target)
 
 # --- purchases -------------------------------------------------------------
 
@@ -224,7 +246,7 @@ func test_a_paged_out_column_cannot_be_touched_through_the_people_strip() -> voi
 	var targets := []
 	for c in root.state.building.cars:
 		targets.append(c.target_row)
-	await do_drag(120.0, floor_centre_y(4), floor_centre_y(1))
+	await do_tap(120.0, floor_centre_y(1))
 	for i in range(root.state.building.cars.size()):
 		assert_eq(root.state.building.cars[i].target_row, targets[i],
 			"shaft %d must not move" % i)
@@ -233,7 +255,7 @@ func test_the_leftmost_visible_column_commands_its_own_shaft() -> void:
 	await buy_shafts(6)
 	var first := view.first_visible_shaft()
 	assert_gt(first, 0, "the strip must actually be paged for this to mean anything")
-	await do_drag(column_x(0), floor_centre_y(4), floor_centre_y(2))
+	await do_tap(column_x(0), floor_centre_y(2))
 	assert_eq(root.state.building.cars[first].target_row, 2)
 	assert_ne(root.state.building.cars[0].target_row, 2,
 		"shaft 0 is off screen and must not have moved")

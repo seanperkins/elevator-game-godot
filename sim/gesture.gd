@@ -1,38 +1,35 @@
 class_name Gesture
 extends RefCounted
 
-## Classifies a point stream on a shaft column into one verb.
+## Tells a TAP from a PAN on a shaft column, and nothing else.
 ##
-## Verbs separate by GESTURE, never by tap cadence -- nothing here depends on
-## double-tap timing, which also collides with mobile Safari's zoom heuristics.
+## It used to classify dispatch itself: a drag onto a floor's band, with detents,
+## cancel edges and a rail preview. That model is what forced the board to fit on
+## one screen -- an absolute drag can only reach what is visible, so scrolling
+## and dispatch-by-drag could not coexist. Handing dispatch to the tap freed the
+## drag, and the freed drag is what lets the board be taller than the screen.
 ##
-## The mapping is ABSOLUTE: a detent is a floor's band on screen, so any floor
-## is one short drag away. A relative mapping would make a lobby-to-top dispatch
-## need 39 rows of travel on a board 40 rows tall.
+## What that bought: a fixed 48pt row at any building height, no density tiers,
+## no floor cap, and floors below the lobby. What it cost: the rail preview and
+## the cancel gesture, both of which existed because a 16pt target invited
+## mistakes that a 48pt one does not.
 ##
-## Screen y is converted to a FLOOR by BoardCoords -- the one definition of the
-## bottom-up inversion. This class holds no coordinate arithmetic beyond the
-## cancel edges.
-##
-## A detent is the floor's whole band, which is exactly the band FloorRow draws
-## into. Snapping to the nearest multiple of the row height instead would anchor
-## the detent on a band EDGE: a thumb resting over a floor's own label would
-## select its neighbour, and the rail would sit half a row from what dispatches.
+## A tap resolves against the PRESS point, never the drift. Below the threshold
+## the thumb never committed to a direction, so where it happened to end up is
+## noise -- and it means the threshold no longer gates precision, only intent.
 
-## SURGE is retained but NOT currently produced. A tap used to mean surge and
-## now dispatches to the floor it landed on, because a tap on a floor obviously
-## means "send the car here" and made the drag feel like the only way to say so.
-## When surge is tuned it needs a gesture that does not collide -- long-press is
-## the candidate, and unlike double-tap it does not fight Safari's zoom.
-enum Result { NONE, SURGE, DISPATCH, CANCELLED }
+enum Result { NONE, TAP, PAN, SURGE }
 
-const DRAG_THRESHOLD := 12.0     # < 14.8, half a row at the 40-floor ceiling
+## Only has to beat thumb wobble now. It used to have to stay under half a row,
+## because a drag that crossed a band boundary changed the target.
+const DRAG_THRESHOLD := 12.0
 
 var _coords: BoardCoords
 var _active := false
-var _dragging := false
+var _panning := false
 var _press_y := 0.0
-var _current_y := 0.0
+var _last_y := 0.0
+var _pan_delta := 0.0
 var _selected_row := 0
 
 func _init(coords: BoardCoords) -> void:
@@ -40,57 +37,49 @@ func _init(coords: BoardCoords) -> void:
 
 func press(y: float, car_floor: int) -> void:
 	_active = true
-	_dragging = false
+	_panning = false
 	_press_y = y
-	_current_y = y
-	_selected_row = clampi(car_floor, 0, _coords.floor_count - 1)
+	_last_y = y
+	_pan_delta = 0.0
+	_selected_row = car_floor
 
 func move(y: float) -> void:
 	if not _active:
 		return
-	_current_y = y
-	if absf(y - _press_y) > DRAG_THRESHOLD:
-		_dragging = true
-	if _dragging and not _is_beyond_edge(y):
-		_selected_row = _coords.y_to_floor(y)
+	if not _panning and absf(y - _press_y) > DRAG_THRESHOLD:
+		_panning = true
+		# The travel that PROVED it was a pan belongs to the pan, or the board
+		# jumps by the threshold the moment panning starts.
+		_pan_delta += _press_y - _last_y
+	if _panning:
+		_pan_delta += _last_y - y
+	_last_y = y
 
-## A tap and a drag are the same verb; a tap is a drag of zero length. It
-## resolves against the PRESS point, not the drift: below DRAG_THRESHOLD the
-## thumb never committed to a direction, so where it happened to end up is
-## noise. It also ignores the car's floor, which press() seeded the rail with
-## for the drag's benefit.
+## How far to move the board since this was last asked, and then zero. The view
+## adds each report to the offset, so returning a cumulative total would
+## accelerate the board away from the thumb.
+func take_pan_delta() -> float:
+	var d := _pan_delta
+	_pan_delta = 0.0
+	return d
+
 func release() -> int:
 	if not _active:
 		return Result.NONE
-	var out := Result.DISPATCH
-	if _dragging:
-		if _is_beyond_edge(_current_y):
-			out = Result.CANCELLED
-	else:
+	var out := Result.PAN if _panning else Result.TAP
+	if out == Result.TAP:
 		_selected_row = _coords.y_to_floor(_press_y)
 	_active = false
-	_dragging = false
+	_panning = false
 	return out
 
 func selected_row() -> int:
 	return _selected_row
 
-func is_dragging() -> bool:
-	return _dragging
+func is_panning() -> bool:
+	return _panning
 
-## Cancel is a deliberate gesture: past the top or bottom of the column, with
-## half a row of slop. The column spans exactly the floors -- the ghost band is
-## outside it -- so this edge never falls inside the lobby's band.
-##
-## In practice only the top edge is reachable: the board's bottom is the bottom
-## of the screen. The rule stays symmetric because asymmetry would be a special
-## case with no benefit.
-func _is_beyond_edge(y: float) -> bool:
-	# Asked of the transform rather than assumed. The column used to span exactly
-	# floor_count * h from y = 0; it no longer does -- a short building stands on
-	# the ground with sky above it, and a tall one scrolls -- so hard-coding that
-	# extent read every drag on the lobby as a drag off the board.
-	var h := _coords.row_height
-	var top := _coords.floor_to_y(_coords.top_floor)
-	var bottom := _coords.floor_to_y(_coords.bottom_floor) + h
-	return y < top - h * 0.5 or y > bottom + h * 0.5
+## Kept for the harness and for the day surge gets a gesture of its own; a pan
+## is not a dispatch and never was one.
+func is_dragging() -> bool:
+	return _panning
