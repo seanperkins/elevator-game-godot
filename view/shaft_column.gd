@@ -1,0 +1,64 @@
+class_name ShaftColumn
+extends Control
+
+## The touch target -- full board height, never the car. Verbs separate by
+## gesture: drag = dispatch, tap = surge.
+
+signal dispatch_requested(shaft_index: int, row: int)
+signal surge_requested(shaft_index: int)
+
+var shaft_index: int = 0
+
+var _gesture: Gesture
+var _selector: FloorSelector
+var _car_rect: ColorRect
+var _row_height: float = 32.0
+var _car_row_provider: Callable
+
+func setup(index: int, row_height: float, row_count: int, car_row_provider: Callable) -> void:
+	shaft_index = index
+	_row_height = row_height
+	_car_row_provider = car_row_provider
+	_gesture = Gesture.new(row_height, row_count)
+
+	var shaft_bg := ColorRect.new()
+	shaft_bg.color = Color("1b2430")
+	shaft_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shaft_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(shaft_bg)
+
+	_car_rect = ColorRect.new()
+	_car_rect.color = Color("4cc2ff")
+	_car_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_car_rect)
+
+	_selector = FloorSelector.new()
+	_selector.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_selector)
+	_selector.configure(row_height)
+
+func set_car_position(position_row: float) -> void:
+	_car_rect.position = Vector2(3, position_row * _row_height + 2)
+	_car_rect.size = Vector2(size.x - 6, _row_height - 4)
+
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch or event is InputEventMouseButton:
+		var pressed: bool = event.pressed
+		var local_y: float = event.position.y
+		if pressed:
+			_gesture.press(local_y, _car_row_provider.call())
+			_selector.show_at(_gesture.selected_row())
+		else:
+			var result := _gesture.release()
+			_selector.hide_rail()
+			match result:
+				Gesture.Result.DISPATCH:
+					dispatch_requested.emit(shaft_index, _gesture.selected_row())
+				Gesture.Result.SURGE:
+					surge_requested.emit(shaft_index)
+				_:
+					pass
+	elif event is InputEventScreenDrag or event is InputEventMouseMotion:
+		_gesture.move(event.position.y)
+		if _gesture.is_dragging():
+			_selector.show_at(_gesture.selected_row())
