@@ -1,7 +1,7 @@
 .godot/
 .import/
 export.cfg
-export_presets.cfg
+# export_presets.cfg is tracked: it holds no secrets and CI needs it
 *.translation
 .DS_Store
 build/
