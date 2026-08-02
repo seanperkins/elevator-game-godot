@@ -111,3 +111,13 @@ func test_expiry_lowers_the_origin_rows_satisfaction() -> void:
 	gs.building.enqueue(Passenger.new(0, 1, 0, 10.0))
 	gs.tick(2)
 	assert_lt(gs.tenancy.satisfaction_at(0), before)
+
+func test_buying_a_row_extends_tenancy_too() -> void:
+	gs.economy.accrue(1e9)
+	assert_true(gs.buy("row"))
+	assert_eq(gs.building.row_count, 7)
+	assert_false(gs.tenancy.is_vacant(6), "the new row must have a tenant")
+
+func test_buying_without_cash_fails() -> void:
+	assert_false(gs.buy("shaft"))
+	assert_eq(gs.building.cars.size(), 1)

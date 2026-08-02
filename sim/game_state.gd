@@ -21,6 +21,7 @@ var building: Building
 var spawner: TrafficSpawner
 var economy: Economy
 var tenancy: Tenancy
+var upgrades: Upgrades
 
 func _init(rows: int, shafts: int, p_seed: int) -> void:
 	clock = SimClock.new()
@@ -29,6 +30,20 @@ func _init(rows: int, shafts: int, p_seed: int) -> void:
 	spawner.load_curve("res://data/traffic_walkup.json")
 	economy = Economy.new()
 	tenancy = Tenancy.new(rows)
+	upgrades = Upgrades.new()
+	upgrades.load_defs("res://data/upgrades.json")
+
+## Buying a row extends the board, so tenancy must grow with it.
+##
+## The guard reads tenancy.rows(), not a tenanted/vacant tally: is_vacant()
+## reports true for a row tenancy does not have, so counting vacancies over the
+## NEW row_count always equals it and the loop would never run.
+func buy(id: String) -> bool:
+	var ok := upgrades.purchase(id, economy, building)
+	if ok:
+		while tenancy.rows() < building.row_count:
+			tenancy.add_row()
+	return ok
 
 func dispatch(shaft_index: int, row: int) -> bool:
 	if shaft_index < 0 or shaft_index >= building.cars.size():
