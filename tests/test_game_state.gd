@@ -121,3 +121,55 @@ func test_buying_a_row_extends_tenancy_too() -> void:
 func test_buying_without_cash_fails() -> void:
 	assert_false(gs.buy("shaft"))
 	assert_eq(gs.building.cars.size(), 1)
+
+## Drives a row out of its lease and returns once it is vacant.
+func vacate(state: GameState, row: int) -> void:
+	while state.tenancy.satisfaction_at(row) > Tenancy.MOVE_OUT_THRESHOLD:
+		state.tenancy.note_expiry(row)
+	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
+		state.tenancy.accrue_for_tick()
+
+func test_relet_charges_the_cost() -> void:
+	vacate(gs, 0)
+	gs.economy.accrue(1000.0)
+	var before := gs.economy.cash
+	assert_true(gs.relet(0))
+	assert_false(gs.tenancy.is_vacant(0))
+	assert_almost_eq(gs.economy.cash, before - Tenancy.RELET_COST, 1e-6,
+		"re-leasing has never actually charged before this")
+
+func test_relet_is_free_when_nothing_is_tenanted() -> void:
+	for row in range(gs.building.row_count):
+		vacate(gs, row)
+	assert_eq(gs.tenancy.tenanted_count(), 0)
+	var before := gs.economy.cash
+	assert_true(gs.relet(0), "the no-fail guarantee")
+	assert_almost_eq(gs.economy.cash, before, 1e-6)
+
+func test_relet_is_refused_when_unaffordable_and_charges_nothing() -> void:
+	vacate(gs, 0)
+	assert_lt(gs.economy.cash, Tenancy.RELET_COST)
+	var before := gs.economy.cash
+	assert_false(gs.relet(0))
+	assert_true(gs.tenancy.is_vacant(0), "still vacant")
+	assert_almost_eq(gs.economy.cash, before, 1e-6)
+
+func test_relet_is_refused_on_a_tenanted_row() -> void:
+	gs.economy.accrue(1000.0)
+	var before := gs.economy.cash
+	assert_false(gs.relet(2))
+	assert_almost_eq(gs.economy.cash, before, 1e-6, "must not charge")
+
+func test_relet_is_refused_outside_the_building() -> void:
+	gs.economy.accrue(1000.0)
+	assert_false(gs.relet(-1))
+	assert_false(gs.relet(99))
+
+func test_relet_reads_the_cost_before_reletting() -> void:
+	# relet_cost is derived from tenanted_count, and relet() flips it. Reletting
+	# first would turn the free last-row case into a $40 charge.
+	var solo := GameState.new(1, 1, 5)
+	vacate(solo, 0)
+	var before := solo.economy.cash
+	assert_true(solo.relet(0))
+	assert_almost_eq(solo.economy.cash, before, 1e-6, "free, not $40")

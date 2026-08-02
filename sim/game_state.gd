@@ -45,6 +45,26 @@ func buy(id: String) -> bool:
 			tenancy.add_row()
 	return ok
 
+## Re-lease a vacant floor. Until now nothing in the game charged for this:
+## Tenancy.relet() restores a tenant without touching Economy and
+## Tenancy.relet_cost() had no caller outside tests, so wiring the view straight
+## to tenancy would have made re-leasing free forever -- hollowing out §5.3's
+## guarantee, which is that re-leasing is free CONDITIONALLY.
+##
+## The cost is read BEFORE the relet: relet_cost derives from tenanted_count,
+## and relet() increments it, so the order decides whether the last row costs
+## nothing or forty dollars.
+func relet(row: int) -> bool:
+	if row < 0 or row >= building.row_count:
+		return false
+	if not tenancy.is_vacant(row):
+		return false
+	var cost := tenancy.relet_cost(row)
+	if not economy.spend(cost):
+		return false
+	tenancy.relet(row)
+	return true
+
 func dispatch(shaft_index: int, row: int) -> bool:
 	if shaft_index < 0 or shaft_index >= building.cars.size():
 		return false
