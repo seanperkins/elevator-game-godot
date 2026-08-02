@@ -19,6 +19,11 @@ extends RefCounted
 ## the detent on a band EDGE: a thumb resting over a floor's own label would
 ## select its neighbour, and the rail would sit half a row from what dispatches.
 
+## SURGE is retained but NOT currently produced. A tap used to mean surge and
+## now dispatches to the floor it landed on, because a tap on a floor obviously
+## means "send the car here" and made the drag feel like the only way to say so.
+## When surge is tuned it needs a gesture that does not collide -- long-press is
+## the candidate, and unlike double-tap it does not fight Safari's zoom.
 enum Result { NONE, SURGE, DISPATCH, CANCELLED }
 
 const DRAG_THRESHOLD := 12.0     # < 14.8, half a row at the 40-floor ceiling
@@ -49,12 +54,20 @@ func move(y: float) -> void:
 	if _dragging and not _is_beyond_edge(y):
 		_selected_row = _coords.y_to_floor(y)
 
+## A tap and a drag are the same verb; a tap is a drag of zero length. It
+## resolves against the PRESS point, not the drift: below DRAG_THRESHOLD the
+## thumb never committed to a direction, so where it happened to end up is
+## noise. It also ignores the car's floor, which press() seeded the rail with
+## for the drag's benefit.
 func release() -> int:
 	if not _active:
 		return Result.NONE
-	var out := Result.SURGE
+	var out := Result.DISPATCH
 	if _dragging:
-		out = Result.CANCELLED if _is_beyond_edge(_current_y) else Result.DISPATCH
+		if _is_beyond_edge(_current_y):
+			out = Result.CANCELLED
+	else:
+		_selected_row = _coords.y_to_floor(_press_y)
 	_active = false
 	_dragging = false
 	return out

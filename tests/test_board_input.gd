@@ -120,6 +120,20 @@ func test_a_drag_onto_a_floors_band_dispatches_to_that_floor() -> void:
 		assert_eq(root.state.building.cars[0].target_row, target,
 			"drag onto floor %d's band" % target)
 
+func test_a_tap_on_a_column_dispatches_to_the_floor_tapped() -> void:
+	# A tap is a dispatch of zero drag length. Same bottom-up transform, so this
+	# would catch a mirror in the tap path even if the drag path were correct.
+	for target in [4, 1, 3]:
+		await do_tap(column_x(0), floor_centre_y(target))
+		assert_eq(root.state.building.cars[0].target_row, target,
+			"tap on floor %d's band" % target)
+
+func test_a_tap_ignores_the_cars_current_floor() -> void:
+	root.state.building.cars[0].position_row = 5.0
+	await do_tap(column_x(0), floor_centre_y(2))
+	assert_eq(root.state.building.cars[0].target_row, 2,
+		"the floor touched, not the floor the car was parked on")
+
 func test_the_car_renders_at_the_floor_it_is_on() -> void:
 	# The car and the label must agree; they are the two surfaces that mirror
 	# together.
@@ -149,12 +163,12 @@ func test_a_tap_in_the_ghost_band_buys_a_floor() -> void:
 	assert_eq(root.state.building.row_count, before + 1,
 		"the ghost band is tappable at x=400, where the columns used to be")
 
-func test_a_tap_in_the_ghost_band_does_not_surge() -> void:
+func test_a_tap_in_the_ghost_band_does_not_dispatch() -> void:
 	root.state.economy.accrue(1e6)
 	var before: int = root.state.building.cars[0].target_row
 	await do_tap(400.0, root.HUD_HEIGHT + view._ghost_height * 0.5)
 	assert_eq(root.state.building.cars[0].target_row, before,
-		"a floor purchase is not a dispatch")
+		"a floor purchase is not a dispatch: the columns stop below the band")
 
 func test_every_shaft_up_to_the_cap_is_reachable() -> void:
 	# With five visible slots and no ghost slot, five owned shafts fill every
@@ -232,6 +246,8 @@ func test_a_tap_past_the_strip_reaches_the_column_not_the_confirm() -> void:
 	await do_tap(300.0, floor_centre_y(2))
 	assert_false(root._relet_confirm.visible,
 		"x=300 is the shaft viewport, not the re-lease span")
+	assert_eq(root.state.building.cars[0].target_row, 2,
+		"and it reached the column, which now dispatches on a tap")
 
 func test_a_tap_on_a_tenanted_floor_does_nothing() -> void:
 	await do_tap(100.0, floor_centre_y(3))

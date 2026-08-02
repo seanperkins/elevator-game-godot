@@ -1,8 +1,12 @@
 class_name ShaftColumn
 extends Control
 
-## The touch target -- full column height, never the car. Verbs separate by
-## gesture: drag = dispatch, tap = surge.
+## The touch target -- full column height, never the car. Both verbs dispatch:
+## a drag sends the car where you release, a tap sends it where you touched.
+##
+## The surge branch below is unreachable for now -- Gesture stopped producing
+## SURGE when the tap became a dispatch. It stays wired so re-enabling surge is
+## a change in one place, once it has a gesture that does not collide.
 ##
 ## The column spans the FLOORS only; the ghost band is above it and belongs to
 ## the floor-purchase target. That inset is what keeps Gesture's cancel edge

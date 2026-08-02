@@ -20,14 +20,31 @@ func test_threshold_is_under_half_a_row() -> void:
 	# unreachable.
 	assert_lt(Gesture.DRAG_THRESHOLD, H * 0.5)
 
-func test_press_and_release_in_place_is_surge() -> void:
-	g.press(centre_of(10), 10)
-	assert_eq(g.release(), Gesture.Result.SURGE)
+func test_a_tap_dispatches_to_the_floor_under_the_thumb() -> void:
+	# A tap is a dispatch to where you touched -- the same verb as a drag, with
+	# a zero-length path. It reads the PRESS point, not the car's floor.
+	g.press(centre_of(10), 30)
+	assert_eq(g.release(), Gesture.Result.DISPATCH)
+	assert_eq(g.selected_row(), 10, "the floor touched, not the car's floor")
 
-func test_tiny_wobble_is_still_surge() -> void:
-	g.press(centre_of(10), 10)
+func test_a_tap_anywhere_in_a_band_selects_that_band() -> void:
+	for frac in [0.01, 0.5, 0.99]:
+		g.press(float(FLOORS - 1 - 7) * H + H * frac, 0)
+		assert_eq(g.release(), Gesture.Result.DISPATCH)
+		assert_eq(g.selected_row(), 7, "%.0f%% into floor 7's band" % [frac * 100.0])
+
+func test_a_tap_on_the_lobby_dispatches_to_the_lobby() -> void:
+	g.press(centre_of(0), 20)
+	assert_eq(g.release(), Gesture.Result.DISPATCH)
+	assert_eq(g.selected_row(), 0)
+
+func test_a_wobble_under_the_threshold_is_still_a_tap() -> void:
+	# Below DRAG_THRESHOLD nothing is a drag, so this resolves against the press
+	# point rather than where the thumb drifted to.
+	g.press(centre_of(10), 30)
 	g.move(centre_of(10) + Gesture.DRAG_THRESHOLD - 0.1)
-	assert_eq(g.release(), Gesture.Result.SURGE)
+	assert_eq(g.release(), Gesture.Result.DISPATCH)
+	assert_eq(g.selected_row(), 10)
 
 func test_crossing_the_threshold_becomes_a_drag() -> void:
 	g.press(centre_of(10), 10)
@@ -130,5 +147,6 @@ func test_a_second_press_resets_state() -> void:
 	g.move(centre_of(10))
 	g.release()
 	g.press(centre_of(0), 3)
-	assert_false(g.is_dragging())
-	assert_eq(g.release(), Gesture.Result.SURGE)
+	assert_false(g.is_dragging(), "the previous drag must not carry over")
+	assert_eq(g.release(), Gesture.Result.DISPATCH)
+	assert_eq(g.selected_row(), 0, "the second press's own floor, not floor 10")
