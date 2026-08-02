@@ -27,7 +27,11 @@ const CALL_DOWN := "\u25bc"
 const MAX_INDIVIDUALS := 12
 const VACANT_MAX_INDIVIDUALS := 9       # leaves room for the re-lease price
 const SPRITE_PITCH := 14.0
-const CHIP_SIZE := Vector2(12.0, 16.0)
+## 14 wide still fits twelve at the 14-unit pitch (the last ends at 236 of 240),
+## and carries a font that is legible at the iPhone scale rather than merely
+## present.
+const CHIP_SIZE := Vector2(14.0, 18.0)
+const CHIP_FONT := 13
 const CROWD_BAR_BELOW := 40.0           # row height at or under which sprites collapse
 
 const GUTTER_WIDTH := 64.0
@@ -62,7 +66,7 @@ func _ready() -> void:
 	add_child(rule)
 
 	_count = Label.new()
-	_count.add_theme_font_size_override("font_size", 16)
+	_count.add_theme_font_size_override("font_size", 18)
 	_count.position = Vector2(0, 2)
 	_count.size = Vector2(COUNT_WIDTH, 18)
 	_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -82,8 +86,8 @@ func _ready() -> void:
 	add_child(_bar_fill)
 
 	_label = Label.new()
-	_label.add_theme_font_size_override("font_size", 14)
-	_label.add_theme_color_override("font_color", Color("7c8899"))
+	_label.add_theme_font_size_override("font_size", 17)
+	_label.add_theme_color_override("font_color", Color("8b98aa"))
 	_label.position = Vector2(LABEL_X, 3)
 	add_child(_label)
 
@@ -96,7 +100,7 @@ func _ready() -> void:
 	# to 10, so sprite 9 ends at x = 204 and the price occupies [206, 240]:
 	# they cannot overlap.
 	_price = Label.new()
-	_price.add_theme_font_size_override("font_size", 11)
+	_price.add_theme_font_size_override("font_size", 13)
 	_price.add_theme_color_override("font_color", GREEN)
 	_price.size = Vector2(PRICE_WIDTH, 16)
 	_price.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -129,7 +133,7 @@ func set_waiting(passengers: Array) -> void:
 		var s := PassengerSprite.new()
 		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(s)
-		s.set_chip(CHIP_SIZE, 11)
+		s.set_chip(CHIP_SIZE, CHIP_FONT)
 		_sprites.append(s)
 	for i in range(_sprites.size()):
 		if i < shown:

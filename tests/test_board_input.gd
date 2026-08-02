@@ -295,7 +295,35 @@ func test_a_rider_reveals_its_destination_once_aboard() -> void:
 	board_riders([5, 2])
 	var col: ShaftColumn = view._columns[0]
 	assert_eq(col.rider_destinations(), PackedStringArray(["5", "2"]),
-		"the same little square, now showing the car button they pressed")
+		"the car names the buttons its riders pressed")
+	assert_string_contains(col.car_text(), "5")
+	assert_string_contains(col.car_text(), "2")
+
+func test_the_floors_are_in_the_header_where_there_is_room_for_type() -> void:
+	# Four seats across a 50.2pt column leaves ~11pt each, which cannot hold two
+	# legible digits. The header is full column width, so it can.
+	board_riders([12, 7])
+	assert_string_contains(view._columns[0].car_text(), "12",
+		"a two-digit floor has to be readable somewhere")
+
+func test_a_crowded_car_collapses_the_list_rather_than_overflowing() -> void:
+	# The line cannot grow past the column, so it lists what fits and counts the
+	# rest. Twelve two-digit floors would otherwise run into the next shaft.
+	root.state.building.cars[0].capacity = 12
+	board_riders([11, 22, 33, 24, 15, 26])
+	var text: String = view._columns[0].car_text()
+	assert_string_contains(text, "6/12", "the count is never dropped")
+	assert_string_contains(text, "+", "and the remainder is counted, not clipped")
+	assert_lt(text.length(), 16, "the line stays inside the column")
+
+func test_seats_show_occupancy_without_carrying_text() -> void:
+	# Textless seats can be short -- 12 units instead of 20 -- which is what
+	# keeps the grid alive to ~30 floors instead of ~17.
+	board_riders([5, 2])
+	var col: ShaftColumn = view._columns[0]
+	assert_eq(col.seats_taken(), 2, "two filled")
+	assert_eq(col.free_slots_shown(), 2, "two hollow")
+	assert_lt(ShaftColumn.SEAT_SIZE.y, 16.0, "short, because it holds no glyph")
 
 func test_free_seats_are_drawn_so_capacity_is_legible_at_a_glance() -> void:
 	var car: ElevatorCar = root.state.building.cars[0]
