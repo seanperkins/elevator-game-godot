@@ -248,7 +248,50 @@ Upgrade definitions, tenant types, traffic curves, and era configuration live in
 - **View and UI** — thin by construction; verified by smoke tests and manual
   play, not unit tests.
 
-## 10. Build order
+## 10. Delivery
+
+Builds are reviewed on an iPhone, so the web export is the primary delivery
+target and desktop is incidental.
+
+**Hosting.** Public GitHub repo, built by GitHub Actions on every push to
+`main`, published to GitHub Pages at
+<https://seanperkins.github.io/elevator-game-godot/>.
+
+**Threadless export, deliberately.** GitHub Pages cannot set custom HTTP
+headers, and Godot's threaded web export requires COOP/COEP. The export
+therefore sets `variant/thread_support=false`, which uses the
+`web_nothreads_release` template and needs no special headers.
+
+**Orientation.** Portrait, 720x1280 base viewport, `canvas_items` stretch with
+`expand`. A tall building suits a phone held upright; desktop gets the same
+board with more horizontal room for panels.
+
+**Renderer.** GL Compatibility (WebGL 2). Forward+ on web depends on WebGPU and
+is not a safe bet in mobile Safari.
+
+**VRAM texture compression is off.** Enabling it for mobile requires "Import
+ETC2 ASTC" in project settings; without it, Godot 4.7 fails the export with a
+config error whose message body is empty. This is a 2D game with no compressed
+textures, so there is nothing to gain by turning it on.
+
+### Milestone 0 — pipeline check (complete)
+
+Before any game code, a probe scene was deployed to verify the whole chain on a
+real device: rendering, frame-loop animation, touch input, text layout, and
+`user://` persistence (IndexedDB on web, the likeliest thing to break in
+Safari).
+
+Verified in Chrome against the live Pages URL: Godot 4.7 web build boots over
+plain HTTP with no COOP/COEP headers, runs at 60 fps, registers taps, and
+round-trips a save through `user://`.
+
+**Outstanding:** confirmation on the user's actual iPhone. Desktop Chrome is
+strong evidence, not proof, for mobile Safari.
+
+**Known cost:** the wasm payload is ~39 MB uncompressed. Acceptable over wifi;
+worth revisiting if it grows.
+
+## 11. Build order
 
 Each milestone is playable on its own.
 
@@ -262,7 +305,7 @@ Each milestone is playable on its own.
 6. **Save and offline** — persistence and the welcome-back screen.
 7. **Content and feel** — remaining eras, events, staff, contracts, juice.
 
-## 11. Decisions taken
+## 12. Decisions taken
 
 Recorded so they are not relitigated:
 
@@ -273,7 +316,7 @@ Recorded so they are not relitigated:
 - Soft pressure: tenants leave, runs never fail.
 - Offline progress on, capped, improvable.
 
-## 12. Open items for balancing
+## 13. Open items for balancing
 
 Deferred to implementation, not blocking:
 
