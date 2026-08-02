@@ -2066,7 +2066,27 @@ func test_a_tap_on_a_tenanted_floor_does_nothing() -> void:
 godot --headless -s addons/gut/gut_cmdln.gd -gtest=res://tests/test_board_input.gd -gexit
 ```
 
-Expected: the re-lease tests FAIL — `_relet_confirm` does not exist until Task 13. Every other test must PASS. If a dispatch test fails, the board is mirrored and Task 9 or 10 is wrong; fix it before continuing.
+Expected: **five** tests fail, not three. The three re-lease tests fail because
+`_relet_confirm` does not exist until Task 13, and the two purchase tests
+(`..._buys_a_floor`, `..._up_to_the_cap_is_reachable`) fail because the old
+`game_root.gd` never connects `floor_purchase_requested` or
+`shaft_purchase_requested` — Task 14 does. The ghost row and the trailing slot
+*do* receive their events here; nothing is listening yet.
+
+Every other test must PASS. If a dispatch test fails, the board is mirrored and
+Task 9 or 10 is wrong; fix it before continuing.
+
+**Two environment facts this harness had to be built around**, both of which
+make the naive version pass vacuously — a synthetic tap that misses and a tap
+on nothing are indistinguishable from the sim's side:
+
+- `game_root.tscn` anchors full-rect, so it resizes to GUT's parent (2000x2560)
+  *before* `_ready` lays the board out. Pin `PRESET_TOP_LEFT` and set the size
+  explicitly, or the board under test is 18 shafts wide with 352-unit rows.
+- The headless window is 0x0, which makes the root viewport's final transform a
+  **0.05 scale**. `Input.parse_input_event` and `push_input(event)` both apply
+  its inverse, multiplying every coordinate by twenty. Inject with
+  `push_input(event, true)` — viewport-local — which skips the transform.
 
 - [ ] **Step 3: Commit**
 
