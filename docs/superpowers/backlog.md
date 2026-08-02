@@ -175,6 +175,46 @@ tenant menu.
 
 ---
 
+## Tenants who will not mix
+
+**Idea.** Some tenant kinds refuse to share a building — or a neighbourhood of
+floors — with others.
+
+**Why it is more than flavour.** It turns leasing from a per-floor choice into a
+*layout* problem. Without it, the optimal building is "whatever pays most on
+every floor" and there is one right answer. With it, a high-paying tenant can
+cost you the two floors either side of it, and the question becomes what a
+floor is worth *given its neighbours*.
+
+**What it touches.** Only the leasing decision, if the rule is checked at
+lease time — `Tenancy` gains a compatibility check and the tenant picker greys
+out what will not fit. It gets much harder if an existing tenant can become
+unhappy because of somebody who moved in later, because then the player can be
+punished for a choice made three floors away and needs to be told why.
+
+**Recommendation.** Check at lease time only, at least at first. A refusal the
+player can see before committing is a puzzle; a penalty applied afterwards is a
+mystery.
+
+---
+
+## Premium tenants worth a dedicated shaft
+
+**Idea.** A tenant whose fares are high enough that devoting a whole shaft to
+their floor pays.
+
+**Why it fits.** It is the reason zoning exists in real buildings, and it gives
+the shaft-count decision a second dimension: not just "can I serve everyone"
+but "is this floor worth a car of its own". It also gives `DispatchPolicy` an
+obvious new block — *serve only these floors* — which the existing decomposition
+already has a slot for, since sources are a set.
+
+**What it needs first.** Per-tenant fares. `base_fare` is currently one number
+on the spawner for the whole building, so fares are uniform; a tenant kind has
+to be able to carry its own.
+
+---
+
 ## Move-in and move-out as elevator jobs
 
 **Idea.** A tenant arriving or leaving occupies a car for a long time and blocks

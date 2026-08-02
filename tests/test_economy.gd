@@ -78,3 +78,28 @@ func test_can_afford_matches_spend_at_the_boundary() -> void:
 	econ.accrue(20.0)
 	assert_true(econ.can_afford(20.0))
 	assert_false(econ.can_afford(20.01))
+
+func test_taking_the_stairs_costs_money() -> void:
+	# Bad service is actively expensive, not merely unprofitable.
+	econ.accrue(100.0)
+	econ.note_expiry(4.0)
+	assert_almost_eq(econ.cash, 96.0, 1e-6, "a fare's worth of goodwill")
+
+func test_the_stairs_penalty_cannot_push_you_into_debt() -> void:
+	# The design has a hard no-fail rule, and a debt that outruns income is a
+	# fail state wearing a number.
+	econ.accrue(1.0)
+	econ.note_expiry(4.0)
+	assert_almost_eq(econ.cash, 0.0, 1e-9, "floored, not negative")
+
+func test_the_penalty_on_an_empty_purse_is_nothing() -> void:
+	assert_almost_eq(econ.cash, 0.0, 1e-9)
+	for i in range(50):
+		econ.note_expiry(4.0)
+	assert_almost_eq(econ.cash, 0.0, 1e-9, "still zero, never below it")
+
+func test_an_expiry_still_breaks_the_combo() -> void:
+	econ.credit_delivery(10.0)
+	assert_gt(econ.combo, 1.0)
+	econ.note_expiry(4.0)
+	assert_almost_eq(econ.combo, 1.0, 1e-9)
