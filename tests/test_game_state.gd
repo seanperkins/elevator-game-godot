@@ -101,7 +101,13 @@ func test_ticking_zero_is_a_no_op() -> void:
 	gs.tick(0)
 	assert_eq(gs.clock.ticks_executed, 0)
 
-func test_rent_is_not_accrued_before_the_tycoon_layer_exists() -> void:
-	# Guards the Milestone 2 seam: until tenancy lands, income is fares only.
-	gs.tick(1200)
-	assert_eq(gs.economy.riders_served * 0, 0)
+func test_rent_accrues_while_the_sim_runs() -> void:
+	var before := gs.economy.cash
+	gs.tick(SimClock.TICKS_PER_MINUTE)
+	assert_gt(gs.economy.cash, before, "tenants pay rent every tick")
+
+func test_expiry_lowers_the_origin_rows_satisfaction() -> void:
+	var before := gs.tenancy.satisfaction_at(0)
+	gs.building.enqueue(Passenger.new(0, 1, 0, 10.0))
+	gs.tick(2)
+	assert_lt(gs.tenancy.satisfaction_at(0), before)

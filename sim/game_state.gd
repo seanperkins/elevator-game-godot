@@ -20,6 +20,7 @@ var clock: SimClock
 var building: Building
 var spawner: TrafficSpawner
 var economy: Economy
+var tenancy: Tenancy
 
 func _init(rows: int, shafts: int, p_seed: int) -> void:
 	clock = SimClock.new()
@@ -27,6 +28,7 @@ func _init(rows: int, shafts: int, p_seed: int) -> void:
 	spawner = TrafficSpawner.new(p_seed)
 	spawner.load_curve("res://data/traffic_walkup.json")
 	economy = Economy.new()
+	tenancy = Tenancy.new(rows)
 
 func dispatch(shaft_index: int, row: int) -> bool:
 	if shaft_index < 0 or shaft_index >= building.cars.size():
@@ -45,7 +47,7 @@ func _tick_once() -> void:
 	_move_and_doors()
 	_deliver()
 	_expire()
-	# accrue rent -- Milestone 2 (tenancy)
+	economy.accrue(tenancy.accrue_for_tick())
 	# update combo -- handled inside Economy on each delivery/expiry
 	clock.note_ticks(1)
 
@@ -69,6 +71,8 @@ func _deliver() -> void:
 			continue
 		for p in car.take_arrivals():
 			var paid := economy.credit_delivery(p.fare)
+			# The destination row's tenant is the one whose visitor arrived.
+			tenancy.note_delivery(p.destination_row)
 			passenger_delivered.emit(p, paid)
 		var seats := car.capacity - car.riders.size()
 		for p in building.take_boardable(car.current_row(), seats):
@@ -84,6 +88,7 @@ func _expire() -> void:
 			p.decay(1)
 			if p.is_expired():
 				economy.note_expiry()
+				tenancy.note_expiry(p.origin_row)
 				passenger_expired.emit(p)
 			else:
 				survivors.append(p)

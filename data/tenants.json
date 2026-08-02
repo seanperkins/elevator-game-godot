@@ -1,0 +1,8 @@
+{
+  "comment": "Rent is per simulated minute at full satisfaction.",
+  "types": [
+    { "id": "deli",       "name": "Deli",        "rent_per_minute": 6.0 },
+    { "id": "dentist",    "name": "Dentist",     "rent_per_minute": 9.0 },
+    { "id": "accountant", "name": "Accountants", "rent_per_minute": 12.0 }
+  ]
+}
