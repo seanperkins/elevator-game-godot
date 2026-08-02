@@ -7,7 +7,12 @@ extends RefCounted
 ## exactly 0.0 patience as the doors open pays and extends the combo, or
 ## expires and breaks it.
 ##
-##   spawn -> move/doors -> deliver -> expire -> accrue rent -> update combo
+##   advance metrics -> spawn -> move/doors -> deliver -> expire
+##     -> accrue rent -> update combo
+##
+## Metrics advances FIRST so the bucket a tick's events land in is the bucket
+## that tick just rolled into, and no event is written to a bucket about to be
+## cleared.
 ##
 ## This class never touches the scene tree. It talks to the view by signal only.
 
@@ -22,6 +27,7 @@ var spawner: TrafficSpawner
 var economy: Economy
 var tenancy: Tenancy
 var upgrades: Upgrades
+var metrics: Metrics
 
 func _init(rows: int, shafts: int, p_seed: int) -> void:
 	clock = SimClock.new()
@@ -32,6 +38,7 @@ func _init(rows: int, shafts: int, p_seed: int) -> void:
 	tenancy = Tenancy.new(rows)
 	upgrades = Upgrades.new()
 	upgrades.load_defs("res://data/upgrades.json")
+	metrics = Metrics.new()
 
 ## Buying a row extends the board, so tenancy must grow with it.
 ##
@@ -78,6 +85,7 @@ func tick(n: int) -> void:
 		_tick_once()
 
 func _tick_once() -> void:
+	metrics.advance()      # first: clears the bucket this tick will write into
 	_spawn()
 	_move_and_doors()
 	_deliver()
@@ -108,6 +116,7 @@ func _deliver() -> void:
 			var paid := economy.credit_delivery(p.fare)
 			# The destination row's tenant is the one whose visitor arrived.
 			tenancy.note_delivery(p.destination_row)
+			metrics.record_delivery(p.waited_ticks())
 			passenger_delivered.emit(p, paid)
 		var seats := car.capacity - car.riders.size()
 		for p in building.take_boardable(car.current_row(), seats):
@@ -124,6 +133,7 @@ func _expire() -> void:
 			if p.is_expired():
 				economy.note_expiry()
 				tenancy.note_expiry(p.origin_row)
+				metrics.record_expiry()
 				passenger_expired.emit(p)
 			else:
 				survivors.append(p)

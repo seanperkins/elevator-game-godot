@@ -173,3 +173,44 @@ func test_relet_reads_the_cost_before_reletting() -> void:
 	var before := solo.economy.cash
 	assert_true(solo.relet(0))
 	assert_almost_eq(solo.economy.cash, before, 1e-6, "free, not $40")
+
+const BUCKET_SLACK := 40   # one bucket either side of the boundary
+
+func test_deliveries_reach_the_metrics_window() -> void:
+	var car: ElevatorCar = gs.building.cars[0]
+	car.rows_per_tick = 1.0
+	car.door_ticks = 2
+	gs.building.enqueue(Passenger.new(0, 2, 100000, 10.0))
+	gs.dispatch(0, 0)
+	gs.tick(1)
+	gs.dispatch(0, 2)
+	gs.tick(5)
+	assert_eq(gs.metrics.deliveries(), 1)
+	assert_gte(gs.metrics.average_wait_seconds(), 0.0, "a real wait was recorded")
+
+func test_expiries_reach_the_metrics_window() -> void:
+	gs.building.enqueue(Passenger.new(0, 1, 0, 10.0))
+	gs.tick(2)
+	assert_eq(gs.metrics.expiries(), 1)
+
+func test_the_metrics_window_advances_with_the_sim() -> void:
+	# The spawner is silenced: over the 1,240 ticks this waits, ambient traffic
+	# spawns and expires on its own -- seed 4242 produces exactly one such expiry
+	# -- and the window would refill with it. This asserts that the ORIGINAL
+	# event ages out, so the traffic has to go.
+	gs.spawner.curve = PackedFloat32Array()
+	gs.building.enqueue(Passenger.new(0, 1, 0, 10.0))
+	gs.tick(2)
+	assert_eq(gs.metrics.expiries(), 1)
+	gs.tick(SimClock.TICKS_PER_MINUTE + BUCKET_SLACK)
+	assert_eq(gs.metrics.expiries(), 0, "it left the window")
+
+func test_a_spawned_passenger_first_decays_on_the_next_tick() -> void:
+	# Spec §8.3: "A passenger spawned on tick T first decays on tick T+1."
+	# No test has ever pinned this, and the code decays on tick T because
+	# _tick_once spawns and then expires within the same call.
+	var p := Passenger.new(0, 1, 100, 1.0)
+	gs.building.enqueue(p)
+	gs.tick(1)
+	assert_eq(p.patience_ticks, 99,
+		"one tick of decay for one tick of waiting")
