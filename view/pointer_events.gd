@@ -4,8 +4,9 @@ extends RefCounted
 ## Classifies pointer events into press / drag / release, and drops the
 ## duplicates that touch emulation produces.
 ##
-## project.godot sets input_devices/pointing/emulate_mouse_from_touch = true, so
-## ONE physical touch reaches a Control's _gui_input TWICE: once as an
+## Godot emulates mouse events from touches by DEFAULT
+## (input_devices/pointing/emulate_mouse_from_touch), so ONE physical touch
+## reaches a Control's _gui_input TWICE: once as an
 ## InputEventScreenTouch and once as a synthetic InputEventMouseButton. Handling
 ## both families fires every tap target twice -- on iPhone a single tap on the
 ## ghost floor bought TWO floors, and a single tap on the trailing shaft slot
