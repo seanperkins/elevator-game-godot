@@ -44,11 +44,21 @@ jobs:
       - name: Import assets
         run: godot --headless --import || true
 
+      - name: Verify export templates are where Godot looks for them
+        run: |
+          dir="$HOME/.local/share/godot/export_templates"
+          echo "--- $dir ---"
+          ls -la "$dir" || echo "MISSING"
+          echo "--- version.txt ---"
+          cat "$dir/${GODOT_VERSION}.stable/version.txt" || echo "MISSING"
+          echo "--- web templates present ---"
+          ls "$dir/${GODOT_VERSION}.stable" | grep web || echo "NO WEB TEMPLATES"
+
       - name: Export web build
         run: |
           set -euo pipefail
           mkdir -p build/web
-          godot --headless --export-release "Web" build/web/index.html
+          godot --headless --verbose --export-release "Web" build/web/index.html
           test -f build/web/index.html
           test -f build/web/index.wasm
           test -f build/web/index.pck
