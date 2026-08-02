@@ -17,20 +17,31 @@ extends GutTest
 ##    landing every tap off the board -- with no error, because a miss is
 ##    indistinguishable from a tap on nothing. push_input(event, true) treats
 ##    the position as viewport-local and skips the transform entirely.
+##
+## 3. GUT's own runner GUI is a CanvasLayer at layer 128, and its TestOutput
+##    panel spans x 652 to 1266 -- straight across the right of a 720-wide
+##    board, where the fifth shaft slot lives. It takes the tap first. The
+##    board goes on a HIGHER canvas layer so it is above GUT's chrome; without
+##    this, taps at x >= 643 silently reach nothing.
 
 const ROOT := preload("res://game/game_root.tscn")
 
 const BOARD_SIZE := Vector2(720, 1280)
 
+const GUT_GUI_LAYER := 128
+
 var root: Control
 var view: BuildingView
 
 func before_each() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = GUT_GUI_LAYER + 1
+	add_child_autofree(layer)
 	root = ROOT.instantiate()
 	root.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	root.position = Vector2.ZERO
 	root.size = BOARD_SIZE
-	add_child_autofree(root)
+	layer.add_child(root)
 	await wait_physics_frames(2)
 	view = root._view
 

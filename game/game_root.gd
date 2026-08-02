@@ -2,28 +2,37 @@ extends Control
 
 ## Owns the sim and pumps it. Physics stays at Godot's default 60 Hz and the
 ## clock accumulates to 20 Hz -- one tick per callback would run the sim 3x fast.
+##
+## Two views, one button. It reads MANAGE on the board and BOARD in management;
+## never CLOSE, because a view is not a sheet. The sim runs in both.
 
 const START_ROWS := 6
 const START_SHAFTS := 1
 const START_SEED := 20260802
 
 const HUD_HEIGHT := 96.0
-const SHEET_FRACTION := 0.5      # the upgrade sheet covers the lower half
 const TOUCH_MIN := 88.0          # 48pt at the 0.546 iPhone scale
 
 var state: GameState
 var _view: BuildingView
+var _management: ManagementView
+var _relet_confirm: ReletConfirm
 var _cash_label: Label
 var _rate_label: Label
-var _panel: UpgradePanel
-var _toggle: Button
+var _view_button: Button
 var _prev_shaft: Button
 var _next_shaft: Button
 var _pager_label: Label
 var _last_shape := Vector2i.ZERO
 
 func _ready() -> void:
-	state = GameState.new(START_ROWS, START_SHAFTS, START_SEED)
+	var rows := START_ROWS
+	var shafts := START_SHAFTS
+	var override := _debug_board_override()
+	if override != Vector2i.ZERO:
+		rows = override.x
+		shafts = override.y
+	state = GameState.new(rows, shafts, START_SEED)
 
 	var bg := ColorRect.new()
 	bg.color = Color("101418")
@@ -46,6 +55,22 @@ func _ready() -> void:
 	_view.size = Vector2(size.x, size.y - HUD_HEIGHT)
 	add_child(_view)
 	_view.bind(state)
+	_view.floor_purchase_requested.connect(func() -> void: state.buy("row"))
+	_view.shaft_purchase_requested.connect(_on_buy_shaft)
+	_view.relet_requested.connect(_on_relet_requested)
+
+	_management = ManagementView.new()
+	_management.position = Vector2(0, HUD_HEIGHT)
+	_management.size = Vector2(size.x, size.y - HUD_HEIGHT)
+	_management.visible = false
+	add_child(_management)
+	_management.bind(state)
+
+	_relet_confirm = ReletConfirm.new()
+	_relet_confirm.size = Vector2(size.x - 80.0, 260.0)
+	_relet_confirm.position = Vector2(40.0, size.y * 0.5 - 130.0)
+	add_child(_relet_confirm)
+	_relet_confirm.bind(state)
 
 	# Paging the shaft strip is a tap, never a swipe: the dispatch drag is
 	# vertical and arcs sideways by more than half a column (§2.1), so any
@@ -61,23 +86,39 @@ func _ready() -> void:
 	_pager_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_pager_label)
 
-	_panel = UpgradePanel.new()
-	_panel.position = Vector2(0, size.y * (1.0 - SHEET_FRACTION))
-	_panel.size = Vector2(size.x, size.y * SHEET_FRACTION)
-	_panel.visible = false
-	add_child(_panel)
-	_panel.bind(state)
-
-	_toggle = Button.new()
-	_toggle.text = "UPGRADES"
-	_toggle.add_theme_font_size_override("font_size", 20)
-	_toggle.size = Vector2(200, TOUCH_MIN)
-	_toggle.position = Vector2(size.x - 208, 4)
-	_toggle.pressed.connect(_on_toggle)
-	add_child(_toggle)
+	# Top-right is the worst reach on the phone, deliberately: a floating button
+	# in the thumb zone would overlay the bottom-right of the board, and at eight
+	# shafts that is a dispatch target.
+	_view_button = Button.new()
+	_view_button.text = "MANAGE"
+	_view_button.add_theme_font_size_override("font_size", 20)
+	_view_button.size = Vector2(200, TOUCH_MIN)
+	_view_button.position = Vector2(size.x - 208, 4)
+	_view_button.pressed.connect(_on_toggle_view)
+	add_child(_view_button)
 
 	_last_shape = Vector2i(state.building.row_count, state.building.cars.size())
 	_refresh_pager()
+
+## Screenshot and device testing need boards that cost 1.36e8 to reach by play.
+## This is a command-line override, NOT an edit to START_ROWS: an unreverted
+## edit would ship every new player a forty-floor building.
+##   godot -- --board=40x8
+##
+## Known limit: it starts GameState with N shafts while Upgrades.level_of
+## ("shaft") stays 0, so the ghost slot prices the FIRST shaft rather than the
+## next one. Harmless for screenshots, which is all this is for.
+func _debug_board_override() -> Vector2i:
+	for arg in OS.get_cmdline_user_args():
+		if not arg.begins_with("--board="):
+			continue
+		var spec := arg.substr("--board=".length()).split("x")
+		if spec.size() != 2:
+			continue
+		return Vector2i(
+			clampi(int(spec[0]), 1, Building.MAX_ROWS),
+			clampi(int(spec[1]), 1, Building.MAX_SHAFTS))
+	return Vector2i.ZERO
 
 func _pager_button(label: String, x: float, on_press: Callable) -> Button:
 	var b := Button.new()
@@ -90,13 +131,31 @@ func _pager_button(label: String, x: float, on_press: Callable) -> Button:
 	add_child(b)
 	return b
 
-func _on_toggle() -> void:
-	_panel.visible = not _panel.visible
-	_toggle.text = "CLOSE" if _panel.visible else "UPGRADES"
+func _on_buy_shaft() -> void:
+	if state.buy("shaft"):
+		_view.scroll_to_end()   # show the shaft that was just paid for
 
-## Hidden entirely while every shaft is on screen -- a disabled control the
-## player has never needed is just noise on a 393pt-wide phone.
+func _on_relet_requested(floor_index: int) -> void:
+	_relet_confirm.open_for(floor_index)
+
+func _on_toggle_view() -> void:
+	var showing_board := _management.visible
+	_management.visible = not showing_board
+	_view.visible = showing_board
+	_view_button.text = "BOARD" if _management.visible else "MANAGE"
+	if _management.visible:
+		_prev_shaft.visible = false
+		_next_shaft.visible = false
+		_pager_label.visible = false
+	else:
+		_refresh_pager()
+
+## Hidden entirely while every slot -- including the trailing ghost -- fits. A
+## disabled control the player has never needed is noise on a 393pt-wide phone.
+## The label counts SHAFTS, not slots, so the ghost is excluded from its totals.
 func _refresh_pager() -> void:
+	if _management.visible:
+		return
 	var total := state.building.cars.size()
 	var pageable := _view.max_scroll() > 0
 	_prev_shaft.visible = pageable
@@ -108,23 +167,25 @@ func _refresh_pager() -> void:
 	var last := mini(first + _view.visible_shafts(), total)
 	_prev_shaft.disabled = first <= 0
 	_next_shaft.disabled = first >= _view.max_scroll()
-	_pager_label.text = "shafts %d-%d of %d" % [first + 1, last, total]
+	_pager_label.text = "shafts %d-%d of %d" % [first + 1, maxi(last, first + 1), total]
 
 func _physics_process(delta: float) -> void:
 	var ticks := state.clock.take_ticks(delta)
 	if ticks > 0:
 		state.tick(ticks)
-	_view.refresh()
 
 	var shape := Vector2i(state.building.row_count, state.building.cars.size())
 	if shape != _last_shape:
-		var bought_shaft := shape.y > _last_shape.y
 		_view.rebuild()
-		if bought_shaft:
-			_view.scroll_to_end()   # show the shaft that was just paid for
+		if shape.y > _last_shape.y:
+			_view.scroll_to_end()
 		_last_shape = shape
 		_refresh_pager()
-	_panel.refresh()
+
+	if _management.visible:
+		_management.refresh()
+	else:
+		_view.refresh()
 
 	_cash_label.text = "$" + NumberFormat.compact(state.economy.cash)
 	var rent := 0.0
