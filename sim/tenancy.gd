@@ -5,15 +5,25 @@ extends RefCounted
 ## continuously; below a threshold a visible countdown starts, giving the
 ## player a chance to recover it.
 ##
-## NO FAIL STATE, guaranteed by ONE rule: re-leasing is free whenever the
-## player holds zero tenanted rows. Any row, including the lobby, may vacate.
-## A second rule ("the lobby never vacates") would make this guard unreachable
-## and would make the recovery test unwritable, because its setup would be
-## forbidden.
+## Tenants do not pay rent. ALL money comes from moving people, so the only
+## thing a tenant is worth is the traffic they generate: a vacant floor is
+## nobody to carry, and therefore nobody to charge. That is a sharper coupling
+## than rent ever was -- bad service loses the tenant, and losing the tenant
+## loses that floor's fares -- and it means the game pays nothing at all for
+## doing nothing until automation is bought.
+##
+## NO FAIL STATE, guaranteed by ONE rule: re-leasing is free whenever the player
+## cannot generate traffic, which is whenever FEWER THAN TWO rows are tenanted.
+## A trip needs an origin and a destination, so a single tenanted floor earns
+## exactly as much as none -- and charging for the re-lease that would fix it
+## would strand the player with no income and no way back.
+##
+## Any row, including the lobby, may vacate. A second rule ("the lobby never
+## vacates") would make this guard unreachable and the recovery test unwritable,
+## because its setup would be forbidden.
 
 const MOVE_OUT_THRESHOLD := 0.2
 const MOVE_OUT_TICKS := 1200          # one simulated minute of grace
-const BASE_RENT_PER_MINUTE := 6.0
 const RELET_COST := 40.0
 
 const _DELIVERY_GAIN := 0.02
@@ -64,9 +74,9 @@ func note_expiry(row: int) -> void:
 	if _satisfaction[row] <= MOVE_OUT_THRESHOLD and _move_out_left[row] <= 0:
 		_move_out_left[row] = MOVE_OUT_TICKS
 
-## Advances move-out countdowns and returns this tick's total rent.
-func accrue_for_tick() -> float:
-	var total := 0.0
+## Advances move-out countdowns. Returns nothing: tenants are not an income
+## source, they are a traffic source.
+func accrue_for_tick() -> void:
 	for row in range(_satisfaction.size()):
 		if _vacant[row]:
 			continue
@@ -74,17 +84,18 @@ func accrue_for_tick() -> float:
 			_move_out_left[row] -= 1
 			if _move_out_left[row] <= 0:
 				_vacant[row] = true
-				continue
-		total += rent_at(row) / float(SimClock.TICKS_PER_MINUTE)
-	return total
 
 func satisfaction_at(row: int) -> float:
 	return _satisfaction[row] if _valid(row) else 0.0
 
-func rent_at(row: int) -> float:
-	if not _valid(row) or _vacant[row]:
-		return 0.0
-	return BASE_RENT_PER_MINUTE * _satisfaction[row]
+## The floors that generate trips. A vacant floor is nobody to carry: it is
+## neither an origin nor a destination.
+func occupied_rows() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for row in range(_vacant.size()):
+		if not _vacant[row]:
+			out.append(row)
+	return out
 
 func is_vacant(row: int) -> bool:
 	return _vacant[row] if _valid(row) else true
@@ -102,9 +113,13 @@ func tenanted_count() -> int:
 			n += 1
 	return n
 
-## Free when nothing is tenanted -- this is the whole no-fail guarantee.
+## Free while the player cannot earn. A trip needs two tenanted floors, so one
+## tenant earns exactly what none does; charging to escape that would be a fail
+## state with a price tag on the exit.
+const MIN_ROWS_FOR_TRAFFIC := 2
+
 func relet_cost(_row: int) -> float:
-	return 0.0 if tenanted_count() == 0 else RELET_COST
+	return 0.0 if tenanted_count() < MIN_ROWS_FOR_TRAFFIC else RELET_COST
 
 func relet(row: int) -> void:
 	if not _valid(row):

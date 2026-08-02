@@ -28,11 +28,14 @@ func test_satisfaction_is_clamped_to_zero() -> void:
 		t.note_expiry(0)
 	assert_almost_eq(t.satisfaction_at(0), 0.0, 1e-9)
 
-func test_rent_scales_with_satisfaction() -> void:
-	var full := t.rent_at(0)
-	for i in range(30):
+func test_a_tenanted_floor_generates_traffic_and_a_vacant_one_does_not() -> void:
+	# Rent is gone: what a tenant is worth is the trips they generate.
+	assert_true(t.occupied_rows().has(0), "tenanted floors carry traffic")
+	while t.satisfaction_at(0) > Tenancy.MOVE_OUT_THRESHOLD:
 		t.note_expiry(0)
-	assert_lt(t.rent_at(0), full, "unhappy tenants pay less")
+	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
+		t.accrue_for_tick()
+	assert_false(t.occupied_rows().has(0), "a vacant floor is nobody to carry")
 
 func test_dropping_below_the_threshold_starts_a_visible_countdown() -> void:
 	while t.satisfaction_at(0) > Tenancy.MOVE_OUT_THRESHOLD:
@@ -60,15 +63,19 @@ func test_vacant_rows_earn_nothing() -> void:
 		t.note_expiry(0)
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
 		t.accrue_for_tick()
-	assert_almost_eq(t.rent_at(0), 0.0, 1e-9)
+	assert_true(t.is_vacant(0), "the countdown ran out and they left")
 
-func test_accrual_over_a_minute_matches_the_rent_rate() -> void:
-	var solo := Tenancy.new(1)
-	var expected := solo.rent_at(0)
-	var total := 0.0
-	for i in range(SimClock.TICKS_PER_MINUTE):
-		total += solo.accrue_for_tick()
-	assert_almost_eq(total, expected, expected * 1e-6)
+func test_a_single_tenant_can_never_be_charged_to_re_lease() -> void:
+	# A trip needs two floors, so one tenant earns exactly what none does.
+	# Charging to escape that would be a fail state with a price on the exit.
+	var pair := Tenancy.new(2)
+	while pair.satisfaction_at(1) > Tenancy.MOVE_OUT_THRESHOLD:
+		pair.note_expiry(1)
+	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
+		pair.accrue_for_tick()
+	assert_eq(pair.tenanted_count(), 1, "one left, one remains")
+	assert_almost_eq(pair.relet_cost(1), 0.0, 1e-9,
+		"one tenant cannot generate traffic, so the way back must be free")
 
 func test_reletting_the_last_row_is_free() -> void:
 	# The single no-fail rule: recovery is always reachable, so
@@ -108,7 +115,7 @@ func test_recovery_is_reachable_from_the_worst_state() -> void:
 	assert_eq(t.tenanted_count(), 0, "everyone left")
 	assert_almost_eq(t.relet_cost(0), 0.0, 1e-9, "so re-leasing must be free")
 	t.relet(0)
-	assert_gt(t.rent_at(0), 0.0, "and income resumes")
+	assert_true(t.occupied_rows().has(0), "and the floor carries traffic again")
 
 func test_add_row_extends_tenancy() -> void:
 	t.add_row()

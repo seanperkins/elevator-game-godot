@@ -226,8 +226,7 @@ func _physics_process(delta: float) -> void:
 		_view.refresh()
 
 	_cash_label.text = "$" + NumberFormat.compact(state.economy.cash)
-	var rent := 0.0
-	for row in range(state.building.row_count):
-		rent += state.tenancy.rent_at(row)
-	_rate_label.text = "%s/min   combo %.2fx" % [
-		NumberFormat.compact(rent), state.economy.combo]
+	# Riders delivered in the rolling minute, not rent: there is no rent, and
+	# this is the number the player is actually paid for.
+	_rate_label.text = "%s riders/min   combo %.2fx" % [
+		Metrics.format_rate(state.metrics.deliveries()), state.economy.combo]

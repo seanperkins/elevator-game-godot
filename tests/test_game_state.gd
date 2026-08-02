@@ -113,10 +113,13 @@ func test_ticking_zero_is_a_no_op() -> void:
 	gs.tick(0)
 	assert_eq(gs.clock.ticks_executed, 0)
 
-func test_rent_accrues_while_the_sim_runs() -> void:
+func test_an_idle_building_earns_nothing() -> void:
+	# The point of removing rent: no money for doing nothing. Income has to be
+	# bought, with automation, rather than arriving on a timer.
 	var before := gs.economy.cash
-	gs.tick(SimClock.TICKS_PER_MINUTE)
-	assert_gt(gs.economy.cash, before, "tenants pay rent every tick")
+	gs.tick(SimClock.TICKS_PER_MINUTE * 3)
+	assert_almost_eq(gs.economy.cash, before, 1e-9,
+		"nobody was carried, so nobody paid")
 
 func test_expiry_lowers_the_origin_rows_satisfaction() -> void:
 	var before := gs.tenancy.satisfaction_at(3)

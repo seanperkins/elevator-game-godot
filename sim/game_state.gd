@@ -8,7 +8,7 @@ extends RefCounted
 ## expires and breaks it.
 ##
 ##   advance metrics -> spawn -> move/doors -> deliver -> auto-dispatch
-##     -> expire -> accrue rent -> update combo
+##     -> expire -> advance tenancy -> update combo
 ##
 ## Metrics advances FIRST so the bucket a tick's events land in is the bucket
 ## that tick just rolled into, and no event is written to a bucket about to be
@@ -167,12 +167,12 @@ func _tick_once() -> void:
 	# its own floor gets first refusal before the policy moves it.
 	auto.step(building)
 	_expire()
-	economy.accrue(tenancy.accrue_for_tick())
+	tenancy.accrue_for_tick()
 	# update combo -- handled inside Economy on each delivery/expiry
 	clock.note_ticks(1)
 
 func _spawn() -> void:
-	for p in spawner.spawn_for_tick(clock.sim_minute(), building.row_count):
+	for p in spawner.spawn_for_tick(clock.sim_minute(), tenancy.occupied_rows()):
 		building.enqueue(p)
 		passenger_spawned.emit(p)
 

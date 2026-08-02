@@ -10,6 +10,10 @@ var curve: PackedFloat32Array = PackedFloat32Array()
 var base_patience_ticks: int = 900
 var base_fare: float = 4.0
 
+## The building size the curve's numbers describe. Six is the starting board, so
+## a new game behaves exactly as the curve says and growth scales from there.
+const REFERENCE_ROWS := 6
+
 var _rng := RandomNumberGenerator.new()
 
 var _seed: int = 0
@@ -55,16 +59,28 @@ func rate_at_minute(minute: int) -> float:
 ## Spawns for a single tick. The per-minute rate is divided across the minute's
 ## ticks and drawn as a Bernoulli trial, so the expected count over a whole
 ## minute equals the bucket value exactly.
-func spawn_for_tick(minute: int, row_count: int) -> Array[Passenger]:
+## `occupied` is the floors with a tenant on them. Traffic comes from tenants,
+## so an empty floor is neither an origin nor a destination -- which is what
+## makes losing a tenant cost money now that rent is gone.
+func spawn_for_tick(minute: int, occupied: PackedInt32Array) -> Array[Passenger]:
 	var out: Array[Passenger] = []
-	if row_count < 2 or curve.is_empty():
+	if occupied.size() < 2 or curve.is_empty():
 		return out
-	var per_tick := rate_at_minute(minute) / float(SimClock.TICKS_PER_MINUTE)
+	# Traffic scales with TENANTS, not with the hour alone. With rent gone, this
+	# is the only thing that makes building a floor worth anything: a new tenant
+	# is new people making trips. Without it a forty-floor tower carries exactly
+	# as many riders as a six-floor one, only over longer distances.
+	#
+	# The curve is stated for a REFERENCE_ROWS-sized building, so the shipped
+	# six-floor start is unchanged and the data file keeps its meaning.
+	var scale := float(occupied.size()) / float(REFERENCE_ROWS)
+	var per_tick := rate_at_minute(minute) * scale / float(SimClock.TICKS_PER_MINUTE)
 	if _rng.randf() >= per_tick:
 		return out
-	var origin := _rng.randi_range(0, row_count - 1)
-	var destination := _rng.randi_range(0, row_count - 2)
-	if destination >= origin:
-		destination += 1        # skip origin without rejection-looping
-	out.append(Passenger.new(origin, destination, base_patience_ticks, base_fare))
+	var origin_index := _rng.randi_range(0, occupied.size() - 1)
+	var destination_index := _rng.randi_range(0, occupied.size() - 2)
+	if destination_index >= origin_index:
+		destination_index += 1  # skip origin without rejection-looping
+	out.append(Passenger.new(occupied[origin_index], occupied[destination_index],
+		base_patience_ticks, base_fare))
 	return out

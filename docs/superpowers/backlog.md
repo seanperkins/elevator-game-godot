@@ -99,6 +99,67 @@ front.
 
 ---
 
+## Tenant kinds with their own traffic patterns
+
+**Idea.** An office floor and a residential floor generate different traffic at
+different hours. The player leases for a mix they can actually serve.
+
+**Why this is the strongest idea in this list.** Income is now traffic, and
+traffic now comes from tenants — so tenant *choice* becomes the first real
+strategic decision on the board, and `relet` stops being "restore what was
+there" and becomes "decide what moves in".
+
+**It also produces the real elevator problem for free.** Office traffic in the
+morning is **inbound** — everyone goes lobby-to-floor — and in the evening it
+reverses. Residential is the mirror. Retail peaks midday and is interfloor.
+Those are precisely the up-peak / down-peak / interfloor regimes real elevator
+engineering is organised around, and they arrive as a *consequence* of tenant
+mix rather than as a mechanic bolted on. A tower of nothing but offices has a
+brutal 8am spike; a mixed one is smoother but never quiet. That is a genuine
+optimisation with no dominant answer.
+
+**What it touches.**
+- `Tenancy` gains a kind per row, and the save has to carry it.
+- `TrafficSpawner` currently rolls ONE Bernoulli trial per tick against a single
+  building-wide curve. Per-kind curves mean either a trial per occupied row, or
+  one trial against the summed rate and then a weighted pick of which row it
+  came from — the latter keeps the cost independent of building height, which
+  matters at forty floors.
+- Origin and destination are currently uniform random. Directional flow is the
+  whole point, so a kind needs to state where its traffic *goes*, not just how
+  much there is.
+- The re-lease confirm becomes a tenant picker, which is a real UI, not a
+  relabel.
+
+**Watch for.** The no-fail guarantee is currently "free re-lease below two
+tenants". If tenants have prices, that guard has to survive: there must always
+be something the player can afford, or the fail state comes back through the
+tenant menu.
+
+---
+
+## Move-in and move-out as elevator jobs
+
+**Idea.** A tenant arriving or leaving occupies a car for a long time and blocks
+other riders.
+
+**Why it fits.** It gives churn a cost beyond the re-lease fee: losing a tenant
+does not just cost $40, it costs a car out of service while the move happens.
+That sharpens satisfaction management considerably — right now a lost tenant is
+an inconvenience, and this makes it an outage.
+
+**What it touches.** It is the same machinery as freight: a load that occupies
+more than one unit of car and takes several trips. If freight lands first, a
+move is freight with a schedule attached. Worth building them together rather
+than twice.
+
+**Open question.** Is a move something the player dispatches deliberately, or a
+background job that seizes a car? The first is a decision, the second is a
+disruption to route around. The second is more interesting and much more
+annoying; it probably wants a warning first.
+
+---
+
 ## Build-your-own dispatch algorithm
 
 **Idea.** A screen where players assemble a policy from the blocks they own.
