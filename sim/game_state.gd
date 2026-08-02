@@ -7,8 +7,8 @@ extends RefCounted
 ## exactly 0.0 patience as the doors open pays and extends the combo, or
 ## expires and breaks it.
 ##
-##   advance metrics -> spawn -> move/doors -> deliver -> expire
-##     -> accrue rent -> update combo
+##   advance metrics -> spawn -> move/doors -> deliver -> auto-dispatch
+##     -> expire -> accrue rent -> update combo
 ##
 ## Metrics advances FIRST so the bucket a tick's events land in is the bucket
 ## that tick just rolled into, and no event is written to a bucket about to be
@@ -28,6 +28,7 @@ var economy: Economy
 var tenancy: Tenancy
 var upgrades: Upgrades
 var metrics: Metrics
+var auto: AutoDispatch
 
 func _init(rows: int, shafts: int, p_seed: int) -> void:
 	clock = SimClock.new()
@@ -39,6 +40,7 @@ func _init(rows: int, shafts: int, p_seed: int) -> void:
 	upgrades = Upgrades.new()
 	upgrades.load_defs("res://data/upgrades.json")
 	metrics = Metrics.new()
+	auto = AutoDispatch.new()
 
 ## Buying a row extends the board, so tenancy must grow with it.
 ##
@@ -72,6 +74,29 @@ func relet(row: int) -> bool:
 	tenancy.relet(row)
 	return true
 
+## Turning a sweep on needs a LICENCE: the Auto-Dispatch upgrade's level is how
+## many shafts may run a policy at once. Enforced here rather than in the view,
+## for the same reason the zero-delta refusal is -- a greyed-out button is
+## bypassed by two taps queued during a stalled frame.
+##
+## Turning one OFF is always allowed, and hands the licence back.
+func set_auto(shaft: int, on: bool) -> bool:
+	if shaft < 0 or shaft >= building.cars.size():
+		return false
+	if not on:
+		auto.set_enabled(shaft, false)
+		return true
+	if auto.is_enabled(shaft):
+		return true                     # idempotent, not a second licence
+	if auto.enabled_count() >= auto_licences():
+		return false
+	auto.set_enabled(shaft, true)
+	return true
+
+## How many shafts may run a dispatch policy at once.
+func auto_licences() -> int:
+	return upgrades.level_of("auto")
+
 func dispatch(shaft_index: int, row: int) -> bool:
 	if shaft_index < 0 or shaft_index >= building.cars.size():
 		return false
@@ -89,6 +114,10 @@ func _tick_once() -> void:
 	_spawn()
 	_move_and_doors()
 	_deliver()
+	# After deliver, so a car that has just finished unloading is idle and can
+	# be sent on this tick; and after move/doors, so a car answering a call at
+	# its own floor gets first refusal before the policy moves it.
+	auto.step(building)
 	_expire()
 	economy.accrue(tenancy.accrue_for_tick())
 	# update combo -- handled inside Economy on each delivery/expiry

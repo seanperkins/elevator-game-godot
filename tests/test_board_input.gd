@@ -437,3 +437,44 @@ func test_the_doors_are_mid_slide_as_they_open() -> void:
 	var col: ShaftColumn = view._columns[0]
 	assert_between(col.door_width(), 0.01, col._car_rect.size.x * 0.5 - 0.01,
 		"caught between shut and open, which is what makes the dwell legible")
+
+# --- dispatch policy lives in Management -----------------------------------
+
+func open_management() -> void:
+	root._on_toggle_view()
+	await wait_physics_frames(2)
+
+func test_a_shaft_cannot_be_automated_before_the_upgrade_is_bought() -> void:
+	await open_management()
+	root._management._shaft_buttons[0].emit_signal("pressed")
+	await wait_physics_frames(2)
+	assert_false(root.state.auto.is_enabled(0), "no licence, no sweep")
+	assert_true(root._management._shaft_buttons[0].disabled, "and the button says so")
+
+func test_the_toggle_puts_a_shaft_on_auto_once_licensed() -> void:
+	root.state.economy.accrue(1e9)
+	assert_true(root.state.buy("auto"))
+	await open_management()
+	assert_false(root._management._shaft_buttons[0].disabled)
+	root._management._shaft_buttons[0].emit_signal("pressed")
+	await wait_physics_frames(2)
+	assert_true(root.state.auto.is_enabled(0))
+	assert_string_contains(root._management._shaft_buttons[0].text, "EVERY FLOOR")
+
+func test_the_toggle_turns_it_off_again() -> void:
+	root.state.economy.accrue(1e9)
+	root.state.buy("auto")
+	await open_management()
+	root._management._shaft_buttons[0].emit_signal("pressed")
+	await wait_physics_frames(2)
+	root._management._shaft_buttons[0].emit_signal("pressed")
+	await wait_physics_frames(2)
+	assert_false(root.state.auto.is_enabled(0))
+	assert_string_contains(root._management._shaft_buttons[0].text, "manual")
+
+func test_a_shaft_bought_on_the_board_gets_a_toggle() -> void:
+	root.state.economy.accrue(1e12)
+	assert_true(root.state.buy("shaft"))
+	await open_management()
+	assert_gte(root._management._shaft_buttons.size(), 2,
+		"the new shaft turns up in the dispatch list")

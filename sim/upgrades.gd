@@ -89,6 +89,8 @@ func _apply(id: String, building: Building) -> bool:
 			return true
 		"row":
 			return building.add_row()
+		"auto":
+			return true          # licences a shaft; nothing on a car changes
 		"doors", "speed", "capacity":
 			# Level up first so _sync_car reads the new value.
 			_levels[id] = level_of(id) + 1
@@ -110,11 +112,15 @@ func effect_value(id: String, level: int) -> float:
 			return SPEED_BASE * (1.0 + 0.25 * float(level))
 		"capacity":
 			return float(CAPACITY_BASE + level)
+		"auto":
+			# How many shafts may run a dispatch policy at once. Not a car
+			# property, so _sync_car never reads it.
+			return float(level)
 		_:
 			return 0.0
 
 func has_effect(id: String) -> bool:
-	return id == "doors" or id == "speed" or id == "capacity"
+	return id == "doors" or id == "speed" or id == "capacity" or id == "auto"
 
 ## True when the next level would change nothing. doors reaches DOOR_TICKS_MIN
 ## at level 8 while max_level is 12, so levels 8-11 would charge $7,226 for no

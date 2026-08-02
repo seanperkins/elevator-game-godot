@@ -17,6 +17,10 @@ var _rows: Dictionary = {}        # id -> Button
 var _riders: Label
 var _wait: Label
 var _gaveup: Label
+var _dispatch_box: VBoxContainer
+var _dispatch_note: Label
+var _shaft_buttons: Array[Button] = []
+var _shafts_shown: int = -1
 
 func bind(state: GameState) -> void:
 	_state = state
@@ -43,6 +47,18 @@ func bind(state: GameState) -> void:
 		if id == "shaft" or id == "row":
 			continue          # bought on the board, where they appear
 		box.add_child(_build_upgrade_row(id))
+
+	# Dispatch policy has no place on the board -- it is a property of a shaft
+	# rather than of anywhere in the building -- which is exactly the split rule
+	# that puts it here.
+	box.add_child(_heading("DISPATCH"))
+	_dispatch_note = Label.new()
+	_dispatch_note.add_theme_font_size_override("font_size", 13)
+	_dispatch_note.add_theme_color_override("font_color", Color("7c8899"))
+	box.add_child(_dispatch_note)
+	_dispatch_box = VBoxContainer.new()
+	_dispatch_box.add_theme_constant_override("separation", 6)
+	box.add_child(_dispatch_box)
 	refresh()
 
 func _heading(text: String) -> Control:
@@ -100,6 +116,8 @@ func refresh() -> void:
 	_wait.text = Metrics.format_wait(m.average_wait_seconds())
 	_gaveup.text = Metrics.format_rate(m.expiries())
 
+	_refresh_dispatch()
+
 	for id in _rows.keys():
 		var b: Button = _rows[id]
 		var label_name := _state.upgrades.name_of(id)
@@ -119,6 +137,39 @@ func refresh() -> void:
 			_effect_text(id, lvl, lvl + 1)]
 		b.disabled = not _state.economy.can_afford(cost)
 
+## One toggle per shaft, plus how many licences are left. Buttons are built as
+## shafts are bought, so a shaft purchased on the board turns up here.
+func _refresh_dispatch() -> void:
+	var shafts := _state.building.cars.size()
+	while _shaft_buttons.size() < shafts:
+		var index := _shaft_buttons.size()
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
+		b.add_theme_font_size_override("font_size", 18)
+		# `index` is captured by value, which is the one place that helps.
+		b.pressed.connect(func() -> void:
+			_state.set_auto(index, not _state.auto.is_enabled(index)))
+		_dispatch_box.add_child(b)
+		_shaft_buttons.append(b)
+	_shafts_shown = shafts
+
+	var licences := _state.auto_licences()
+	var used := _state.auto.enabled_count()
+	if licences <= 0:
+		_dispatch_note.text = "Buy Auto-Dispatch to let a shaft run itself."
+	else:
+		_dispatch_note.text = "%d of %d shafts on auto." % [used, licences]
+
+	for i in range(_shaft_buttons.size()):
+		var b: Button = _shaft_buttons[i]
+		b.visible = i < shafts
+		if not b.visible:
+			continue
+		var on := _state.auto.is_enabled(i)
+		b.text = "Shaft %d      %s" % [i + 1, "EVERY FLOOR" if on else "manual"]
+		# Disabled only when turning it ON would need a licence there is not.
+		b.disabled = not on and used >= licences
+
 func _effect_text(id: String, from_level: int, to_level: int) -> String:
 	var a := _state.upgrades.effect_value(id, from_level)
 	var b := _state.upgrades.effect_value(id, to_level)
@@ -129,5 +180,7 @@ func _effect_text(id: String, from_level: int, to_level: int) -> String:
 			return "speed %.2f → %.2f rows/tick" % [a, b]
 		"capacity":
 			return "capacity %d → %d" % [int(a), int(b)]
+		"auto":
+			return "%d → %d shafts may run themselves" % [int(a), int(b)]
 		_:
 			return ""

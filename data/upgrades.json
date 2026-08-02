@@ -5,6 +5,7 @@
     { "id": "speed",    "name": "Stronger Motor","base": 40.0,   "growth": 1.60, "max_level": 12 },
     { "id": "capacity", "name": "Bigger Car",    "base": 120.0,  "growth": 1.90, "max_level": 8 },
     { "id": "shaft",    "name": "New Shaft",     "base": 500.0,  "growth": 3.20, "max_level": 7 },
-    { "id": "row",      "name": "Build a Floor", "base": 200.0,  "growth": 1.45, "max_level": 34 }
+    { "id": "row",      "name": "Build a Floor", "base": 200.0,  "growth": 1.45, "max_level": 34 },
+    { "id": "auto",     "name": "Auto-Dispatch", "base": 750.0,  "growth": 2.60, "max_level": 8 }
   ]
 }
