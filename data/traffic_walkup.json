@@ -1,0 +1,12 @@
+{
+  "comment": "Spawns per simulated minute, one bucket per simulated hour. A simulated day is 24 minutes of real time at 20 ticks/s.",
+  "minutes_per_day": 24,
+  "buckets": [
+    0.4, 0.3, 0.2, 0.2, 0.3, 0.8,
+    2.4, 4.0, 5.0, 3.0, 2.0, 2.2,
+    3.6, 2.4, 2.0, 2.0, 2.4, 3.6,
+    4.4, 2.4, 1.4, 1.0, 0.8, 0.6
+  ],
+  "base_patience_ticks": 900,
+  "base_fare": 4.0
+}
