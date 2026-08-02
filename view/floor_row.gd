@@ -16,14 +16,18 @@ extends Control
 ## co-occur. In the dense tier it would sit on the crowd bar, whose LENGTH is
 ## the encoding.
 
-## Eight, not twelve. A sprite now carries its destination floor, which needs
-## roughly 18 units of width to stay legible for two digits, so the fixed
-## 176-unit strip holds fewer of them. Eight legible destinations beat twelve
-## anonymous boxes: the boxes only restated the count, which is beside them and
-## always exact. Both numbers are tunable constants.
-const MAX_INDIVIDUALS := 8
-const VACANT_MAX_INDIVIDUALS := 6       # leaves room for the re-lease price
-const SPRITE_PITCH := 21.0
+## A waiting passenger shows its CALL DIRECTION, not its destination: they
+## pressed a hall button, which is up or down. One glyph fits the original
+## 14-unit pitch, so the strip still holds twelve. (Two digits would have cost
+## roughly 18 units each and dropped it to eight -- which is what the destination
+## panel upgrade will have to buy, when it lands.)
+const CALL_UP := "\u25b2"
+const CALL_DOWN := "\u25bc"
+
+const MAX_INDIVIDUALS := 12
+const VACANT_MAX_INDIVIDUALS := 9       # leaves room for the re-lease price
+const SPRITE_PITCH := 14.0
+const CHIP_SIZE := Vector2(12.0, 16.0)
 const CROWD_BAR_BELOW := 40.0           # row height at or under which sprites collapse
 
 const GUTTER_WIDTH := 64.0
@@ -125,6 +129,7 @@ func set_waiting(passengers: Array) -> void:
 		var s := PassengerSprite.new()
 		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(s)
+		s.set_chip(CHIP_SIZE, 11)
 		_sprites.append(s)
 	for i in range(_sprites.size()):
 		if i < shown:
@@ -132,7 +137,8 @@ func set_waiting(passengers: Array) -> void:
 			_sprites[i].position = Vector2(
 				SPRITE_X + float(i) * SPRITE_PITCH,
 				(size.y - _sprites[i].size.y) * 0.5)
-			_sprites[i].show_for(p.patience_fraction(), p.destination_row)
+			_sprites[i].show_as(p.patience_fraction(),
+				CALL_DOWN if p.direction() < 0 else CALL_UP)
 		else:
 			_sprites[i].recycle()
 

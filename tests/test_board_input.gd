@@ -253,48 +253,127 @@ func test_a_tap_on_a_tenanted_floor_does_nothing() -> void:
 	await do_tap(100.0, floor_centre_y(3))
 	assert_false(root._relet_confirm.visible)
 
-# --- who is waiting, and where do they want to go -------------------------
+# --- the hall call: direction now, destination only once aboard -----------
 
-func test_a_waiting_passenger_shows_its_destination() -> void:
-	# Without this the dispatch decision is a guess: the board shows that someone
-	# is waiting but not the one fact you need to act on.
+func test_a_waiting_passenger_shows_its_call_direction_not_its_floor() -> void:
+	# A hall call button is UP or DOWN. Where they are actually going is not
+	# known to the operator until they board and press a car button, which is
+	# the information asymmetry the whole dispatch puzzle rests on.
 	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0))
 	view.refresh()
 	var sprite: PassengerSprite = view._rows[2]._sprites[0]
 	assert_true(sprite.visible, "the passenger is drawn")
-	assert_eq(sprite.destination_text(), "5", "and says where it is going")
+	assert_eq(sprite.label_text(), FloorRow.CALL_UP, "floor 2 to floor 5 is a call up")
+	assert_false(sprite.label_text().contains("5"),
+		"the destination must NOT be readable from the hall")
 
-func test_several_waiting_passengers_each_show_their_own_destination() -> void:
-	for dest in [1, 4, 3]:
+func test_a_downward_call_shows_a_downward_arrow() -> void:
+	root.state.building.enqueue(Passenger.new(4, 1, 900, 4.0))
+	view.refresh()
+	assert_eq(view._rows[4]._sprites[0].label_text(), FloorRow.CALL_DOWN)
+
+func test_waiting_passengers_show_their_own_directions() -> void:
+	for dest in [5, 0, 4]:
 		root.state.building.enqueue(Passenger.new(2, dest, 900, 4.0))
 	view.refresh()
 	var shown := []
 	for i in range(3):
-		shown.append(view._rows[2]._sprites[i].destination_text())
-	assert_eq(shown, ["1", "4", "3"], "in queue order, FIFO like boarding")
+		shown.append(view._rows[2]._sprites[i].label_text())
+	assert_eq(shown, [FloorRow.CALL_UP, FloorRow.CALL_DOWN, FloorRow.CALL_UP],
+		"in queue order, FIFO like boarding")
 
-func test_the_car_shows_who_is_aboard_and_where_they_are_going() -> void:
-	# Capacity starts at 4, so "is there room, and where is this car already
-	# committed" is the whole dispatch decision once anyone is aboard.
-	var car: ElevatorCar = root.state.building.cars[0]
-	car.riders.append(Passenger.new(0, 5, 900, 4.0))
-	car.riders.append(Passenger.new(0, 3, 900, 4.0))
-	view.refresh()
-	var text: String = view._columns[0].car_text()
-	assert_string_contains(text, "2/%d" % car.capacity, "occupancy against capacity")
-	assert_string_contains(text, "5", "a rider's destination")
-	assert_string_contains(text, "3", "and the other's")
+# --- the car as a set of seats --------------------------------------------
 
-func test_an_empty_car_shows_it_is_empty() -> void:
+func board_riders(dests: Array) -> void:
 	var car: ElevatorCar = root.state.building.cars[0]
-	assert_true(car.riders.is_empty())
+	for d in dests:
+		car.riders.append(Passenger.new(0, d, 900, 4.0))
 	view.refresh()
-	assert_string_contains(view._columns[0].car_text(), "0/%d" % car.capacity,
-		"an empty car still reports its capacity, so room is legible before boarding")
 
-func test_the_car_reports_a_raised_capacity() -> void:
-	# The capacity upgrade is only legible if the car actually says the new number.
+func test_a_rider_reveals_its_destination_once_aboard() -> void:
+	# The payoff of the asymmetry above: boarding is how you learn the floor.
+	board_riders([5, 2])
+	var col: ShaftColumn = view._columns[0]
+	assert_eq(col.rider_destinations(), PackedStringArray(["5", "2"]),
+		"the same little square, now showing the car button they pressed")
+
+func test_free_seats_are_drawn_so_capacity_is_legible_at_a_glance() -> void:
 	var car: ElevatorCar = root.state.building.cars[0]
-	car.capacity = 9
+	assert_eq(car.capacity, 4, "the shipped starting capacity")
+	board_riders([5, 2])
+	assert_eq(view._columns[0].free_slots_shown(), 2,
+		"two aboard of four leaves two visible empty seats")
+
+func test_an_empty_car_is_all_free_seats() -> void:
 	view.refresh()
-	assert_string_contains(view._columns[0].car_text(), "0/9")
+	assert_eq(view._columns[0].free_slots_shown(), 4)
+	assert_eq(view._columns[0].rider_destinations().size(), 0)
+
+func test_a_full_car_shows_no_free_seats() -> void:
+	board_riders([1, 2, 3, 4])
+	assert_eq(view._columns[0].free_slots_shown(), 0, "nothing more fits")
+	assert_eq(view._columns[0].rider_destinations().size(), 4)
+
+func test_raising_capacity_adds_visible_seats() -> void:
+	root.state.building.cars[0].capacity = 7
+	view.refresh()
+	assert_eq(view._columns[0].free_slots_shown(), 7,
+		"the capacity upgrade is only legible if the seats appear")
+
+func test_the_occupancy_number_sits_at_the_top_of_the_car() -> void:
+	board_riders([5])
+	var col: ShaftColumn = view._columns[0]
+	var car_height: float = col._car_rect.size.y
+	assert_lt(col._car_label.position.y, car_height * 0.25,
+		"the number reads from the top of the car, not its middle")
+	assert_string_contains(col.car_text(), "1/4")
+
+# --- what a real thumb delivers -------------------------------------------
+
+## An iPhone tap arrives TWICE: as a touch, and as the synthetic mouse event
+## emulate_mouse_from_touch fabricates from it (device -1). Both reach the same
+## Control's _gui_input. These helpers replay that faithfully -- the mouse-only
+## helpers above are the desktop path and cannot catch a double-fire.
+func touch_event(x: float, y: float, pressed: bool) -> InputEventScreenTouch:
+	var e := InputEventScreenTouch.new()
+	e.index = 0
+	e.device = 0
+	e.pressed = pressed
+	e.position = Vector2(x, y)
+	return e
+
+func emulated_mouse_event(x: float, y: float, pressed: bool) -> InputEventMouseButton:
+	var e := InputEventMouseButton.new()
+	e.device = PointerEvents.EMULATED_DEVICE
+	e.button_index = MOUSE_BUTTON_LEFT
+	e.pressed = pressed
+	e.position = Vector2(x, y)
+	e.global_position = e.position
+	return e
+
+func thumb_tap(x: float, y: float) -> void:
+	inject(touch_event(x, y, true))
+	inject(emulated_mouse_event(x, y, true))
+	await wait_physics_frames(2)
+	inject(touch_event(x, y, false))
+	inject(emulated_mouse_event(x, y, false))
+	await wait_physics_frames(2)
+
+func test_one_thumb_tap_buys_exactly_one_floor() -> void:
+	root.state.economy.accrue(1e9)
+	var before: int = root.state.building.row_count
+	await thumb_tap(400.0, root.HUD_HEIGHT + view._ghost_height * 0.5)
+	assert_eq(root.state.building.row_count, before + 1,
+		"one thumb, one floor -- touch emulation delivers the tap twice")
+
+func test_one_thumb_tap_buys_exactly_one_shaft() -> void:
+	root.state.economy.accrue(1e9)
+	var before: int = root.state.building.cars.size()
+	await thumb_tap(column_x(1), floor_centre_y(1))
+	assert_eq(root.state.building.cars.size(), before + 1,
+		"one thumb, one shaft")
+
+func test_a_thumb_tap_on_a_column_still_dispatches() -> void:
+	await thumb_tap(column_x(0), floor_centre_y(3))
+	assert_eq(root.state.building.cars[0].target_row, 3,
+		"dropping the duplicate must not drop the gesture itself")

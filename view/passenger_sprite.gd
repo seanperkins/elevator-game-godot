@@ -1,22 +1,24 @@
 class_name PassengerSprite
 extends ColorRect
 
-## One waiting passenger. Pooled.
+## One passenger, waiting on a floor or riding in a car. Pooled.
 ##
-## The sprite carries TWO facts, because either alone is useless for dispatch:
-## the fill ramps green -> red with remaining patience (how long you have), and
-## the number is the destination floor (where this trip is going). An anonymous
-## box tells you somebody is waiting, which the count already said.
+## The body's fill ramps green -> red with remaining patience. What the LABEL
+## says depends on where the passenger is, and that difference is the game:
 ##
-## The number sits INSIDE the body rather than beside it. Beside it would need a
-## second column of width per passenger, and the strip is a fixed 176 units --
-## the whole point of fixing it was that a strip sized from leftovers reaches
-## zero exactly when the building is busiest.
+##   waiting  -- an arrow. They pressed a hall call button, which is up or down;
+##               the operator does not know their floor yet.
+##   aboard   -- the floor number. They pressed a car button, so now you do.
+##
+## Learning the destination by picking someone up is the information asymmetry
+## the dispatch puzzle rests on. A later upgrade puts a destination panel in the
+## lobby and reveals floors before boarding, which is a real change in what the
+## player can plan -- see set_call/set_destination's two callers.
 
 const GREEN := Color("4ade80")
 const RED := Color("ef4444")
 
-const WIDTH := 18.0
+const WIDTH := 12.0
 const HEIGHT := 16.0
 
 var _label: Label
@@ -25,23 +27,34 @@ func _ready() -> void:
 	size = Vector2(WIDTH, HEIGHT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	# Dark ink, because the body ranges over green through red and both are
-	# light enough that white text on them is the unreadable case.
+	# Dark ink: the body ranges over green through red, and both are light
+	# enough that white text on them is the unreadable case.
 	_label = Label.new()
-	_label.add_theme_font_size_override("font_size", 11)
 	_label.add_theme_color_override("font_color", Color("0b0f14"))
-	_label.size = Vector2(WIDTH, HEIGHT)
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_label)
+	_apply_size(Vector2(WIDTH, HEIGHT), 11)
 
-func show_for(fraction: float, destination: int) -> void:
+## Hall chips hold one glyph; car chips hold two digits, so they are wider.
+## Same square, same colour ramp, different content -- which is the point.
+func set_chip(chip_size: Vector2, font_size: int) -> void:
+	_apply_size(chip_size, font_size)
+
+func _apply_size(chip_size: Vector2, font_size: int) -> void:
+	size = chip_size
+	if _label == null:
+		return
+	_label.size = chip_size
+	_label.add_theme_font_size_override("font_size", font_size)
+
+func show_as(fraction: float, text: String) -> void:
 	visible = true
 	color = RED.lerp(GREEN, clampf(fraction, 0.0, 1.0))
-	_label.text = str(destination)
+	_label.text = text
 
-func destination_text() -> String:
+func label_text() -> String:
 	return _label.text if _label != null else ""
 
 func recycle() -> void:

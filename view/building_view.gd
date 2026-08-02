@@ -228,12 +228,10 @@ func _gui_input(event: InputEvent) -> void:
 	if _state.tenancy.is_vacant(floor_index):
 		relet_requested.emit(floor_index)
 
+## Touch emulation delivers one physical tap twice -- see PointerEvents. Reading
+## both families here bought two floors, or two shafts, for one thumb.
 func _is_tap(event: InputEvent) -> bool:
-	if event is InputEventScreenTouch:
-		return not event.pressed
-	if event is InputEventMouseButton:
-		return not event.pressed and event.button_index == MOUSE_BUTTON_LEFT
-	return false
+	return PointerEvents.is_release(event)
 
 func refresh() -> void:
 	if _state == null:
