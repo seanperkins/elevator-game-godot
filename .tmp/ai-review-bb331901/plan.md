@@ -271,6 +271,20 @@ actual `godot_js_os_fs_sync()` call happens in `OS_Web::main_loop_iterate()` —
 same stopped loop — so even a synchronous write is not durable without forcing the
 sync explicitly from the glue.
 
+**`JavaScriptBridge.force_fs_sync()` is banned on the hidden path.** It is
+script-exposed and documented as "force synchronization of the persistent file
+system," so it is the first thing an implementer will reach for — but it only sets
+`idb_needs_sync`, which is consumed by `main_loop_iterate()`, the loop that has
+stopped. Calling it looks like compliance and silently restores the defect. Force
+the sync from JS instead (`FS.syncfs`), and note that the engine's own
+`GodotFS.sync()` refuses re-entry, so a hide racing the timer-save's sync must
+chain on the pending promise rather than skip the flush.
+
+**The synchronous guarantee is coupled to the threadless export.** Under
+`PROXY_TO_PTHREAD` the bridge callback becomes deferred and is consumed at resume,
+which would silently reopen this defect — so a future move to the threaded template
+(say, after a custom domain makes COOP/COEP available) must revisit §7.1.
+
 Serialisation *reads* sim state and does not mutate it, so running it inline is
 compatible with the rule below. **Only sim-state mutation — the §7.2
 reconciliation — defers**, via a flag consumed at the top of the next
@@ -447,9 +461,13 @@ equivalence test asserts.
   no-exploit property, so it is restored deliberately. Automation upgrades then
   read as "my building runs better without me," which is the fantasy anyway.
 - For Hidden→Resumed the process never died, so `Time.get_ticks_msec()` is
-  monotonic and available and is used; `Time.get_unix_time_from_system()` is
-  reserved for cold start. This removes DST/NTP and in-session clock manipulation
-  entirely from the common path.
+  monotonic and available and is used — **contingent on §10.1's device check**,
+  since the HR-time spec permits the monotonic clock to pause across device sleep
+  and iOS has historically done so. If it pauses across phone lock, the Resumed
+  boundary reads unix time like cold start does; the epoch-domain watermark means
+  such credit would be deferred rather than lost, so conservation holds either way.
+  Cold start uses `Time.get_unix_time_from_system()`. This keeps DST/NTP and
+  in-session clock manipulation off the common path.
 - The model evolves tenancy state, not just cash: satisfaction decay, move-out
   countdowns, capacity as a throughput ceiling.
 - Catch-up runs strictly after §8.6 step 7 (construction), on validated values — `clampf(NAN, …)`
@@ -479,6 +497,11 @@ prevent. Therefore: export the save (clipboard plus on-screen string) *before*
 prompting to install, and on first standalone launch with no save found, offer
 "played in Safari? paste your save" rather than silently starting fresh. Container
 isolation is verified on device as part of §10.1.
+
+**A successful standalone import writes a migrated-tombstone into the Safari-side
+save**, so that copy — which remains reachable by bookmark or history and keeps
+aging toward deletion — shows "this building moved to your home-screen app" rather
+than silently diverging into a second live game.
 
 **Other adopted mitigations:** enable the PWA export and manifest (with the icon
 fields populated — they are currently empty); treat "no save found" as a normal,
