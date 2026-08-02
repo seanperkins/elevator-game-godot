@@ -46,27 +46,75 @@ it is another `Source` — which is a good sign the decomposition holds.
 
 ---
 
-## Parking garage below the lobby
+## Building downward: parking, then mining, then whatever is down there
 
-**Idea.** Floors beneath the lobby.
+**Idea.** Floors below the lobby. The first few are parking; keep digging and it
+becomes mining; keep going and there is something alive down there.
 
-**This is the largest of these.** Everything currently assumes **floor 0 is the
-lobby and the bottom of the board**:
+**This is a second growth axis, not a feature.** Up and down would have
+different economies, which is what makes it worth doing rather than just more
+floors:
 
-- `BoardCoords` builds an edge table over `[0, N)` and maps bottom-up from 0.
-  Negative floors mean the table needs an origin offset, and `y_to_floor` has to
-  return negatives.
-- `DispatchPolicy.LOBBY = 0` is the parking target for Lobby Parking; with a
-  basement, "home" and "floor 0" stop being the same idea.
-- `ElevatorCar.is_spring_trip` defines the launch as `from == 0` to the top. Does
-  the spring launch from the *lowest* floor or from the lobby?
-- The ghost floor sits above the top floor. A basement needs its own "+ DIG"
-  affordance below the lobby, and the two cannot share the band.
+- **Up** is *service*. People, fares, patience, tenant mix. You are paid for
+  moving somebody who chose to be there.
+- **Down** is *extraction*. Depth costs time and buys material. Nobody down
+  there is in a hurry, but what comes up is heavy.
 
-**Recommendation.** Do this *before* the era ladder rather than after — retrofitting
-an origin offset through a coordinate system that four consumers depend on is
-exactly the kind of change the one-transform rule exists to make survivable, but
-it is still cheaper while N is small.
+That split gives the game a second currency with an honest source — the thing
+the reputation-gate entry is reaching for. Materials come out of the ground
+rather than being conjured from satisfaction, and they buy the structural things
+money currently buys, which frees fares to buy service.
+
+**It also makes freight load-bearing rather than flavour.** Ore has to be
+hauled. A mining floor is a permanent freight source with no patience and real
+bulk, which is exactly the load the weigher, the capacity upgrade and the
+service entrance all exist to handle. Down-axis content would make three
+backlog items pay off at once.
+
+**Monsters are the down-axis era ladder.** The design spec already has an era
+ladder going up — Walk-Up to Orbital Tether — where each era inflates what a row
+*means*. A downward ladder mirrors it: parking, storage, bedrock, caverns,
+something that objects to being disturbed. Same structure, opposite direction,
+and it reuses the era machinery rather than inventing a parallel one.
+
+### The structural conflict, which is the real work
+
+**The board never scrolls vertically, and that is load-bearing.** §3.5 rejected
+vertical scrolling explicitly: dispatch is an absolute drag onto a floor's band,
+so a scrolled board can only dispatch to what is on screen, and "any floor is one
+short drag away" is the property the whole input model rests on.
+
+Two-directional growth breaks that. Forty up and twenty down is sixty rows on a
+board that fits forty at 29.6 units — already 16pt, already the reason the
+crowd-bar tier exists.
+
+Three ways out, none free:
+
+1. **One budget, split.** The 40-row cap becomes a total: dig a basement and you
+   lose a tower floor. Keeps every rule intact and makes depth a genuine
+   sacrifice. Cheapest, and probably the best first answer.
+2. **Two boards, one switch.** Above ground and below ground as separate
+   surfaces, each obeying the no-scroll rule, with shafts that span both. Costs
+   a navigation layer the design has so far refused, and a dispatch across the
+   boundary becomes invisible.
+3. **Shrink the row.** More rows on the same board. Already at 16pt; this is not
+   available.
+
+**Coordinates.** `BoardCoords` maps bottom-up from floor 0 over `[0, N)`. Signed
+floors mean an origin offset and a `y_to_floor` that returns negatives. The
+one-transform rule is what makes this survivable — there is a single definition
+to change and four consumers that follow — but it is still much cheaper while N
+is small. `DispatchPolicy.LOBBY = 0` stops meaning "the bottom", and
+`is_spring_trip` has to decide whether the launch starts at the lobby or the
+lowest floor.
+
+**Ghost bands.** There is a "+ BUILD FLOOR" band above the top floor. Digging
+needs its own affordance below the bottom one, and the two cannot share.
+
+**Recommendation.** If this is wanted at all, do the coordinate work *before* the
+era ladder and before the board grows. Retrofitting a signed origin through four
+consumers is exactly the change the one-transform rule was written to survive,
+but surviving it is still cheaper at six floors than at forty.
 
 ---
 
