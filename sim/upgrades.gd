@@ -9,6 +9,7 @@ const DOOR_TICKS_BASE := 20
 const DOOR_TICKS_MIN := 4
 const SPEED_BASE := 0.1
 const CAPACITY_BASE := 4
+const SPRING_BASE := 4.0        # a launched car travels four times as fast
 
 var _defs: Dictionary = {}          # id -> {name, base, growth, max_level}
 var _levels: Dictionary = {}        # id -> int
@@ -49,6 +50,12 @@ func ids() -> PackedStringArray:
 
 func name_of(id: String) -> String:
 	return str(_defs[id]["name"]) if _defs.has(id) else id
+
+## What an upgrade does, in words, for the ones whose effect is not a number --
+## a sensor either exists or it does not. Read from data so the view still has
+## no say in what an upgrade claims to do.
+func note_of(id: String) -> String:
+	return str(_defs[id]["note"]) if _defs.has(id) else ""
 
 func level_of(id: String) -> int:
 	return int(_levels.get(id, 0))
@@ -91,6 +98,12 @@ func _apply(id: String, building: Building) -> bool:
 			return building.add_row()
 		"auto":
 			return true          # licences a shaft; nothing on a car changes
+		"hall_buttons", "car_buttons", "load_sensor", "lobby_parking":
+			return true          # sensors and controller features, not car parts
+		"spring":
+			for car in building.cars:
+				car.spring_multiplier = SPRING_BASE
+			return true
 		"doors", "speed", "capacity":
 			# Level up first so _sync_car reads the new value.
 			_levels[id] = level_of(id) + 1
@@ -116,11 +129,23 @@ func effect_value(id: String, level: int) -> float:
 			# How many shafts may run a dispatch policy at once. Not a car
 			# property, so _sync_car never reads it.
 			return float(level)
+		"spring":
+			# Speed multiplier for a committed lobby-to-top launch. 1.0 means
+			# no spring fitted.
+			return SPRING_BASE if level > 0 else 1.0
 		_:
 			return 0.0
 
+const HARDWARE := ["hall_buttons", "car_buttons", "load_sensor", "lobby_parking",
+	"spring"]
+
 func has_effect(id: String) -> bool:
-	return id == "doors" or id == "speed" or id == "capacity" or id == "auto"
+	return id == "doors" or id == "speed" or id == "capacity" or id == "auto" \
+		or id == "spring"
+
+## Fitted hardware is a yes/no, and max_level 1 already stops a second purchase.
+func is_installed(id: String) -> bool:
+	return level_of(id) > 0
 
 ## True when the next level would change nothing. doors reaches DOOR_TICKS_MIN
 ## at level 8 while max_level is 12, so levels 8-11 would charge $7,226 for no
@@ -133,6 +158,7 @@ func is_zero_delta(id: String) -> bool:
 	return is_equal_approx(effect_value(id, lvl), effect_value(id, lvl + 1))
 
 func _sync_car(car: ElevatorCar) -> void:
+	car.spring_multiplier = effect_value("spring", level_of("spring"))
 	car.door_ticks = int(effect_value("doors", level_of("doors")))
 	car.rows_per_tick = effect_value("speed", level_of("speed"))
 	car.capacity = int(effect_value("capacity", level_of("capacity")))

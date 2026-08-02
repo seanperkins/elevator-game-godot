@@ -204,3 +204,119 @@ func test_the_upgrade_stops_at_one_licence_per_shaft() -> void:
 	licence(8)
 	assert_true(gs.upgrades.is_maxed("auto"))
 	assert_eq(gs.auto_licences(), Building.MAX_SHAFTS)
+
+# --- the hardware gate ------------------------------------------------------
+
+func fit(id: String) -> void:
+	gs.economy.accrue(1e12)
+	assert_true(gs.buy(id), "fitted %s" % id)
+
+func test_a_policy_is_refused_until_its_sensors_are_fitted() -> void:
+	licence()
+	assert_false(gs.is_preset_available(DispatchPolicy.Preset.ANSWER_CALLS),
+		"no call buttons, no call-driven policy")
+	assert_false(gs.set_policy(0, DispatchPolicy.Preset.ANSWER_CALLS))
+
+func test_both_buttons_are_needed_not_just_one() -> void:
+	licence()
+	fit("hall_buttons")
+	assert_false(gs.is_preset_available(DispatchPolicy.Preset.ANSWER_CALLS),
+		"knowing who is waiting is not knowing where they are going")
+	fit("car_buttons")
+	assert_true(gs.is_preset_available(DispatchPolicy.Preset.ANSWER_CALLS))
+	assert_true(gs.set_policy(0, DispatchPolicy.Preset.ANSWER_CALLS))
+
+func test_the_sweep_needs_no_sensors_at_all() -> void:
+	licence()
+	assert_true(gs.is_preset_available(DispatchPolicy.Preset.EVERY_FLOOR),
+		"which is exactly why it stops everywhere")
+
+func test_a_call_policy_only_visits_floors_with_someone_on_them() -> void:
+	licence()
+	fit("hall_buttons")
+	fit("car_buttons")
+	assert_true(gs.set_policy(0, DispatchPolicy.Preset.ANSWER_CALLS))
+	gs.building.enqueue(Passenger.new(4, 0, 100000, 4.0))
+	var car: ElevatorCar = gs.building.cars[0]
+	var visited := {}
+	for t in range(300):
+		gs.tick(1)
+		if car.state == ElevatorCar.State.DOORS:
+			visited[car.current_row()] = true
+	assert_true(visited.has(4), "it went to the one floor that called")
+	assert_false(visited.has(2), "and did not stop at floor 2 for nobody")
+
+func test_lobby_parking_brings_an_idle_car_home() -> void:
+	licence()
+	fit("hall_buttons")
+	fit("car_buttons")
+	fit("lobby_parking")
+	assert_true(gs.set_policy(0, DispatchPolicy.Preset.CALLS_THEN_LOBBY))
+	gs.building.cars[0].position_row = 5.0
+	gs.building.cars[0].target_row = 5
+	assert_ne(run_until_at(0, 0, 300), -1, "it came back to the lobby")
+
+func test_fitting_a_load_sensor_improves_a_shaft_already_running() -> void:
+	# Hardware bought after a policy was chosen still applies to it.
+	licence()
+	fit("hall_buttons")
+	fit("car_buttons")
+	assert_true(gs.set_policy(0, DispatchPolicy.Preset.ANSWER_CALLS))
+	assert_false(gs.auto._policy[0].bypass_when_full, "no weigher yet")
+	fit("load_sensor")
+	assert_true(gs.auto._policy[0].bypass_when_full, "and now it knows")
+
+# --- the lobby launch spring ------------------------------------------------
+
+func test_without_the_spring_a_lobby_to_top_run_is_ordinary() -> void:
+	var car: ElevatorCar = gs.building.cars[0]
+	car.rows_per_tick = 0.1
+	assert_true(gs.dispatch(0, 5))
+	gs.tick(10)
+	assert_almost_eq(car.position_row, 1.0, 1e-6, "one row in ten ticks")
+
+func test_the_spring_launches_the_lobby_to_top_run() -> void:
+	fit("spring")
+	var car: ElevatorCar = gs.building.cars[0]
+	car.rows_per_tick = 0.1
+	assert_true(gs.dispatch(0, 5))
+	gs.tick(10)
+	assert_almost_eq(car.position_row, 4.0, 1e-6, "four times the speed")
+
+func test_the_spring_only_serves_the_lobby_to_top_run() -> void:
+	fit("spring")
+	var car: ElevatorCar = gs.building.cars[0]
+	car.rows_per_tick = 0.1
+	assert_true(gs.dispatch(0, 3), "the top floor is 5, so this is an ordinary trip")
+	gs.tick(10)
+	assert_almost_eq(car.position_row, 1.0, 1e-6)
+
+func test_a_launched_car_cannot_be_stopped_on_the_way() -> void:
+	# The trade the spring makes: four times the speed, and no way off.
+	fit("spring")
+	var car: ElevatorCar = gs.building.cars[0]
+	car.rows_per_tick = 0.1
+	assert_true(gs.dispatch(0, 5))
+	gs.tick(2)
+	assert_false(gs.dispatch(0, 2), "refused mid-flight")
+	assert_eq(car.target_row, 5, "still bound for the top")
+
+func test_a_launched_car_is_free_again_once_it_arrives() -> void:
+	fit("spring")
+	var car: ElevatorCar = gs.building.cars[0]
+	car.rows_per_tick = 0.1
+	gs.dispatch(0, 5)
+	for t in range(60):
+		gs.tick(1)
+		if car.current_row() == 5:
+			break
+	assert_eq(car.current_row(), 5, "arrived")
+	gs.tick(40)                                  # let the doors finish
+	assert_true(gs.dispatch(0, 1), "and takes orders again")
+
+func test_a_policy_uses_the_spring_too() -> void:
+	fit("spring")
+	licence()
+	assert_true(gs.set_policy(0, DispatchPolicy.Preset.EVERY_FLOOR))
+	assert_false(gs.building.cars[0].is_committed(),
+		"a floor-by-floor sweep never makes the lobby-to-top run")

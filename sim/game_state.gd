@@ -52,6 +52,7 @@ func buy(id: String) -> bool:
 	if ok:
 		while tenancy.rows() < building.row_count:
 			tenancy.add_row()
+		_resync_policies()
 	return ok
 
 ## Re-lease a vacant floor. Until now nothing in the game charged for this:
@@ -81,17 +82,57 @@ func relet(row: int) -> bool:
 ##
 ## Turning one OFF is always allowed, and hands the licence back.
 func set_auto(shaft: int, on: bool) -> bool:
+	return set_policy(shaft,
+		DispatchPolicy.Preset.EVERY_FLOOR if on else DispatchPolicy.Preset.MANUAL)
+
+## Puts a shaft on a named policy. Refused when the shaft does not exist, when
+## the hardware the policy needs is not installed, or when every licence is
+## already spent -- all in the sim, because a greyed-out button is bypassed by
+## two taps queued during a stalled frame.
+func set_policy(shaft: int, preset: int) -> bool:
 	if shaft < 0 or shaft >= building.cars.size():
 		return false
-	if not on:
-		auto.set_enabled(shaft, false)
+	if preset == DispatchPolicy.Preset.MANUAL:
+		auto.set_policy(shaft, preset, null)
 		return true
-	if auto.is_enabled(shaft):
-		return true                     # idempotent, not a second licence
-	if auto.enabled_count() >= auto_licences():
+	if not is_preset_available(preset):
 		return false
-	auto.set_enabled(shaft, true)
+	if not auto.is_enabled(shaft) and auto.enabled_count() >= auto_licences():
+		return false
+	auto.set_policy(shaft, preset, _build_policy(preset))
 	return true
+
+## Every piece of hardware the preset needs has to be fitted. An algorithm
+## cannot be smarter than the sensors feeding it.
+func is_preset_available(preset: int) -> bool:
+	if preset == DispatchPolicy.Preset.MANUAL:
+		return true
+	for id in DispatchPolicy.preset_requires(preset):
+		if not upgrades.is_installed(id):
+			return false
+	return true
+
+func available_presets() -> Array:
+	var out := []
+	for preset in DispatchPolicy.PRESET_ORDER:
+		if is_preset_available(preset):
+			out.append(preset)
+	return out
+
+## Hardware fitted after a policy was chosen still applies to it, which is why
+## buying a load weigher improves shafts already running.
+func _build_policy(preset: int) -> DispatchPolicy:
+	var policy := DispatchPolicy.preset_policy(preset)
+	if policy != null:
+		policy.bypass_when_full = upgrades.is_installed("load_sensor")
+	return policy
+
+func _resync_policies() -> void:
+	for shaft in range(building.cars.size()):
+		var preset := auto.preset_of(shaft)
+		if preset == DispatchPolicy.Preset.MANUAL:
+			continue
+		auto.set_policy(shaft, preset, _build_policy(preset))
 
 ## How many shafts may run a dispatch policy at once.
 func auto_licences() -> int:
@@ -102,7 +143,14 @@ func dispatch(shaft_index: int, row: int) -> bool:
 		return false
 	if row < 0 or row >= building.row_count:
 		return false
-	building.cars[shaft_index].dispatch_to(row)
+	var car: ElevatorCar = building.cars[shaft_index]
+	if car.is_committed():
+		return false                    # a launched car cannot be called off
+	if ElevatorCar.is_spring_trip(car.current_row(), row, building.row_count) \
+			and car.spring_multiplier > 1.0:
+		car.launch_to(row)
+	else:
+		car.dispatch_to(row)
 	return true
 
 func tick(n: int) -> void:

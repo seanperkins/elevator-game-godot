@@ -16,13 +16,38 @@ var capacity: int = 4
 var rows_per_tick: float = 0.1
 var door_ticks: int = 20
 
+## The lobby launch spring: a mechanical assist that throws the car from the
+## lobby straight to the top. 1.0 means none fitted.
+var spring_multiplier: float = 1.0
+
 var _door_remaining: int = 0
+var _launched: bool = false
 
 func _init(start_row: int) -> void:
 	position_row = float(start_row)
 	target_row = start_row
 
-func dispatch_to(row: int) -> void:
+## A spring trip is the lobby to the top floor and nothing else. Whoever
+## dispatches decides, because the car does not know how tall the building is.
+static func is_spring_trip(from: int, to: int, row_count: int) -> bool:
+	return row_count > 1 and from == 0 and to == row_count - 1
+
+## A launched car is COMMITTED: it cannot be stopped or redirected until it
+## arrives. That is the trade the spring makes -- four times the speed, and no
+## way off in between.
+func is_committed() -> bool:
+	return _launched and state == State.MOVING
+
+func launch_to(row: int) -> void:
+	dispatch_to(row, true)
+
+## `express` is passed rather than set around the call: setting it beforehand
+## and letting dispatch_to clear it is order-dependent, and it silently undid
+## every launch.
+func dispatch_to(row: int, express := false) -> void:
+	if is_committed():
+		return
+	_launched = express
 	target_row = row
 	if is_equal_approx(position_row, float(row)):
 		position_row = float(row)
@@ -40,10 +65,12 @@ func step(delta_ticks: int) -> void:
 			pass
 
 func _step_moving(delta_ticks: int) -> void:
-	var travel := rows_per_tick * float(delta_ticks)
+	var rate := rows_per_tick * (spring_multiplier if _launched else 1.0)
+	var travel := rate * float(delta_ticks)
 	var remaining := float(target_row) - position_row
 	if absf(remaining) <= travel:
 		position_row = float(target_row)   # snap; never overshoot
+		_launched = false
 		_open_doors()
 	else:
 		position_row += signf(remaining) * travel

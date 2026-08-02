@@ -147,8 +147,7 @@ func _refresh_dispatch() -> void:
 		b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
 		b.add_theme_font_size_override("font_size", 18)
 		# `index` is captured by value, which is the one place that helps.
-		b.pressed.connect(func() -> void:
-			_state.set_auto(index, not _state.auto.is_enabled(index)))
+		b.pressed.connect(func() -> void: _cycle_policy(index))
 		_dispatch_box.add_child(b)
 		_shaft_buttons.append(b)
 	_shafts_shown = shafts
@@ -165,10 +164,23 @@ func _refresh_dispatch() -> void:
 		b.visible = i < shafts
 		if not b.visible:
 			continue
-		var on := _state.auto.is_enabled(i)
-		b.text = "Shaft %d      %s" % [i + 1, "EVERY FLOOR" if on else "manual"]
-		# Disabled only when turning it ON would need a licence there is not.
-		b.disabled = not on and used >= licences
+		var preset := _state.auto.preset_of(i)
+		b.text = "Shaft %d      %s" % [i + 1, DispatchPolicy.preset_name(preset)]
+		# Disabled only when there is nothing it could be changed to: no licence
+		# left and nothing running here to turn off.
+		b.disabled = not _state.auto.is_enabled(i) and used >= licences
+
+## Steps a shaft through the policies whose hardware is installed. Each tap is
+## one step, and set_policy is the authority on whether a step is allowed --
+## the button never decides for itself.
+func _cycle_policy(shaft: int) -> void:
+	var presets: Array = _state.available_presets()
+	if presets.is_empty():
+		return
+	var at := presets.find(_state.auto.preset_of(shaft))
+	for step in range(1, presets.size() + 1):
+		if _state.set_policy(shaft, presets[(at + step) % presets.size()]):
+			return
 
 func _effect_text(id: String, from_level: int, to_level: int) -> String:
 	var a := _state.upgrades.effect_value(id, from_level)
