@@ -70,7 +70,39 @@ it is still cheaper while N is small.
 
 ---
 
-## A second currency: satisfaction
+## Total satisfaction as a reputation gate
+
+**Idea.** The building's overall satisfaction gates which tenants will move in.
+
+**This is a better answer than spending it.** A currency has to be *spent*, and
+spending satisfaction means every purchase nudges a tenant toward leaving —
+strange goods to sell. A gate never spends it, so satisfaction keeps its
+retention job and gains a second one: a well-run building attracts better
+tenants, a badly-run one gets whoever will take it.
+
+**Why it fits what already exists.** Satisfaction is per-row and already
+aggregated for the no-fail guard (`tenanted_count`). A building-wide mean is the
+same shape of number. And it composes exactly with tenant kinds: a premium
+tenant is one with a reputation requirement, better traffic, and probably a
+harder pattern to serve.
+
+**The loop it makes.** Serve people well → reputation rises → better tenants
+unlock → more traffic → harder to serve → reputation is at risk again. That is
+self-limiting rather than compounding, which is the opposite of the problem the
+goodwill idea had, and it needs no cap.
+
+**Open questions.**
+- Mean or minimum? A mean lets one excellent floor hide a neglected one. A
+  minimum makes every floor matter and is much harsher.
+- Does a tenant leave if reputation falls below what they required, or only if
+  *their own* satisfaction drops? Losing tenants to a building-wide average
+  would be brutal and hard to read.
+- Ratchet or live? If reputation can fall, unlocked tenants can become
+  unavailable mid-game, which is either good pressure or a trap.
+
+---
+
+## A second currency (superseded by the gate above, kept for the reasoning)
 
 **Idea.** Satisfaction as a spendable currency, unlocking elevator music and
 other comforts.
