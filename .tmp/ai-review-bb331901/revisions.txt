@@ -1,0 +1,64 @@
+- INPUT MODEL (new §2.1): replaced tap-car-then-tap-floor with press-and-drag on the
+  shaft COLUMN. Target is the full-height column (>=44pt wide), never the 32px moving
+  car. Verbs separate by gesture not cadence: drag = dispatch (floor-selector rail,
+  detents, magnified label offset above thumb), tap = surge, events draw their own
+  oversized control. Resolves the sub-HIG moving-target collision.
+- CATCH-UP MODEL (§7.2): replaced rate-sampling with coarse-step integration of the
+  same time-of-day curves at 1 step per simulated minute (4h = 240 steps). Kills the
+  quit-at-rush-peak exploit (error ratio r(t0)/mean(r) was unbounded). §9's tolerance
+  is now a real 1e-9 relative bound instead of an unachievable "stated tolerance".
+  Elapsed clamped to [0, cap]; backwards clock treated as zero. Model evolves tenancy
+  state, not just cash.
+- LIFECYCLE (§7.1): three states, not two. Added HIDDEN (visibilitychange) since iOS
+  Safari backgrounds without unloading and fires no reliable quit event. Save on
+  hidden/focus-out + 30s timer; save-on-quit demoted to a desktop nicety. Resume and
+  cold start share one catch-up path.
+- STORAGE DURABILITY (§7.3): NEW. Safari ITP deletes IndexedDB after 7 days of Safari
+  use without site interaction; home-screen apps are exempt. Adopted: enable PWA
+  export, prompt Add to Home Screen, save export/import string, treat "no save" as a
+  normal tested path. Also documented the shared github.io origin exposure.
+- TICK MODEL (§8.3): physics stays 60Hz, game_root runs a 0.05s fixed-step
+  accumulator. Previously ambiguous and would have run the sim 3x fast. Added the
+  written intra-tick order (spawn -> move/doors -> deliver -> expire -> accrue ->
+  combo), with deliver-before-expire pinned at exact-zero patience. Wall-clock
+  authoritative for earnings, ticks for sim state.
+- PERSISTENCE (§8.6): fixed the impossible "version checked before parse" with an
+  explicit 6-step load sequence (parse -> version -> validate -> migrate ->
+  re-validate -> construct). Refused load now DISABLES autosave + backs up the file
+  (previously the 30s timer would overwrite a newer save with a blank). Atomic
+  single-flight writes via temp+replace. RNG state, tick counter, and fractional
+  accumulator added to the save schema. Save treated as untrusted input: JSON only,
+  never str_to_var/bytes_to_var, never ResourceLoader.load on a user:// path,
+  is_finite() on every numeric, counts clamped, string ids checked against data/.
+- MILESTONE 0 REOPENED (§10.1): the probe writes before reading in the same session,
+  so on Godot web (memory-backed FS synced to IndexedDB) it reports ok even when
+  storage is denied. The "round-trips a save" claim was unsupported. Fix: read before
+  write, report restored yes/no, verify across reload AND Safari force-quit. Added
+  device exit criteria incl. background/foreground wall-clock delta and wasm memory.
+- CI HARDENING (§10.2): NEW. test job running GUT that build depends on; pin Godot to
+  exact patch + SHA-256 verify (was a mutable URL, sudo mv'd and executed with deploy
+  privileges); per-job permissions (pages:write/id-token:write currently leak to the
+  build job); replace the unreachable SharedArrayBuffer grep with an assertion on
+  export_presets.cfg; stop discarding import failures; exclude_filter for tests/addons;
+  gitignore export_credentials.cfg; pin actions to SHAs.
+- ERA LADDER (§3): Highrise now inflates (row = 4 floors, 4x) instead of staying 1
+  floor. Added explicit rule that origins/destinations are ROWS above Walk-Up, closing
+  the Megatower intra-district ambiguity.
+- NO-FAIL-STATE (§5.3): now guaranteed rather than asserted. Lobby row never vacates;
+  first re-lease is free when no tenanted rows remain. Closes the terminal
+  all-vacant-and-broke state.
+- PRESTIGE (§4): demolish gated on yielding >=1 Blueprint, with projected yield shown.
+- COMBO (§6): hard cap added. Uncapped 1%/delivery hits INF at ~71,270 deliveries.
+- FORMATTER (§8.5): suffix ladder generated (98 two-letter entries), magnitude chosen
+  AFTER rounding (999,950 -> "1.0M", not "1000.0K").
+- SPRITES (§8.5): worst case multiplied out (40x12 = 480 + bars/cars/widgets ~600
+  nodes); per-row cap is now a tunable with a global ceiling, measured on device.
+- PAYLOAD (§10): corrected 39MB -> ~10.3MB transferred (gzip -9 verified at
+  10,052,184 bytes; Pages serves gzip). Added wasm-compilation memory as the real risk.
+- §8.1: removed the false claim that offline is "the same code run differently" —
+  it contradicted §8.4. They are two paths validated against each other.
+- §8.4/§8.7: bbcode takes only literal markup (dynamic text via Label/[lb]-escape);
+  Resources are res://-only; data/ holds numeric coefficients, never Expression strings.
+- §9: added 9 named must-have tests; exact equality on ints, relative epsilon on floats.
+- §13: Orbital Tether's economic model now explicitly owned (cargo has no tenants, so
+  4 core systems need era-5 substitutes).

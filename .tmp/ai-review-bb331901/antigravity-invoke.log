@@ -1,0 +1,3 @@
+[antigravity] Submitting plan to agy (Antigravity CLI) directly (timeout: 300s)...
+[antigravity] agy (Antigravity CLI) failed (exit 1).
+[antigravity] stderr: Error: Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 60h55m12s.
