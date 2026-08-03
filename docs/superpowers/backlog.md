@@ -490,6 +490,77 @@ reason — so "somewhere on the board" is a real layout decision, not a free one
 
 ---
 
+## A roster of floor kinds (2026-08-03)
+
+Five kinds raised together. They are recorded as one entry because they sort
+cleanly by **what they cost to build**, and three of them turn out to need the
+same two primitives rather than five separate mechanics.
+
+### Tier 1 — pure data, no code at all
+
+A kind is `{id, name, requires_class, lease_cost, base_fare, rate[24],
+inbound[24], outbound[24]}` in `data/tenants.json`. Anything expressible as a
+shape over 24 hourly buckets is a **data edit and nothing else** — the spawner,
+the catalog and `DaySparkline` already handle arbitrary kinds.
+
+- **Restaurant.** Busy at meal times: spikes at buckets 12–13 and 18–20, near
+  dead overnight. Inbound-heavy before each spike, outbound after. This is the
+  sharpest *shape* in the roster and the best argument for the sparkline.
+- **Hotel.** Consistently busy — a flat, high curve with no trough. Interesting
+  precisely because it is the opposite of Apartments: no rush to plan around,
+  just steady load. It makes "can I serve this at all" the question instead of
+  "when".
+
+These two are worth doing first and separately. They cost hours, not days, and
+they prove the kind system carries real variety before anything harder is built.
+
+### Tier 2 — needs multi-slot occupancy
+
+Both of these need a passenger to take up **more than one seat**, which is
+exactly the primitive the freight entry above already requires (`Passenger`
+gains a size, `ElevatorCar.board()` sums units instead of counting heads,
+`ChipGrid` draws more than one square). Build it once and all three land.
+
+- **Hospital.** A gurney takes 2 slots plus 2 first responders = **4 slots**,
+  i.e. the entire base car (`Upgrades.CAPACITY_BASE` is 4). One gurney is a
+  dedicated trip. Directional too: gurneys arrive through the lobby *or* leave
+  from the hospital floor, so it generates both inbound and outbound heavy
+  loads rather than a symmetric mix.
+- **Hotel luggage.** A guest sometimes carries luggage and takes 2 slots. The
+  cheap version of the same mechanic, and a reason Hotel might be Tier 2 rather
+  than Tier 1 if the luggage lands with it.
+
+The hospital is the strongest case for **Load Weighing**: a car that cannot fit
+a 4-slot gurney should not stop for it, and today's headcount capacity cannot
+express that.
+
+### Tier 3 — needs a passenger that escapes
+
+- **Haunted floor.** Sometimes a ghost gets out.
+- **Research floor.** Sometimes an experiment gets loose.
+
+Both are the same primitive: an entity that **leaves the normal
+spawn → board → deliver → expire lifecycle** and does something else. That is a
+genuinely new thing in the sim — every passenger today is delivered or expires,
+and `GameState`'s tick order has no phase for "and then something wanders off".
+
+**Open question, and it is the whole design:** what does an escaped thing *do*?
+If it only costs money it is a random tax with no decision in it. It earns its
+place only if the player can respond — catch it, contain it, route around it —
+which means it needs to change what the elevator should do next.
+
+Related but distinct: **The floor that eats people** above inverts delivery
+(arriving *is* the loss). These invert departure. Worth keeping separate.
+
+### Sequencing
+
+Tier 1 first, alone. Tier 2 rides on the freight work and should be scheduled
+with it, not before it. Tier 3 wants its own design pass — it is the only one of
+the five that adds a phase to the tick order, which is player-visible and pinned
+by tests.
+
+---
+
 ## Not in this list, and deliberately
 
 **Offline earnings.** Saving is built; accruing while closed is not. §9.1 of the
