@@ -75,8 +75,35 @@ the saturation ceiling. The real ceiling is now the spawner's divisor, 600.
 `TICKS_PER_SIM_MINUTE`. Leaving it at 1200 does not fail; it silently stops
 guarding the invariant it exists to guard, which is worse.
 
-**5. `tests/test_game_state.gd`** (96, 120, 318, 444) — all four mean elapsed
-real time and take the rename to `TICKS_PER_REAL_MINUTE`.
+**5. `tests/test_sim_clock.gd`** — three tests know the old divisor. Two of them
+**fail** under the change; they are not cosmetic:
+
+| line | test | why |
+| --- | --- | --- |
+| 48 | `test_the_day_starts_at_the_morning_rush` | passes, but its comment says the trough "shows a new player an empty building for six real minutes". Now three. Comment only. |
+| 56 | `test_sim_minute_advances_every_1200_ticks` | **fails.** `note_ticks(1199)` is one minute on at a 600-tick divisor, not "still the opening minute". Rename and re-pin to 599/600. |
+| 64 | `test_sim_minute_uses_integer_arithmetic` | **fails.** `note_ticks(1200 * 137)` yields `START_MINUTE + 274`. Must multiply by `TICKS_PER_SIM_MINUTE`. |
+
+Test 56 should stop hardcoding the number in its name and body — the boundary it
+guards is "one bucket", not "1200 ticks", and pinning the literal is what made it
+break rather than adapt.
+
+**6. `tests/test_game_state.gd`** — four uses, and they do **not** all mean the
+same thing. Two count real time; two count traffic buckets. Renaming all four to
+`TICKS_PER_REAL_MINUTE` would leave both bucket-counting tests still passing
+while their arithmetic silently became wrong, which is the worst outcome
+available here.
+
+| line | means | becomes |
+| --- | --- | --- |
+| 96 | **buckets** — the comment derives "~43.6 expected spawns" over twenty buckets | `TICKS_PER_SIM_MINUTE` |
+| 120 | real time — "an idle building earns nothing" over three minutes | `TICKS_PER_REAL_MINUTE` |
+| 318 | real time — the metrics window (`sim/metrics.gd:16`, 1200 ticks) | `TICKS_PER_REAL_MINUTE` |
+| 444 | **buckets** — the comment derives `shops.rate_at(6) + 5 x apartments.rate_at(6)` = 2.5 trips/min, "~7.5 over three minutes" | `TICKS_PER_SIM_MINUTE` |
+
+Lines 96 and 444 keep their comments' arithmetic true only under
+`TICKS_PER_SIM_MINUTE`. Under the real-minute constant both would span twice the
+buckets, still pass, and quietly document the wrong numbers.
 
 Line 318 was checked specifically: it exercises the metrics window, and
 `sim/metrics.gd:16` defines that window independently as
