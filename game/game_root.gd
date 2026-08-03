@@ -26,9 +26,9 @@ var _saving_enabled := true
 var state: GameState
 var _view: BuildingView
 var _management: ManagementView
-var _relet_confirm: ReletConfirm
-## A test-facing seam for hall selection until the FloorPanel lands (Task 17/
-## 18): the hall tap sets this, which is what lets the input tests observe it.
+var panel: FloorPanel
+## A test-facing seam for hall selection: the hall tap sets this, which is what
+## lets the input tests observe it.
 var last_selected_floor: int = -1
 var _cash_label: Label
 var _rate_label: Label
@@ -90,11 +90,10 @@ func _ready() -> void:
 	add_child(_management)
 	_management.bind(state)
 
-	_relet_confirm = ReletConfirm.new()
-	_relet_confirm.size = Vector2(size.x - 80.0, 260.0)
-	_relet_confirm.position = Vector2(40.0, size.y * 0.5 - 130.0)
-	add_child(_relet_confirm)
-	_relet_confirm.bind(state)
+	panel = FloorPanel.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(panel)
+	panel.bind(state)
 
 	# Paging the shaft strip is a tap, never a swipe: the dispatch drag is
 	# vertical and arcs sideways by more than half a column (§2.1), so any

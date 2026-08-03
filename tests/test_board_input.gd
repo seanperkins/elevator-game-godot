@@ -322,6 +322,31 @@ func test_a_tap_at_exactly_the_shaft_boundary_reaches_the_shaft() -> void:
 	assert_eq(root.state.building.cars[0].target_row, 1,
 		"and it reached the shaft, which dispatches on a tap")
 
+# --- the floor panel --------------------------------------------------------
+
+func test_the_lease_picker_is_hidden_while_the_floor_is_tenanted() -> void:
+	root.panel.show_floor(root.state, 3)
+	assert_false(root.panel.picker_visible(), "you choose who moves in, not out")
+
+func test_the_lease_picker_appears_when_the_floor_is_vacant() -> void:
+	root.state.tenancy.restore_row(3, 1.0, true, 0)
+	root.panel.show_floor(root.state, 3)
+	assert_true(root.panel.picker_visible())
+
+func test_a_floor_counting_down_to_move_out_still_counts_as_tenanted() -> void:
+	while root.state.tenancy.satisfaction_at(3) > Tenancy.MOVE_OUT_THRESHOLD:
+		root.state.tenancy.note_expiry(3)
+	assert_true(root.state.tenancy.is_moving_out(3))
+	root.panel.show_floor(root.state, 3)
+	assert_false(root.panel.picker_visible(),
+		"the move-out clock keeps its teeth")
+
+func test_kinds_above_the_floors_class_are_shown_locked() -> void:
+	root.state.tenancy.restore_row(3, 1.0, true, 0)
+	root.panel.show_floor(root.state, 3)
+	assert_true(root.panel.is_locked("law_firm"), "law firm needs class 3")
+	assert_false(root.panel.is_locked("apartments"))
+
 # --- the hall call: direction now, destination only once aboard -----------
 
 func test_a_waiting_passenger_shows_its_call_direction_not_its_floor() -> void:
