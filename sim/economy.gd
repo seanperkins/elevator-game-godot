@@ -36,7 +36,7 @@ func credit_delivery(fare: float) -> float:
 ## Floored at zero cash, never negative. The design has a hard no-fail rule, and
 ## a debt that outruns income is a fail state wearing a number. Losing what you
 ## have is punishment enough; owing what you do not have is a dead end.
-func note_expiry(fare := 0.0) -> void:
+func note_expiry(fare: float) -> void:
 	combo = 1.0
 	streak = 0
 	var penalty := minf(fare * STAIRS_PENALTY_FARES, cash)

@@ -121,6 +121,18 @@ func test_an_idle_building_earns_nothing() -> void:
 	assert_almost_eq(gs.economy.cash, before, 1e-9,
 		"nobody was carried, so nobody paid")
 
+func test_a_real_expiry_deducts_the_stairs_penalty() -> void:
+	# Seeded first: a fresh GameState holds $0 and economy.gd:42 caps the
+	# penalty at available cash, so "assert cash fell" would leave $0 -> $0
+	# and fail against the fixed code exactly as it fails against the broken
+	# code. The seeding is what makes this test able to distinguish them.
+	gs.economy.accrue(100.0)
+	var before := gs.economy.cash
+	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0))
+	gs.tick(2)
+	assert_almost_eq(gs.economy.cash, before - 10.0, 1e-9,
+		"one expiry costs exactly min(fare, cash)")
+
 func test_expiry_lowers_the_origin_rows_satisfaction() -> void:
 	var before := gs.tenancy.satisfaction_at(3)
 	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0))   # off the car's floor

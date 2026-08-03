@@ -213,7 +213,7 @@ func _expire() -> void:
 		for p in queue:
 			p.decay(1)
 			if p.is_expired():
-				economy.note_expiry()
+				economy.note_expiry(p.fare)
 				tenancy.note_expiry(p.origin_row)
 				metrics.record_expiry()
 				passenger_expired.emit(p)

@@ -37,14 +37,14 @@ func test_expiry_resets_the_combo_and_the_streak() -> void:
 	econ.credit_delivery(10.0)
 	econ.credit_delivery(10.0)
 	assert_gt(econ.streak, 0)
-	econ.note_expiry()
+	econ.note_expiry(0.0)
 	assert_almost_eq(econ.combo, 1.0, 1e-9, "one bad delivery kills it")
 	assert_eq(econ.streak, 0)
 
-func test_expiry_does_not_take_cash_away() -> void:
+func test_a_zero_fare_expiry_takes_no_cash() -> void:
 	econ.credit_delivery(10.0)
 	var before := econ.cash
-	econ.note_expiry()
+	econ.note_expiry(0.0)
 	assert_almost_eq(econ.cash, before, 1e-9)
 
 func test_lifetime_earnings_only_ever_rises() -> void:
