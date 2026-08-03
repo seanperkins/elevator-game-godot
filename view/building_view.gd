@@ -343,7 +343,8 @@ func refresh() -> void:
 			_state.tenancy.satisfaction_at(i), vacant,
 			_state.tenancy.is_moving_out(i),
 			_state.tenancy.move_out_ticks_left(i))
-		_rows[i].set_waiting(waiting)
+		_rows[i].set_waiting(waiting,
+			_state.upgrades.is_installed("call_direction"))
 	if _ghost_label != null:
 		var row_cost := _state.upgrades.cost_of("row")
 		_ghost_label.text = "+ BUILD FLOOR  $%s" % NumberFormat.compact(row_cost)

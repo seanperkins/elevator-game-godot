@@ -23,6 +23,11 @@ extends Control
 ## panel upgrade will have to buy, when it lands.)
 const CALL_UP := "\u25b2"
 const CALL_DOWN := "\u25bc"
+## Waiting, direction withheld -- before the call_direction upgrade is fitted.
+## The empty string rather than a glyph: the chip's colour already carries
+## patience, so a "?" would add no information and reads as an error state
+## rather than as information not yet bought.
+const CALL_UNKNOWN := ""
 
 const MAX_INDIVIDUALS := 12
 const SPRITE_PITCH := 14.0
@@ -99,7 +104,10 @@ func set_row(index: int) -> void:
 ## fixed 88 units now, so that tier could never fire again, and a representation
 ## that never appears is worse than no representation. The count beside them is
 ## still exact regardless of how many are drawn.
-func set_waiting(passengers: Array) -> void:
+## `show_direction` is required rather than defaulted to true: a default would
+## let a future caller silently opt out of the gate, which is the same class of
+## bug the note_expiry(fare) default caused.
+func set_waiting(passengers: Array, show_direction: bool) -> void:
 	var total: int = passengers.size()
 	_count.text = "" if total <= 0 else str(total)
 
@@ -121,7 +129,8 @@ func set_waiting(passengers: Array) -> void:
 			_sprites[i].position = Vector2(SPRITE_X, 0) \
 				+ ChipGrid.position_of(i, shown, grid, area)
 			_sprites[i].show_as(p.patience_fraction(),
-				CALL_DOWN if p.direction() < 0 else CALL_UP)
+				(CALL_DOWN if p.direction() < 0 else CALL_UP) if show_direction
+				else CALL_UNKNOWN)
 		else:
 			_sprites[i].recycle()
 

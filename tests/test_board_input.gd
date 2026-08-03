@@ -349,10 +349,33 @@ func test_kinds_above_the_floors_class_are_shown_locked() -> void:
 
 # --- the hall call: direction now, destination only once aboard -----------
 
+func fit(id: String) -> void:
+	# test_auto_dispatch.gd has its own fit() against that suite's `gs`; this
+	# file drives the real scene and reaches state through root.state. The
+	# accrue is load-bearing: a fresh GameState holds $0, so buy() would fail
+	# and the arrow would stay hidden for the wrong reason entirely.
+	root.state.economy.accrue(1e12)
+	assert_true(root.state.buy(id), "fitted %s" % id)
+
+func test_a_waiting_passenger_hides_its_direction_until_the_upgrade() -> void:
+	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
+	view.refresh()
+	var sprite: PassengerSprite = view._rows[2]._sprites[0]
+	assert_true(sprite.visible, "the chip is still drawn -- someone IS waiting")
+	assert_eq(sprite.label_text(), FloorRow.CALL_UNKNOWN,
+		"which way they are going is not readable until it is bought")
+
+func test_buying_call_direction_reveals_the_arrow() -> void:
+	fit("call_direction")
+	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
+	view.refresh()
+	assert_eq(view._rows[2]._sprites[0].label_text(), FloorRow.CALL_UP)
+
 func test_a_waiting_passenger_shows_its_call_direction_not_its_floor() -> void:
 	# A hall call button is UP or DOWN. Where they are actually going is not
 	# known to the operator until they board and press a car button, which is
 	# the information asymmetry the whole dispatch puzzle rests on.
+	fit("call_direction")
 	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
 	view.refresh()
 	var sprite: PassengerSprite = view._rows[2]._sprites[0]
@@ -362,11 +385,13 @@ func test_a_waiting_passenger_shows_its_call_direction_not_its_floor() -> void:
 		"the destination must NOT be readable from the hall")
 
 func test_a_downward_call_shows_a_downward_arrow() -> void:
+	fit("call_direction")
 	root.state.building.enqueue(Passenger.new(4, 1, 900, 4.0, 4))
 	view.refresh()
 	assert_eq(view._rows[4]._sprites[0].label_text(), FloorRow.CALL_DOWN)
 
 func test_waiting_passengers_show_their_own_directions() -> void:
+	fit("call_direction")
 	for dest in [5, 0, 4]:
 		root.state.building.enqueue(Passenger.new(2, dest, 900, 4.0, 2))
 	view.refresh()

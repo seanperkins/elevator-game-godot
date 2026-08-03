@@ -356,25 +356,6 @@ to absorb.
 
 ---
 
-## Call direction visible only after an upgrade
-
-**Idea.** A waiting passenger currently always shows an up/down call arrow
-(`view/floor_row.gd` `set_waiting`, from `Passenger.direction()`). Gate that
-glyph behind an upgrade: before it is bought, a waiting chip is just an occupied
-square, revealing nothing; after, it shows the call direction.
-
-**Why it fits.** It is the reader half of the Destination-entry idea above and
-sharpens the same information asymmetry — until you pay, all a hall button gives
-you is "someone is waiting". It is presentation-only (no sim change): `Upgrades`
-already handles arbitrary ids, `floor_row` just needs the installed state passed
-into `set_waiting`, and three tests in `test_board_input.gd` invert (no arrow by
-default, arrows after the buy).
-
-**Balance lever (the actual decision):** cost and tier of the `call_direction`
-upgrade relative to `auto`/`shaft`/`row`.
-
----
-
 ## Not in this list, and deliberately
 
 **Offline earnings.** Saving is built; accruing while closed is not. §9.1 of the
