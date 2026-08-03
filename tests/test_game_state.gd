@@ -318,6 +318,59 @@ func test_the_metrics_window_advances_with_the_sim() -> void:
 	gs.tick(SimClock.TICKS_PER_MINUTE + BUCKET_SLACK)
 	assert_eq(gs.metrics.expiries(), 0, "it left the window")
 
+func test_upgrading_a_tenanted_floor_changes_its_fare_on_the_next_spawn() -> void:
+	# THE discriminating test. A class purchase mutates Fitout, not Tenancy,
+	# so a Tenancy-scoped revision would leave the stale x1.00 cached until
+	# the next tenancy event -- which on a well-served floor may be never.
+	# The "new tenant is charged x1.80" test cannot catch that: a lease moves
+	# the revision and rebuilds the cache, so it passes either way.
+	gs.economy.accrue(1e6)
+	var before := 0.0
+	for s in gs._sources():
+		if s.floor_row == 3:
+			before = s.fare_multiplier
+	assert_almost_eq(before, 1.0, 1e-9)
+	assert_true(gs.upgrade_class(3))
+	var after := 0.0
+	for s in gs._sources():
+		if s.floor_row == 3:
+			after = s.fare_multiplier
+	assert_almost_eq(after, 1.35, 1e-9,
+		"the upgrade pays immediately, with no intervening tenancy event")
+
+func test_a_class_upgrade_is_refused_when_unaffordable_or_maxed() -> void:
+	gs.economy.cash = 10.0
+	assert_false(gs.upgrade_class(3), "cannot afford $400")
+	assert_eq(gs.fitout.tier_at(3), 1)
+	gs.economy.accrue(1e6)
+	assert_true(gs.upgrade_class(3))
+	assert_true(gs.upgrade_class(3))
+	assert_eq(gs.fitout.tier_at(3), 3)
+	assert_false(gs.upgrade_class(3), "tier 3 is the top of the ladder")
+
+func test_class_survives_a_tenant_change_and_kind_does_not() -> void:
+	# The headline invariant: things built into the floor persist, things
+	# built for the tenant leave with them.
+	gs.economy.accrue(1e6)
+	assert_true(gs.upgrade_class(3))
+	assert_true(gs.upgrade_class(3))
+	while gs.tenancy.satisfaction_at(3) > Tenancy.MOVE_OUT_THRESHOLD:
+		gs.tenancy.note_expiry(3)
+	gs.tick(Tenancy.MOVE_OUT_TICKS + 1)
+	assert_true(gs.tenancy.is_vacant(3))
+	assert_eq(gs.tenancy.kind_at(3), "", "kind leaves with the tenant")
+	assert_eq(gs.fitout.tier_at(3), 3, "class is built into the floor")
+
+func test_a_new_tenant_on_a_class_three_floor_is_charged_the_multiplier() -> void:
+	gs.economy.accrue(1e6)
+	gs.upgrade_class(3)
+	gs.upgrade_class(3)
+	gs.tenancy.restore_row(3, 1.0, true, 0)
+	assert_true(gs.lease(3, "law_firm"))
+	for s in gs._sources():
+		if s.floor_row == 3:
+			assert_almost_eq(s.kind.base_fare * s.fare_multiplier, 9.0 * 1.8, 1e-5)
+
 func test_a_spawned_passenger_first_decays_on_the_next_tick() -> void:
 	# Spec §8.3: "A passenger spawned on tick T first decays on tick T+1."
 	# No test has ever pinned this, and the code decays on tick T because

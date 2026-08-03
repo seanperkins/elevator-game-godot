@@ -138,6 +138,28 @@ func lease_cost(row: int, kind_id: String) -> float:
 func available_kinds(row: int) -> Array[TenantKind]:
 	return catalog.available_for_class(fitout.tier_at(row))
 
+## The fare multiplier is why this is not inert on a tenanted floor. Class
+## gates leasing and leasing only happens on vacancy, so a purchase with no
+## live effect would pay nothing until the tenant left -- a button you
+## rationally never press except in a crisis.
+func class_upgrade_cost(row: int) -> float:
+	var next := fitout.tier_at(row) + 1
+	if next > catalog.max_tier():
+		return INF
+	return catalog.class_cost(next)
+
+func upgrade_class(row: int) -> bool:
+	if row < 0 or row >= building.row_count:
+		return false
+	var next := fitout.tier_at(row) + 1
+	if next > catalog.max_tier():
+		return false
+	var cost := class_upgrade_cost(row)
+	if not economy.spend(cost):
+		return false
+	fitout.set_tier(row, next)
+	return true
+
 ## Turning a sweep on needs a LICENCE: the Auto-Dispatch upgrade's level is how
 ## many shafts may run a policy at once. Enforced here rather than in the view,
 ## for the same reason the zero-delta refusal is -- a greyed-out button is
