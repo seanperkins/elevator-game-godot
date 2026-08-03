@@ -433,3 +433,14 @@ These are decision records, not ideas — recorded so a later reviewer does not
 - **Plan test counts** were consistently +1 off (arithmetic): actuals were
   388/392/396/399/402/405/408 where the plan printed 389+1. Cosmetic; the suite
   is green at whatever it is.
+- **Tasks 13, 15, 17 wrote tests against assumptions that do not hold.**
+  (a) Task 13's move-out test gave every passenger patience 900 but ticked 1201
+  ticks, so even the intended survivor expired naturally; and the parked car at
+  floor 0 boards any origin-0 passenger (via `answer_call`), turning them into
+  riders. It needed ambient traffic silenced (one tenanted floor), patience far
+  past the window, and the car sent to the roof first. (b) The view-layer tests
+  (Tasks 15/17) assume a `_board(...)`/`last_selected_floor`/`root.panel`
+  harness that is NOT what `test_board_input.gd` is -- it uses global
+  `root`/`view` + `do_tap`/`do_drag` + a `ReletConfirm` reached through
+  `BuildingView._gui_input`. Any view-layer implementation must either build
+  that harness or (preferred) adapt the tests to the real one.
