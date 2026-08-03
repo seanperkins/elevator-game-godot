@@ -82,5 +82,5 @@ func spawn_for_tick(minute: int, occupied: PackedInt32Array) -> Array[Passenger]
 	if destination_index >= origin_index:
 		destination_index += 1  # skip origin without rejection-looping
 	out.append(Passenger.new(occupied[origin_index], occupied[destination_index],
-		base_patience_ticks, base_fare))
+		base_patience_ticks, base_fare, occupied[origin_index]))
 	return out

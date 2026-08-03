@@ -7,14 +7,23 @@ var patience_ticks: int
 var fare: float
 var boarded: bool = false
 
+## The floor whose tenant generated this trip. NOT derivable from the
+## endpoints: an inbound trip runs lobby -> F, so its origin is the lobby
+## while the traffic belongs to F. Both the fare (kind.base_fare x the
+## floor's class multiplier) and satisfaction credit follow this, not the
+## endpoints -- see spec §5.1.
+var source_row: int
+
 var _initial_patience: int
 
-func _init(origin: int, destination: int, patience: int, p_fare: float) -> void:
+func _init(origin: int, destination: int, patience: int, p_fare: float,
+		p_source_row: int) -> void:
 	origin_row = origin
 	destination_row = destination
 	patience_ticks = patience
 	_initial_patience = maxi(patience, 1)
 	fare = p_fare
+	source_row = p_source_row
 
 func decay(n: int) -> void:
 	patience_ticks -= n

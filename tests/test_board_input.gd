@@ -293,7 +293,7 @@ func test_a_waiting_passenger_shows_its_call_direction_not_its_floor() -> void:
 	# A hall call button is UP or DOWN. Where they are actually going is not
 	# known to the operator until they board and press a car button, which is
 	# the information asymmetry the whole dispatch puzzle rests on.
-	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0))
+	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
 	view.refresh()
 	var sprite: PassengerSprite = view._rows[2]._sprites[0]
 	assert_true(sprite.visible, "the passenger is drawn")
@@ -302,13 +302,13 @@ func test_a_waiting_passenger_shows_its_call_direction_not_its_floor() -> void:
 		"the destination must NOT be readable from the hall")
 
 func test_a_downward_call_shows_a_downward_arrow() -> void:
-	root.state.building.enqueue(Passenger.new(4, 1, 900, 4.0))
+	root.state.building.enqueue(Passenger.new(4, 1, 900, 4.0, 4))
 	view.refresh()
 	assert_eq(view._rows[4]._sprites[0].label_text(), FloorRow.CALL_DOWN)
 
 func test_waiting_passengers_show_their_own_directions() -> void:
 	for dest in [5, 0, 4]:
-		root.state.building.enqueue(Passenger.new(2, dest, 900, 4.0))
+		root.state.building.enqueue(Passenger.new(2, dest, 900, 4.0, 2))
 	view.refresh()
 	var shown := []
 	for i in range(3):
@@ -321,7 +321,7 @@ func test_waiting_passengers_show_their_own_directions() -> void:
 func board_riders(dests: Array) -> void:
 	var car: ElevatorCar = root.state.building.cars[0]
 	for d in dests:
-		car.riders.append(Passenger.new(0, d, 900, 4.0))
+		car.riders.append(Passenger.new(0, d, 900, 4.0, 0))
 	view.refresh()
 
 func test_a_rider_reveals_its_destination_once_aboard() -> void:
@@ -348,7 +348,7 @@ func test_the_count_returns_when_the_row_is_too_short_for_seats() -> void:
 	# picture is gone, and the number is all there is.
 	var col: ShaftColumn = view._columns[0]
 	col._car_rect.size.y = 18.0
-	col.set_riders([Passenger.new(0, 5, 900, 4.0)], 4)
+	col.set_riders([Passenger.new(0, 5, 900, 4.0, 0)], 4)
 	assert_eq(col.free_slots_shown(), 0, "no seats drawn")
 	assert_string_contains(col.car_text(), "1/4", "so the count comes back")
 	assert_string_contains(col.car_text(), "5", "with the floors it can fit")
@@ -358,7 +358,7 @@ func test_the_fallback_line_collapses_rather_than_overflowing() -> void:
 	col._car_rect.size.y = 18.0
 	var riders := []
 	for d in [11, 22, 33, 24, 15, 26]:
-		riders.append(Passenger.new(0, d, 900, 4.0))
+		riders.append(Passenger.new(0, d, 900, 4.0, 0))
 	col.set_riders(riders, 12)
 	var text: String = col.car_text()
 	assert_string_contains(text, "6/12", "the count is never dropped")

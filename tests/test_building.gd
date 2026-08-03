@@ -35,26 +35,26 @@ func test_rows_stop_at_the_board_cap() -> void:
 	assert_false(b.add_row(), "the board never scrolls")
 
 func test_enqueue_places_the_passenger_on_its_origin_row() -> void:
-	b.enqueue(Passenger.new(3, 5, 100, 1.0))
+	b.enqueue(Passenger.new(3, 5, 100, 1.0, 3))
 	assert_eq(b.waiting_at(3).size(), 1)
 	assert_eq(b.waiting_at(5).size(), 0)
 
 func test_total_waiting_counts_every_row() -> void:
-	b.enqueue(Passenger.new(0, 5, 100, 1.0))
-	b.enqueue(Passenger.new(3, 5, 100, 1.0))
-	b.enqueue(Passenger.new(3, 1, 100, 1.0))
+	b.enqueue(Passenger.new(0, 5, 100, 1.0, 0))
+	b.enqueue(Passenger.new(3, 5, 100, 1.0, 3))
+	b.enqueue(Passenger.new(3, 1, 100, 1.0, 3))
 	assert_eq(b.total_waiting(), 3)
 
 func test_take_boardable_removes_up_to_the_limit() -> void:
 	for i in range(5):
-		b.enqueue(Passenger.new(2, 4, 100, 1.0))
+		b.enqueue(Passenger.new(2, 4, 100, 1.0, 2))
 	var got := b.take_boardable(2, 3)
 	assert_eq(got.size(), 3, "limited by the seats offered")
 	assert_eq(b.waiting_at(2).size(), 2, "the rest stay waiting")
 
 func test_take_boardable_is_fifo() -> void:
-	var first := Passenger.new(2, 4, 100, 1.0)
-	var second := Passenger.new(2, 9, 100, 1.0)
+	var first := Passenger.new(2, 4, 100, 1.0, 2)
+	var second := Passenger.new(2, 9, 100, 1.0, 2)
 	b.enqueue(first)
 	b.enqueue(second)
 	var got := b.take_boardable(2, 1)
@@ -64,6 +64,6 @@ func test_take_boardable_on_an_empty_row_is_empty() -> void:
 	assert_eq(b.take_boardable(1, 4).size(), 0)
 
 func test_take_boardable_with_zero_seats_takes_nobody() -> void:
-	b.enqueue(Passenger.new(2, 4, 100, 1.0))
+	b.enqueue(Passenger.new(2, 4, 100, 1.0, 2))
 	assert_eq(b.take_boardable(2, 0).size(), 0)
 	assert_eq(b.waiting_at(2).size(), 1)

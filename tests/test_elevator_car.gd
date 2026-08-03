@@ -74,20 +74,20 @@ func test_is_available_only_when_doors_are_open() -> void:
 func test_boarding_respects_capacity() -> void:
 	open_fully()
 	for i in range(4):
-		assert_true(car.board(Passenger.new(0, 3, 100, 1.0)), "seat %d" % i)
-	assert_false(car.board(Passenger.new(0, 3, 100, 1.0)), "car is full")
+		assert_true(car.board(Passenger.new(0, 3, 100, 1.0, 0)), "seat %d" % i)
+	assert_false(car.board(Passenger.new(0, 3, 100, 1.0, 0)), "car is full")
 	assert_eq(car.riders.size(), 4)
 
 func test_boarding_marks_the_passenger() -> void:
 	open_fully()
-	var p := Passenger.new(0, 3, 100, 1.0)
+	var p := Passenger.new(0, 3, 100, 1.0, 0)
 	car.board(p)
 	assert_true(p.boarded)
 
 func test_take_arrivals_returns_only_riders_for_this_row() -> void:
 	open_fully()
-	var here := Passenger.new(0, 3, 100, 1.0)
-	var elsewhere := Passenger.new(0, 7, 100, 1.0)
+	var here := Passenger.new(0, 3, 100, 1.0, 0)
+	var elsewhere := Passenger.new(0, 7, 100, 1.0, 0)
 	car.board(here)
 	car.board(elsewhere)
 	car.dispatch_to(3)
@@ -100,6 +100,6 @@ func test_take_arrivals_returns_only_riders_for_this_row() -> void:
 
 func test_take_arrivals_is_empty_when_doors_are_shut() -> void:
 	open_fully()
-	car.board(Passenger.new(0, 0, 100, 1.0))
+	car.board(Passenger.new(0, 0, 100, 1.0, 0))
 	car.step(25)                        # doors closed again
 	assert_eq(car.take_arrivals().size(), 0)

@@ -105,7 +105,7 @@ func test_it_does_not_steal_a_car_that_is_boarding() -> void:
 	# undo the parked-car rule and read as sabotage.
 	var car: ElevatorCar = gs.building.cars[0]
 	car.door_ticks = 20
-	gs.building.enqueue(Passenger.new(0, 3, 900, 4.0))
+	gs.building.enqueue(Passenger.new(0, 3, 900, 4.0, 0))
 	gs.tick(1)
 	assert_eq(car.state, ElevatorCar.State.DOORS, "boarding")
 	assert_true(gs.set_auto(0, true))
@@ -236,7 +236,7 @@ func test_a_call_policy_only_visits_floors_with_someone_on_them() -> void:
 	fit("hall_buttons")
 	fit("car_buttons")
 	assert_true(gs.set_policy(0, DispatchPolicy.Preset.ANSWER_CALLS))
-	gs.building.enqueue(Passenger.new(4, 0, 100000, 4.0))
+	gs.building.enqueue(Passenger.new(4, 0, 100000, 4.0, 4))
 	var car: ElevatorCar = gs.building.cars[0]
 	var visited := {}
 	for t in range(300):

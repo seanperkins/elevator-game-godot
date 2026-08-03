@@ -23,7 +23,7 @@ func test_ticking_advances_the_clock() -> void:
 func test_delivery_beats_expiry_at_exactly_zero_patience() -> void:
 	# THE boundary. Order is deliver -> expire, so a passenger reaching exactly
 	# 0 on the tick the doors open is delivered, pays, and extends the combo.
-	var p := Passenger.new(0, 1, 1, 10.0)
+	var p := Passenger.new(0, 1, 1, 10.0, 0)
 	gs.building.enqueue(p)
 	var car: ElevatorCar = gs.building.cars[0]
 	car.dispatch_to(0)                 # doors open at row 0
@@ -38,7 +38,7 @@ func test_expiry_fires_below_zero_patience() -> void:
 	# Row 3, not row 0: the car parks at the lobby and now answers calls there,
 	# so a passenger left at floor 0 is rescued before it can expire. The row was
 	# always incidental here -- this test is about the patience boundary.
-	var p := Passenger.new(3, 1, 0, 10.0)
+	var p := Passenger.new(3, 1, 0, 10.0, 3)
 	gs.building.enqueue(p)
 	var expired := []
 	gs.passenger_expired.connect(func(pp): expired.append(pp))
@@ -49,7 +49,7 @@ func test_expiry_fires_below_zero_patience() -> void:
 func test_expiry_breaks_the_combo() -> void:
 	gs.economy.credit_delivery(10.0)
 	assert_gt(gs.economy.combo, 1.0)
-	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0))   # off the car's floor
+	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0, 3))   # off the car's floor
 	gs.tick(2)
 	assert_almost_eq(gs.economy.combo, 1.0, 1e-9)
 
@@ -60,7 +60,7 @@ func test_a_full_trip_boards_delivers_and_pays() -> void:
 	# which runs BEFORE deliver, so a one-tick dwell opened between ticks shuts
 	# before anyone can board. At the shipped 20-tick dwell this is invisible.
 	car.door_ticks = 2
-	gs.building.enqueue(Passenger.new(0, 2, 100000, 10.0))
+	gs.building.enqueue(Passenger.new(0, 2, 100000, 10.0, 0))
 	gs.dispatch(0, 0)                  # open at row 0 to board
 	gs.tick(1)
 	assert_eq(car.riders.size(), 1, "boarded while the doors were open")
@@ -72,7 +72,7 @@ func test_a_full_trip_boards_delivers_and_pays() -> void:
 
 func test_passengers_only_board_a_car_at_their_own_row() -> void:
 	var car: ElevatorCar = gs.building.cars[0]
-	gs.building.enqueue(Passenger.new(4, 0, 100000, 10.0))
+	gs.building.enqueue(Passenger.new(4, 0, 100000, 10.0, 4))
 	gs.dispatch(0, 0)
 	gs.tick(1)
 	assert_eq(car.riders.size(), 0, "the car is at row 0, they wait at row 4")
@@ -128,14 +128,14 @@ func test_a_real_expiry_deducts_the_stairs_penalty() -> void:
 	# code. The seeding is what makes this test able to distinguish them.
 	gs.economy.accrue(100.0)
 	var before := gs.economy.cash
-	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0))
+	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0, 3))
 	gs.tick(2)
 	assert_almost_eq(gs.economy.cash, before - 10.0, 1e-9,
 		"one expiry costs exactly min(fare, cash)")
 
 func test_expiry_lowers_the_origin_rows_satisfaction() -> void:
 	var before := gs.tenancy.satisfaction_at(3)
-	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0))   # off the car's floor
+	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0, 3))   # off the car's floor
 	gs.tick(2)
 	assert_lt(gs.tenancy.satisfaction_at(3), before)
 
@@ -207,7 +207,7 @@ func test_deliveries_reach_the_metrics_window() -> void:
 	var car: ElevatorCar = gs.building.cars[0]
 	car.rows_per_tick = 1.0
 	car.door_ticks = 2
-	gs.building.enqueue(Passenger.new(0, 2, 100000, 10.0))
+	gs.building.enqueue(Passenger.new(0, 2, 100000, 10.0, 0))
 	gs.dispatch(0, 0)
 	gs.tick(1)
 	gs.dispatch(0, 2)
@@ -216,7 +216,7 @@ func test_deliveries_reach_the_metrics_window() -> void:
 	assert_gte(gs.metrics.average_wait_seconds(), 0.0, "a real wait was recorded")
 
 func test_expiries_reach_the_metrics_window() -> void:
-	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0))   # off the car's floor
+	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0, 3))   # off the car's floor
 	gs.tick(2)
 	assert_eq(gs.metrics.expiries(), 1)
 
@@ -226,7 +226,7 @@ func test_the_metrics_window_advances_with_the_sim() -> void:
 	# -- and the window would refill with it. This asserts that the ORIGINAL
 	# event ages out, so the traffic has to go.
 	gs.spawner.curve = PackedFloat32Array()
-	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0))   # off the car's floor
+	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0, 3))   # off the car's floor
 	gs.tick(2)
 	assert_eq(gs.metrics.expiries(), 1)
 	gs.tick(SimClock.TICKS_PER_MINUTE + BUCKET_SLACK)
@@ -238,7 +238,7 @@ func test_a_spawned_passenger_first_decays_on_the_next_tick() -> void:
 	# _tick_once spawns and then expires within the same call.
 	# Row 3 again: a passenger the lobby car picks up stops decaying entirely,
 	# because riders are being served. That would hide the boundary.
-	var p := Passenger.new(3, 1, 100, 1.0)
+	var p := Passenger.new(3, 1, 100, 1.0, 3)
 	gs.building.enqueue(p)
 	gs.tick(1)
 	assert_eq(p.patience_ticks, 99,
@@ -280,7 +280,7 @@ func test_a_parked_car_opens_its_doors_for_someone_on_its_own_floor() -> void:
 	var car: ElevatorCar = st.building.cars[0]
 	st.tick(1)
 	assert_eq(car.state, ElevatorCar.State.IDLE, "parked at the lobby")
-	st.building.enqueue(Passenger.new(0, 4, 900, 4.0))
+	st.building.enqueue(Passenger.new(0, 4, 900, 4.0, 0))
 	# The doors have to finish opening first: a stop is open, board, shut.
 	st.tick(car.door_opening_ticks() + 1)
 	assert_eq(car.riders.size(), 1, "they got on")
@@ -292,7 +292,7 @@ func test_answering_a_call_is_not_dispatch_automation() -> void:
 	var st := quiet_state()
 	var car: ElevatorCar = st.building.cars[0]
 	st.tick(1)
-	st.building.enqueue(Passenger.new(0, 4, 900, 4.0))
+	st.building.enqueue(Passenger.new(0, 4, 900, 4.0, 0))
 	st.tick(3)
 	assert_eq(car.target_row, 0, "still targeting the floor it is parked on")
 	assert_almost_eq(car.position_row, 0.0, 1e-9, "and it has not moved")
@@ -301,7 +301,7 @@ func test_a_parked_car_ignores_a_call_on_a_different_floor() -> void:
 	var st := quiet_state()
 	var car: ElevatorCar = st.building.cars[0]
 	st.tick(1)
-	st.building.enqueue(Passenger.new(3, 5, 900, 4.0))
+	st.building.enqueue(Passenger.new(3, 5, 900, 4.0, 3))
 	st.tick(5)
 	assert_eq(car.riders.size(), 0, "it is at floor 0, they are at floor 3")
 	assert_eq(st.building.waiting_at(3).size(), 1, "still waiting")
@@ -313,8 +313,8 @@ func test_a_full_parked_car_does_not_open_its_doors() -> void:
 	var car: ElevatorCar = st.building.cars[0]
 	st.tick(1)
 	for i in range(car.capacity):
-		car.riders.append(Passenger.new(0, 5, 900, 4.0))
-	st.building.enqueue(Passenger.new(0, 4, 900, 4.0))
+		car.riders.append(Passenger.new(0, 5, 900, 4.0, 0))
+	st.building.enqueue(Passenger.new(0, 4, 900, 4.0, 0))
 	st.tick(3)
 	assert_eq(car.state, ElevatorCar.State.IDLE, "doors stay shut")
 	assert_eq(st.building.waiting_at(0).size(), 1, "nobody boarded")
@@ -323,7 +323,7 @@ func test_a_moving_car_does_not_answer_calls_it_passes() -> void:
 	var st := quiet_state()
 	var car: ElevatorCar = st.building.cars[0]
 	car.rows_per_tick = 0.2
-	st.building.enqueue(Passenger.new(2, 5, 900, 4.0))
+	st.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
 	st.dispatch(0, 5)
 	st.tick(3)
 	assert_eq(car.state, ElevatorCar.State.MOVING, "still travelling")
@@ -334,9 +334,9 @@ func test_a_parked_car_keeps_answering_as_people_arrive() -> void:
 	var car: ElevatorCar = st.building.cars[0]
 	car.door_ticks = 2
 	st.tick(1)
-	st.building.enqueue(Passenger.new(0, 4, 900, 4.0))
+	st.building.enqueue(Passenger.new(0, 4, 900, 4.0, 0))
 	st.tick(4)
 	assert_eq(car.riders.size(), 1)
-	st.building.enqueue(Passenger.new(0, 2, 900, 4.0))
+	st.building.enqueue(Passenger.new(0, 2, 900, 4.0, 0))
 	st.tick(4)
 	assert_eq(car.riders.size(), 2, "the doors reopen for the next one")
