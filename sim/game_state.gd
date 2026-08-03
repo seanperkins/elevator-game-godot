@@ -252,7 +252,11 @@ func _tick_once() -> void:
 	# its own floor gets first refusal before the policy moves it.
 	auto.step(building)
 	_expire()
-	tenancy.accrue_for_tick()
+	# The tenant left, so their visitors stop arriving. NOT charged as
+	# expiries: the expiries that caused the move-out were already charged,
+	# and charging again would double-penalise one failure.
+	for row in tenancy.accrue_for_tick():
+		building.remove_waiting_from_source(row)
 	# update combo -- handled inside Economy on each delivery/expiry
 	clock.note_ticks(1)
 

@@ -371,6 +371,54 @@ func test_a_new_tenant_on_a_class_three_floor_is_charged_the_multiplier() -> voi
 		if s.floor_row == 3:
 			assert_almost_eq(s.kind.base_fare * s.fare_multiplier, 9.0 * 1.8, 1e-5)
 
+func test_a_move_out_removes_that_floors_waiting_passengers_from_every_queue() -> void:
+	# The inbound case is the one that matters: those passengers stand in the
+	# LOBBY queue, so a rule phrased over "that floor's queue" misses them
+	# entirely -- and for inbound-heavy kinds that is most of the floor's
+	# traffic.
+	#
+	# Ambient traffic is silenced (one tenanted floor cannot spawn a trip) so
+	# the three manual passengers below are the only ones in any queue; and
+	# they outlive the move-out window, because patience 900 would expire the
+	# survivor naturally inside 1201 ticks and this test must distinguish
+	# source removal from ordinary expiry.
+	for row in range(gs.building.row_count):
+		if row != 4:
+			gs.tenancy.restore_row(row, 1.0, true, 0)
+	# Send the car to the roof FIRST and let it get away from the lobby: a car
+	# parked at floor 0 answers the origin-0 calls below and BOARDs them,
+	# turning waiting passengers into riders. Once parked at 5 it stays there
+	# (auto is off and nothing is dispatched), so the lobby queue is never
+	# served for the rest of the test.
+	gs.building.cars[0].dispatch_to(5)
+	gs.tick(200)
+	var mine := Passenger.new(0, 4, 100000, 4.0, 4)     # inbound, belongs to 4
+	var theirs := Passenger.new(0, 2, 100000, 4.0, 2)   # inbound, belongs to 2
+	var also_mine := Passenger.new(4, 0, 100000, 4.0, 4)  # outbound, belongs to 4
+	gs.building.enqueue(mine)
+	gs.building.enqueue(theirs)
+	gs.building.enqueue(also_mine)
+	var cash_before := gs.economy.cash
+
+	while gs.tenancy.satisfaction_at(4) > Tenancy.MOVE_OUT_THRESHOLD:
+		gs.tenancy.note_expiry(4)
+	gs.tick(Tenancy.MOVE_OUT_TICKS + 1)
+	assert_true(gs.tenancy.is_vacant(4))
+
+	var left: Array[Passenger] = []
+	for row in range(gs.building.row_count):
+		for p in gs.building.waiting_at(row):
+			left.append(p)
+	for p in left:
+		assert_ne(p.source_row, 4, "no passenger from the vacated floor remains")
+	var survivors := 0
+	for p in left:
+		if p.source_row == 2:
+			survivors += 1
+	assert_eq(survivors, 1, "another floor's lobby queue is untouched")
+	assert_gte(gs.economy.cash, cash_before,
+		"removal is not an expiry -- the failure was already charged")
+
 func test_a_spawned_passenger_first_decays_on_the_next_tick() -> void:
 	# Spec §8.3: "A passenger spawned on tick T first decays on tick T+1."
 	# No test has ever pinned this, and the code decays on tick T because

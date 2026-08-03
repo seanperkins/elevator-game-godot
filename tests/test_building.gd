@@ -39,6 +39,16 @@ func test_enqueue_places_the_passenger_on_its_origin_row() -> void:
 	assert_eq(b.waiting_at(3).size(), 1)
 	assert_eq(b.waiting_at(5).size(), 0)
 
+func test_remove_waiting_from_source_clears_every_queue() -> void:
+	# Inbound trips wait in the LOBBY queue, so a source-scoped sweep must reach
+	# across queues, not just "that floor's" queue.
+	b.enqueue(Passenger.new(0, 4, 900, 4.0, 4))    # lobby queue, belongs to 4
+	b.enqueue(Passenger.new(4, 0, 900, 4.0, 4))    # queue 4, belongs to 4
+	b.enqueue(Passenger.new(0, 2, 900, 4.0, 2))    # lobby queue, belongs to 2
+	assert_eq(b.remove_waiting_from_source(4), 2, "counts what it removed")
+	assert_eq(b.total_waiting(), 1, "another floor's visitors survive")
+	assert_eq(b.waiting_at(3).size(), 0, "cleared from the lobby too")
+
 func test_total_waiting_counts_every_row() -> void:
 	b.enqueue(Passenger.new(0, 5, 100, 1.0, 0))
 	b.enqueue(Passenger.new(3, 5, 100, 1.0, 3))
