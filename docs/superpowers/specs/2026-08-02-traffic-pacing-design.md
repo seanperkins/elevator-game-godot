@@ -136,6 +136,11 @@ If it overshoots, the cheapest counterweight is raising `base_patience_ticks` in
 `data/traffic_walkup.json`. That is a data edit, it is the one patience knob the
 spawner reads, and it does not disturb anything above.
 
+**Outcome, play-tested on device 2026-08-03.** The risk did not materialise. The
+opening reads as busier rather than punishing, and no patience change was
+needed — `base_patience_ticks` stays at 900. Recorded here so a later reader
+knows this was checked and cleared, not overlooked.
+
 ## 6. Verification
 
 - The full GUT suite passes (433 tests at time of writing).
