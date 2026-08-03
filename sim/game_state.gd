@@ -130,7 +130,7 @@ func lease_cost(floor_index: int, kind_id: String) -> float:
 	var k := catalog.kind(kind_id)
 	if k == null:
 		return INF
-	if tenancy.tenanted_count() >= Tenancy.MIN_ROWS_FOR_TRAFFIC:
+	if tenancy.tenanted_count() >= Tenancy.MIN_FLOORS_FOR_TRAFFIC:
 		return k.lease_cost
 	var cheapest := catalog.cheapest_for_class(fitout.tier_at(floor_index))
 	return 0.0 if cheapest != null and cheapest.id == kind_id else k.lease_cost

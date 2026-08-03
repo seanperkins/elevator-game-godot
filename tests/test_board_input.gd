@@ -61,7 +61,7 @@ func floor_centre_y(f: int) -> float:
 ## The "+ BUILD FLOOR" band sits one floor above the top floor and scrolls with it.
 func ghost_centre_y() -> float:
 	return root.HUD_HEIGHT + view.coords().floor_to_y(view.coords().top_floor) \
-		- BuildingView.ROW_HEIGHT * 0.5
+		- BuildingView.FLOOR_HEIGHT * 0.5
 
 func column_x(slot: int) -> float:
 	return BuildingView.SHAFT_AREA_X + float(slot) * BuildingView.SHAFT_WIDTH + 40.0
@@ -115,7 +115,7 @@ func test_the_board_under_test_is_the_board_that_ships() -> void:
 	# and a no-op look identical from the sim's side.
 	assert_eq(root.size, BOARD_SIZE, "720x1280, not GUT's container")
 	assert_eq(view.visible_shafts(), 3, "three columns on a 160-unit pitch")
-	assert_almost_eq(view.coords().floor_height, BuildingView.ROW_HEIGHT, 0.01,
+	assert_almost_eq(view.coords().floor_height, BuildingView.FLOOR_HEIGHT, 0.01,
 		"floors are a fixed height now, not squeezed to fit")
 	var col: ShaftColumn = view._columns[0]
 	assert_true(col.get_global_rect().has_point(

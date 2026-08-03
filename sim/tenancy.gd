@@ -15,7 +15,7 @@ extends RefCounted
 ## NO FAIL STATE, guaranteed by ONE rule: the cheapest tenant eligible for a
 ## floor is FREE whenever the player cannot generate traffic. The pricing
 ## itself lives in GameState.lease_cost, which only charges while
-## tenanted_count() >= MIN_ROWS_FOR_TRAFFIC; Tenancy owns the threshold and
+## tenanted_count() >= MIN_FLOORS_FOR_TRAFFIC; Tenancy owns the threshold and
 ## the kind the lease writes.
 ##
 ## Any floor, including the lobby, may vacate. A second rule ("the lobby never
@@ -158,7 +158,7 @@ func tenanted_count() -> int:
 ## COULD generate lobby trips, so this is now a deliberate policy guard rather
 ## than arithmetic -- but the guarantee it protects is unchanged: there must
 ## always be something a $0 player can take.
-const MIN_ROWS_FOR_TRAFFIC := 2
+const MIN_FLOORS_FOR_TRAFFIC := 2
 
 func lease(floor_index: int, kind_id: String) -> void:
 	if not _valid(floor_index):

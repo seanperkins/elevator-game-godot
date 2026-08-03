@@ -6,7 +6,7 @@ extends Control
 ## Two views, one button. It reads MANAGE on the board and BOARD in management;
 ## never CLOSE, because a view is not a sheet. The sim runs in both.
 
-const START_ROWS := 6
+const START_FLOORS := 6
 const START_SHAFTS := 1
 const START_SEED := 20260802
 const DEFAULT_CATALOG := "res://data/tenants.json"
@@ -48,7 +48,7 @@ var _last_shape := Vector2i.ZERO
 
 func _ready() -> void:
 	_safe = SafeArea.current(size)
-	var floors := START_ROWS
+	var floors := START_FLOORS
 	var shafts := START_SHAFTS
 	var override := _debug_board_override()
 	if override != Vector2i.ZERO:
@@ -146,7 +146,7 @@ func _ready() -> void:
 	_refresh_pager()
 
 ## Screenshot and device testing need boards that cost 1.36e8 to reach by play.
-## This is a command-line override, NOT an edit to START_ROWS: an unreverted
+## This is a command-line override, NOT an edit to START_FLOORS: an unreverted
 ## edit would ship every new player a forty-floor building.
 ##   godot -- --board=40x8
 ##

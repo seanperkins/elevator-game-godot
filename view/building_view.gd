@@ -33,7 +33,7 @@ const SHAFT_WIDTH := 160.0
 ## Every floor, always. 88 units is 48pt at the 0.546 iPhone scale -- the same
 ## touch floor every other control uses -- and it no longer shrinks as the
 ## building grows, because the board scrolls instead of squeezing.
-const ROW_HEIGHT := 88.0
+const FLOOR_HEIGHT := 88.0
 
 var _state: GameState
 var _coords: BoardCoords
@@ -84,7 +84,7 @@ func rebuild() -> void:
 
 func _build_all() -> void:
 	var previous := _coords.scroll_offset if _coords != null else 0.0
-	_coords = BoardCoords.fixed(0, _state.building.floor_count - 1, ROW_HEIGHT)
+	_coords = BoardCoords.fixed(0, _state.building.floor_count - 1, FLOOR_HEIGHT)
 	_coords.set_viewport_height(size.y)
 	# Buying a floor must not throw away where the player was looking.
 	_coords.scroll_to(previous)
@@ -115,7 +115,7 @@ func _reposition_floors() -> void:
 		_floors[i].position = Vector2(0, _coords.floor_to_y(i))
 	if _ghost_floor != null:
 		_ghost_floor.position = Vector2(0,
-			_coords.floor_to_y(_coords.top_floor) - ROW_HEIGHT)
+			_coords.floor_to_y(_coords.top_floor) - FLOOR_HEIGHT)
 
 func scroll_board_by(delta: float) -> void:
 	_coords.scroll_by(delta)
@@ -169,7 +169,7 @@ func _on_hall_floor_selected(floor_index: int) -> void:
 ## floor is always visibly there; at the cap the term simply leaves the divisor.
 func _build_ghost_floor() -> void:
 	_ghost_floor = Control.new()
-	_ghost_floor.size = Vector2(size.x, ROW_HEIGHT)
+	_ghost_floor.size = Vector2(size.x, FLOOR_HEIGHT)
 	add_child(_ghost_floor)
 
 	var bg := ColorRect.new()
@@ -180,7 +180,7 @@ func _build_ghost_floor() -> void:
 
 	var label := Label.new()
 	label.add_theme_font_size_override("font_size", 15)
-	label.position = Vector2(FloorRow.LABEL_X, (ROW_HEIGHT - 20.0) * 0.5)
+	label.position = Vector2(FloorRow.LABEL_X, (FLOOR_HEIGHT - 20.0) * 0.5)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ghost_floor.add_child(label)
 	_ghost_label = label
