@@ -120,3 +120,30 @@ func test_recovery_is_reachable_from_the_worst_state() -> void:
 func test_add_row_extends_tenancy() -> void:
 	t.add_row()
 	assert_false(t.is_vacant(6))
+
+func test_accrue_reports_which_rows_vacated() -> void:
+	while t.satisfaction_at(0) > Tenancy.MOVE_OUT_THRESHOLD:
+		t.note_expiry(0)
+	var vacated := PackedInt32Array()
+	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
+		var out := t.accrue_for_tick()
+		if not out.is_empty():
+			vacated = out
+	assert_eq(vacated.size(), 1, "exactly one row vacated")
+	assert_eq(vacated[0], 0, "and the caller is told which")
+
+func test_a_vacancy_moves_the_revision() -> void:
+	while t.satisfaction_at(0) > Tenancy.MOVE_OUT_THRESHOLD:
+		t.note_expiry(0)
+	var before := t.revision()
+	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
+		t.accrue_for_tick()
+	assert_ne(t.revision(), before)
+
+func test_restoring_a_row_moves_the_revision() -> void:
+	# The path every returning player's session starts with: decode mutates
+	# tenancy from outside, and a cache built at construction would otherwise
+	# never learn about it.
+	var before := t.revision()
+	t.restore_row(2, 0.5, true, 0)
+	assert_ne(t.revision(), before)

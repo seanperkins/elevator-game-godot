@@ -32,6 +32,7 @@ const _EXPIRY_LOSS := 0.05
 var _satisfaction: PackedFloat32Array = PackedFloat32Array()
 var _vacant: Array[bool] = []
 var _move_out_left: PackedInt32Array = PackedInt32Array()
+var _revision: int = 0
 
 func _init(row_count: int) -> void:
 	for i in range(row_count):
@@ -51,6 +52,11 @@ func add_row() -> void:
 func rows() -> int:
 	return _satisfaction.size()
 
+## Monotonic revision bumping on every structural change. A cached TrafficSource
+## list compares this against its last-seen baseline to learn it is stale.
+func revision() -> int:
+	return _revision
+
 ## Restores one row from a save. Satisfaction scales rent and a vacancy is a
 ## debt, so neither can be inferred from anything else in the file.
 func restore_row(row: int, satisfaction: float, vacant: bool, move_out_left: int) -> void:
@@ -59,6 +65,7 @@ func restore_row(row: int, satisfaction: float, vacant: bool, move_out_left: int
 	_satisfaction[row] = clampf(satisfaction, 0.0, 1.0)
 	_vacant[row] = vacant
 	_move_out_left[row] = maxi(move_out_left, 0)
+	_revision += 1
 
 func note_delivery(row: int) -> void:
 	if not _valid(row) or _vacant[row]:
@@ -74,9 +81,15 @@ func note_expiry(row: int) -> void:
 	if _satisfaction[row] <= MOVE_OUT_THRESHOLD and _move_out_left[row] <= 0:
 		_move_out_left[row] = MOVE_OUT_TICKS
 
-## Advances move-out countdowns. Returns nothing: tenants are not an income
-## source, they are a traffic source.
-func accrue_for_tick() -> void:
+## Advances move-out countdowns and RETURNS the rows that vacated on this tick.
+##
+## The docstring this replaces said "returns nothing", meaning tenants are not
+## an income source -- a rejection of rent, not of all return values. The row
+## identity is needed because a vacating floor's waiting passengers have to be
+## removed by source, and a revision counter is floor-anonymous by
+## construction: it reports that something changed, not which floor.
+func accrue_for_tick() -> PackedInt32Array:
+	var vacated := PackedInt32Array()
 	for row in range(_satisfaction.size()):
 		if _vacant[row]:
 			continue
@@ -84,6 +97,9 @@ func accrue_for_tick() -> void:
 			_move_out_left[row] -= 1
 			if _move_out_left[row] <= 0:
 				_vacant[row] = true
+				_revision += 1
+				vacated.append(row)
+	return vacated
 
 func satisfaction_at(row: int) -> float:
 	return _satisfaction[row] if _valid(row) else 0.0
@@ -127,6 +143,7 @@ func relet(row: int) -> void:
 	_vacant[row] = false
 	_satisfaction[row] = 1.0
 	_move_out_left[row] = 0
+	_revision += 1
 
 func _valid(row: int) -> bool:
 	return row >= 0 and row < _satisfaction.size()
