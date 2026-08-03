@@ -175,7 +175,7 @@ func test_buying_a_row_extends_tenancy_too() -> void:
 	gs.economy.accrue(1e9)
 	assert_true(gs.buy("row"))
 	assert_eq(gs.building.row_count, 7)
-	assert_false(gs.tenancy.is_vacant(6), "the new row must have a tenant")
+	assert_true(gs.tenancy.is_vacant(6), "a purchased floor is leased, not granted")
 
 func test_buying_without_cash_fails() -> void:
 	assert_false(gs.buy("shaft"))

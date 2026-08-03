@@ -36,7 +36,7 @@ func _init(rows: int, shafts: int, p_seed: int) -> void:
 	spawner = TrafficSpawner.new(p_seed)
 	spawner.load_curve("res://data/traffic_walkup.json")
 	economy = Economy.new()
-	tenancy = Tenancy.new(rows)
+	tenancy = Tenancy.new(rows, rows)   # full roster prefix -- Task 9 narrows it
 	upgrades = Upgrades.new()
 	upgrades.load_defs("res://data/upgrades.json")
 	metrics = Metrics.new()

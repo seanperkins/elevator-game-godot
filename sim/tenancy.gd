@@ -32,19 +32,33 @@ const _EXPIRY_LOSS := 0.05
 var _satisfaction: PackedFloat32Array = PackedFloat32Array()
 var _vacant: Array[bool] = []
 var _move_out_left: PackedInt32Array = PackedInt32Array()
+var _kind: PackedStringArray = PackedStringArray()
 var _revision: int = 0
 
-func _init(row_count: int) -> void:
+## `tenanted_prefix` is how many LEADING rows start with a tenant. Everything
+## past it arrives vacant with no kind, so a constructed floor and a purchased
+## one agree.
+##
+## The divergence is by row INDEX, not by entry point. _append_row is shared
+## with add_row, and flipping the append itself would make every floor of a new
+## building vacant; vacating only in add_row would leave a tall constructed
+## building fully tenanted and kindless. So both callers vacate, by index.
+func _init(row_count: int, tenanted_prefix: int) -> void:
 	for i in range(row_count):
 		_append_row()
+		if i >= tenanted_prefix:
+			_vacant[i] = true
 
 func _append_row() -> void:
 	_satisfaction.append(1.0)
 	_vacant.append(false)
 	_move_out_left.append(0)
+	_kind.append("")
 
 func add_row() -> void:
 	_append_row()
+	_vacant[_vacant.size() - 1] = true
+	_revision += 1
 
 ## How many rows tenancy covers. Callers that grow the building need this to
 ## know how far behind tenancy has fallen -- is_vacant() cannot answer it,
@@ -59,12 +73,23 @@ func revision() -> int:
 
 ## Restores one row from a save. Satisfaction scales rent and a vacancy is a
 ## debt, so neither can be inferred from anything else in the file.
-func restore_row(row: int, satisfaction: float, vacant: bool, move_out_left: int) -> void:
+func restore_row(row: int, satisfaction: float, vacant: bool, move_out_left: int,
+		kind := "") -> void:
 	if not _valid(row):
 		return
 	_satisfaction[row] = clampf(satisfaction, 0.0, 1.0)
 	_vacant[row] = vacant
 	_move_out_left[row] = maxi(move_out_left, 0)
+	_kind[row] = "" if vacant else kind
+	_revision += 1
+
+func kind_at(row: int) -> String:
+	return _kind[row] if _valid(row) else ""
+
+func set_kind(row: int, kind_id: String) -> void:
+	if not _valid(row):
+		return
+	_kind[row] = kind_id
 	_revision += 1
 
 func note_delivery(row: int) -> void:
@@ -97,6 +122,7 @@ func accrue_for_tick() -> PackedInt32Array:
 			_move_out_left[row] -= 1
 			if _move_out_left[row] <= 0:
 				_vacant[row] = true
+				_kind[row] = ""
 				_revision += 1
 				vacated.append(row)
 	return vacated
