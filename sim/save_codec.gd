@@ -15,9 +15,12 @@ extends RefCounted
 ## headlessly and the file handling lives in SaveStore.
 ##
 ## FORMAT IS VERSIONED. A save written by an older build must either load or be
-## refused, never be half-read into a state that looks fine and is not.
+## refused, never be half-read into a state that looks fine and is not. v2 adds a
+## kind and a class per row; v1 migrates -- §4.3 defines what rows past the
+## roster get, so a v1 fallthrough is read, not refused.
 
-const VERSION := 1
+const VERSION := 2
+const SUPPORTED_VERSIONS := [1, 2]
 
 static func encode(state: GameState) -> Dictionary:
 	var cars := []
@@ -48,6 +51,13 @@ static func encode(state: GameState) -> Dictionary:
 			"satisfaction": state.tenancy.satisfaction_at(row),
 			"vacant": state.tenancy.is_vacant(row),
 			"move_out_left": state.tenancy.move_out_ticks_left(row),
+			# null, not absent: v2 requires the field present, and a vacant or
+			# newly purchased floor genuinely has no kind. Without an explicit
+			# encoding "a missing kind is malformed" and "vacant floors have no
+			# kind" contradict each other.
+			"kind": null if state.tenancy.kind_at(row).is_empty() \
+				else state.tenancy.kind_at(row),
+			"class": state.fitout.tier_at(row),
 		})
 
 	return {
@@ -97,11 +107,25 @@ static func decode(data: Dictionary) -> GameState:
 		car.door_ticks = int(saved.get("door_ticks", car.door_ticks))
 		car.spring_multiplier = float(saved.get("spring_multiplier", 1.0))
 
+	var version := int(data["version"])
 	var saved_rows: Array = data.get("rows", [])
+	# v1 may fall through -- §4.3 defines what rows past the roster get.
+	# v2 may not: a short array silently keeps a constructor default that
+	# contradicts the save, and past the roster that default is VACANCY, i.e.
+	# the silent loss of a floor the player leased.
+	if version == 2 and saved_rows.size() < state.building.row_count:
+		return null
+
 	for row in range(mini(saved_rows.size(), state.building.row_count)):
 		var r: Dictionary = saved_rows[row]
+		if version == 2 and not (r.has("kind") and r.has("class")):
+			return null
+		var vacant := bool(r.get("vacant", false))
 		state.tenancy.restore_row(row, float(r.get("satisfaction", 1.0)),
-			bool(r.get("vacant", false)), int(r.get("move_out_left", 0)))
+			vacant, int(r.get("move_out_left", 0)))
+		state.fitout.set_tier(row, clampi(int(r.get("class", 1)), 1,
+			state.catalog.max_tier()))
+		state.tenancy.set_kind(row, _restore_kind(state, row, version, r, vacant))
 
 	# Policies go through set_policy, so a save cannot grant a shaft a policy
 	# the hardware does not support or more licences than were bought.
@@ -111,11 +135,35 @@ static func decode(data: Dictionary) -> GameState:
 
 	return state
 
+## A vacant row has no kind. A v1 row infers `apartments`; a v2 row carries an
+## explicit id or null. Either way the result is cross-checked against the
+## restored class, because independent validation lets {class: 1, kind:
+## "law_firm"} through -- a known id skips the unknown-id fallback and the
+## class clamp never looks at the kind.
+static func _restore_kind(state: GameState, row: int, version: int,
+		r: Dictionary, vacant: bool) -> String:
+	if vacant:
+		return ""
+	var id := ""
+	if version == 1:
+		id = "apartments"
+	else:
+		var raw: Variant = r["kind"]
+		id = "" if raw == null else str(raw)
+	if id.is_empty():
+		return ""
+	var k := state.catalog.kind(id)
+	var tier := state.fitout.tier_at(row)
+	if k == null or k.requires_class > tier:
+		var fallback := state.catalog.cheapest_for_class(tier)
+		return "" if fallback == null else fallback.id
+	return id
+
 ## A save has to be recognisably one of ours, of a version we understand, and
 ## carry the fields decode indexes without a default. Anything else is refused
 ## whole rather than partly applied.
 static func _is_usable(data: Dictionary) -> bool:
-	if int(data.get("version", -1)) != VERSION:
+	if not SUPPORTED_VERSIONS.has(int(data.get("version", -1))):
 		return false
 	for key in ["seed", "ticks", "cash", "row_count", "cars"]:
 		if not data.has(key):

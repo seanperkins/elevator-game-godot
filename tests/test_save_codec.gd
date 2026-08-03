@@ -148,3 +148,71 @@ func test_loading_does_not_invent_offline_earnings() -> void:
 		"no time passed, so no money appeared")
 	assert_eq(after.clock.ticks_executed, before.clock.ticks_executed,
 		"and no ticks were run to catch up")
+
+# --- v2: a kind and a class per row ------------------------------------------
+
+## A version-1 dictionary: rows carry no kind or class, exactly what the old
+## formatter wrote.
+func _v1_save() -> Dictionary:
+	var data := SaveCodec.encode(GameState.new(6, 1, 7))
+	data["version"] = 1
+	for r in data["rows"]:
+		r.erase("kind")
+		r.erase("class")
+	return data
+
+func test_a_vacant_row_round_trips_as_a_null_kind() -> void:
+	# The state a newly purchased floor is in, so this is the common case.
+	var gs := GameState.new(6, 1, 7)
+	gs.economy.accrue(1e9)
+	gs.buy("row")
+	var back := SaveCodec.decode(SaveCodec.encode(gs))
+	assert_not_null(back)
+	assert_true(back.tenancy.is_vacant(6))
+	assert_eq(back.tenancy.kind_at(6), "")
+
+func test_v2_round_trips_kind_and_class() -> void:
+	var gs := GameState.new(6, 1, 7)
+	gs.economy.accrue(1e6)
+	gs.upgrade_class(2)
+	var back := SaveCodec.decode(SaveCodec.encode(gs))
+	assert_eq(back.fitout.tier_at(2), 2)
+	assert_eq(back.tenancy.kind_at(0), "shops")
+
+func test_a_v1_save_migrates() -> void:
+	var data := _v1_save()
+	var back := SaveCodec.decode(data)
+	assert_not_null(back)
+	assert_eq(back.fitout.tier_at(0), 1)
+	assert_eq(back.tenancy.kind_at(0), "apartments")
+
+func test_a_vacant_v1_row_migrates_with_no_kind() -> void:
+	var data := _v1_save()
+	(data["rows"] as Array)[2]["vacant"] = true
+	var back := SaveCodec.decode(data)
+	assert_true(back.tenancy.is_vacant(2))
+	assert_eq(back.tenancy.kind_at(2), "", "a vacant floor has no tenant")
+
+func test_a_kind_the_restored_class_cannot_lease_falls_back() -> void:
+	# Independent validation lets this through: a known id skips the
+	# unknown-id fallback and the class clamp never looks at the kind.
+	var gs := GameState.new(6, 1, 7)
+	var data := SaveCodec.encode(gs)
+	(data["rows"] as Array)[3]["kind"] = "law_firm"
+	(data["rows"] as Array)[3]["class"] = 1
+	var back := SaveCodec.decode(data)
+	assert_eq(back.tenancy.kind_at(3), "apartments",
+		"falls back to the cheapest eligible kind")
+
+func test_a_short_v2_rows_array_is_refused() -> void:
+	var gs := GameState.new(6, 1, 7)
+	var data := SaveCodec.encode(gs)
+	(data["rows"] as Array).resize(3)
+	assert_null(SaveCodec.decode(data))
+
+func test_an_out_of_range_class_bounds_to_the_top_tier() -> void:
+	var gs := GameState.new(6, 1, 7)
+	var data := SaveCodec.encode(gs)
+	(data["rows"] as Array)[1]["class"] = 99
+	var back := SaveCodec.decode(data)
+	assert_eq(back.fitout.tier_at(1), 3, "bounded, not prevented")
