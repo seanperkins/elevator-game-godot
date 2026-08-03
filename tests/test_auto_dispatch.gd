@@ -8,9 +8,16 @@ extends GutTest
 
 var gs: GameState
 
+## Silences traffic so these assert the policy, not the seed. One tenanted
+## floor cannot generate a trip, so nothing spawns. Replaces
+## `spawner.curve = PackedFloat32Array()`, which set a field that is gone.
+func _silence(state: GameState) -> void:
+	for row in range(1, state.building.row_count):
+		state.tenancy.restore_row(row, 1.0, true, 0)
+
 func before_each() -> void:
 	gs = GameState.new(6, 2, 4242)
-	gs.spawner.curve = PackedFloat32Array()   # policy under test, not traffic
+	_silence(gs)
 	for car in gs.building.cars:
 		car.rows_per_tick = 1.0               # a floor a tick, so tests are short
 		car.door_ticks = 2
@@ -133,7 +140,7 @@ func test_a_manual_dispatch_still_works_and_the_sweep_resumes() -> void:
 
 func test_a_one_floor_building_does_not_thrash() -> void:
 	var solo := GameState.new(1, 1, 7)
-	solo.spawner.curve = PackedFloat32Array()
+	_silence(solo)
 	solo.economy.accrue(1e9)
 	solo.buy("auto")
 	assert_true(solo.set_auto(0, true))

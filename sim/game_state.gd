@@ -32,6 +32,9 @@ var upgrades: Upgrades
 var metrics: Metrics
 var auto: AutoDispatch
 
+var _source_cache: Array[TrafficSource] = []
+var _source_revision: int = -1
+
 ## The starting assignment: six kind ids, one per row from the lobby up. NOT
 ## the catalog's length -- adding a seventh KIND must not tenant a seventh ROW.
 ## Both the tenanted-row count and those rows' kinds derive from this one list,
@@ -214,8 +217,28 @@ func _tick_once() -> void:
 	# update combo -- handled inside Economy on each delivery/expiry
 	clock.note_ticks(1)
 
+## Rebuilt when EITHER container's revision moves. Compared with != rather than
+## >: both counters only increment today, so > would be correct -- but it stops
+## working silently the moment any future path swaps a container into a live
+## GameState and resets one to zero.
+func _sources() -> Array[TrafficSource]:
+	var revision := tenancy.revision() + fitout.revision()
+	if revision != _source_revision:
+		_source_cache = []
+		for row in range(building.row_count):
+			if tenancy.is_vacant(row):
+				continue
+			var k := catalog.kind(tenancy.kind_at(row))
+			if k == null:
+				continue
+			_source_cache.append(TrafficSource.new(row, k,
+				catalog.fare_multiplier(fitout.tier_at(row))))
+		_source_revision = revision
+	return _source_cache
+
 func _spawn() -> void:
-	for p in spawner.spawn_for_tick(clock.sim_minute(), tenancy.occupied_rows()):
+	for p in spawner.spawn_from_sources(clock.sim_minute(), _sources(),
+			not tenancy.is_vacant(0)):
 		building.enqueue(p)
 		passenger_spawned.emit(p)
 

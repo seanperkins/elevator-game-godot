@@ -207,6 +207,14 @@ func test_a_malformed_catalog_makes_the_state_invalid() -> void:
 	var bad := GameState.new(6, 1, 1, "res://data/does_not_exist.json")
 	assert_false(bad.is_valid())
 
+## Silences traffic so a rule test asserts the rule, not the seed. One tenanted
+## floor cannot generate a trip (a trip needs two floors), so nothing spawns.
+## Replaces `spawner.curve = PackedFloat32Array()`, which set a field that is
+## gone.
+func _silence(state: GameState) -> void:
+	for row in range(1, state.building.row_count):
+		state.tenancy.restore_row(row, 1.0, true, 0)
+
 ## Drives a row out of its lease and returns once it is vacant.
 func vacate(state: GameState, row: int) -> void:
 	while state.tenancy.satisfaction_at(row) > Tenancy.MOVE_OUT_THRESHOLD:
@@ -283,7 +291,7 @@ func test_the_metrics_window_advances_with_the_sim() -> void:
 	# spawns and expires on its own -- seed 4242 produces exactly one such expiry
 	# -- and the window would refill with it. This asserts that the ORIGINAL
 	# event ages out, so the traffic has to go.
-	gs.spawner.curve = PackedFloat32Array()
+	_silence(gs)
 	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0, 3))   # off the car's floor
 	gs.tick(2)
 	assert_eq(gs.metrics.expiries(), 1)
@@ -303,32 +311,39 @@ func test_a_spawned_passenger_first_decays_on_the_next_tick() -> void:
 		"one tick of decay for one tick of waiting")
 
 func test_the_opening_minutes_carry_real_traffic() -> void:
-	# The cold start a player actually experiences. Starting the day at midnight
-	# opened on the curve's overnight trough -- 0.4, 0.3, 0.2 spawns per simulated
-	# minute -- so a new player watched an empty building for about six real
-	# minutes, and a 900-tick patience meant the rare night passenger was gone
-	# before anyone looked.
+	# Re-derived from the roster: at START_MINUTE the starting building
+	# (1 Shops + 5 Apartments) sums to shops.rate_at(6) + 5 x apartments.rate_at(6)
+	# = 0.0 + 5 x 0.5 = 2.5 trips/min, so ~7.5 over three minutes. Four is a
+	# comfortable floor for a Bernoulli draw at that rate.
 	#
-	# Counted off the signal into an Array: GDScript lambdas capture by value, so
-	# a captured int would increment a copy and read back zero. Three simulated
-	# minutes of rush is ~11.4 expected spawns against ~0.9 for the trough, so
-	# this discriminates rather than riding the seed.
+	# An Array, deliberately: GDScript lambdas capture local ints by value, so a
+	# captured counter increments a copy and reads back zero.
 	var spawned := []
 	gs.passenger_spawned.connect(func(p): spawned.append(p))
 	gs.tick(SimClock.TICKS_PER_MINUTE * 3)
-	assert_gt(spawned.size(), 4,
-		"the opening minutes must be busy, not the 0.9-spawn overnight trough")
+	assert_gt(spawned.size(), 4, "the opening is a rush, not a trickle")
 
 func test_the_opening_rate_is_a_rush_rate() -> void:
-	assert_gt(gs.spawner.rate_at_minute(gs.clock.sim_minute()), 2.0,
-		"the day opens on real traffic, not the 0.4/min trough")
+	# Re-derived from the roster, since rate_at_minute is gone: the opening hour
+	# must carry real traffic, not the old overnight trough.
+	var sum := gs.catalog.kind("shops").rate_at(SimClock.START_MINUTE) \
+		+ 5.0 * gs.catalog.kind("apartments").rate_at(SimClock.START_MINUTE)
+	assert_gt(sum, 2.0, "the day opens on real traffic")
+
+func test_the_source_cache_rebuilds_when_a_floor_vacates() -> void:
+	while gs.tenancy.satisfaction_at(3) > Tenancy.MOVE_OUT_THRESHOLD:
+		gs.tenancy.note_expiry(3)
+	gs.tick(Tenancy.MOVE_OUT_TICKS + 1)
+	assert_true(gs.tenancy.is_vacant(3))
+	for s in gs._sources():
+		assert_ne(s.floor_row, 3, "a vacated floor stops generating traffic")
 
 # --- a parked car answers a call at its own floor --------------------------
 
 ## Silences traffic so these assert the rule and not the seed.
 func quiet_state(rows := 6, shafts := 1) -> GameState:
 	var st := GameState.new(rows, shafts, 4242)
-	st.spawner.curve = PackedFloat32Array()
+	_silence(st)
 	return st
 
 func test_a_parked_car_opens_its_doors_for_someone_on_its_own_floor() -> void:

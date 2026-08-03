@@ -7,6 +7,5 @@
     3.6, 2.4, 2.0, 2.0, 2.4, 3.6,
     4.4, 2.4, 1.4, 1.0, 0.8, 0.6
   ],
-  "base_patience_ticks": 900,
-  "base_fare": 4.0
+  "base_patience_ticks": 900
 }
