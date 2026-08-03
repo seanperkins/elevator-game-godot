@@ -17,6 +17,19 @@ func test_definitions_load() -> void:
 func test_levels_start_at_zero() -> void:
 	assert_eq(up.level_of("doors"), 0)
 
+func test_call_direction_is_a_one_shot_that_installs() -> void:
+	assert_eq(up.level_of("call_direction"), 0, "not fitted on a fresh building")
+	assert_false(up.is_installed("call_direction"))
+	econ.accrue(1000.0)
+	assert_true(up.purchase("call_direction", econ, b), "bought at $50")
+	assert_true(up.is_installed("call_direction"))
+
+func test_call_direction_cannot_be_bought_twice() -> void:
+	econ.accrue(1000.0)
+	assert_true(up.purchase("call_direction", econ, b))
+	assert_false(up.purchase("call_direction", econ, b),
+		"max_level 1 stops a second purchase")
+
 func test_cost_grows_with_level() -> void:
 	var first := up.cost_of("doors")
 	econ.accrue(1e9)

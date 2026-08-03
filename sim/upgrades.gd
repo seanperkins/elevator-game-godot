@@ -106,7 +106,8 @@ func _apply(id: String, building: Building) -> bool:
 			return building.add_row()
 		"auto":
 			return true          # licences a shaft; nothing on a car changes
-		"hall_buttons", "car_buttons", "load_sensor", "lobby_parking":
+		"hall_buttons", "car_buttons", "load_sensor", "lobby_parking", \
+		"call_direction":
 			return true          # sensors and controller features, not car parts
 		"spring":
 			for car in building.cars:
@@ -145,7 +146,7 @@ func effect_value(id: String, level: int) -> float:
 			return 0.0
 
 const HARDWARE := ["hall_buttons", "car_buttons", "load_sensor", "lobby_parking",
-	"spring"]
+	"spring", "call_direction"]
 
 func has_effect(id: String) -> bool:
 	return id == "doors" or id == "speed" or id == "capacity" or id == "auto" \

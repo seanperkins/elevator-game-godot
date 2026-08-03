@@ -9,6 +9,8 @@
     { "id": "auto",     "name": "Auto-Dispatch", "base": 200.0,  "growth": 2.60, "max_level": 8,
       "note": "one more shaft may run itself" },
 
+    { "id": "call_direction", "name": "Hall Call Direction", "base": 50.0, "growth": 1.0, "max_level": 1,
+      "note": "a waiting passenger's arrow shows which way they are going" },
     { "id": "hall_buttons",  "name": "Hall Call Buttons", "base": 1200.0, "growth": 1.0, "max_level": 1,
       "note": "the controller learns which floors are waiting" },
     { "id": "car_buttons",   "name": "Car Call Buttons",  "base": 2000.0, "growth": 1.0, "max_level": 1,

@@ -31,24 +31,31 @@ and `hall_buttons`:
 
 | id | cost |
 | --- | --- |
+| **`call_direction`** | **$50, one-shot** |
 | `row` | $200 base, 1.45^n |
-| **`call_direction`** | **$400, one-shot** |
+| `auto` | $200 base, 2.60^n |
 | `hall_buttons` | $1,200 |
 | `car_buttons` | $2,000 |
 | `load_sensor` | $4,500 |
 | `lobby_parking` | $6,000 |
 | `spring` | $9,000 |
 
-$400 is deliberately the cheapest one-shot on the ladder. Unlike every other
-upgrade, this one **starts by taking something away** — the arrow is visible in
-the shipped game today, so this makes the default strictly less informative than
-it is now. Pricing it early means the player buys the arrow back within the first
-few minutes and reads it as a first information purchase rather than a
-punishment, and it teaches the one-shot hardware family before the expensive
-members appear.
+$50 makes it the cheapest purchase in the game. Unlike every other upgrade, this
+one **starts by taking something away** — the arrow is visible in the shipped
+game today, so this makes the default strictly less informative than it is now.
+The price has to buy it back almost immediately, or the game simply ships a
+downgrade.
+
+**This was $400, and $400 was wrong.** The starting building earns ~$12.22/min
+(1 shops + 5 apartments, 12-minute day), so $400 is **32.7 minutes** — you would
+buy a floor and an Auto-Dispatch licence before it, and play half an hour with a
+deliberately degraded display. That is the opposite of the intent above. $50 is
+**~4 minutes**, which is what "buys it back almost immediately" actually costs at
+this income. The original figure was set by eye against the ladder rather than
+against the income curve, and the arithmetic was never checked.
 
 ```json
-{ "id": "call_direction", "name": "Hall Call Direction", "base": 400.0,
+{ "id": "call_direction", "name": "Hall Call Direction", "base": 50.0,
   "growth": 1.0, "max_level": 1,
   "note": "a waiting passenger's arrow shows which way they are going" }
 ```
