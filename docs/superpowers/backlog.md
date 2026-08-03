@@ -28,6 +28,29 @@ different dispatch problem.
 **Open question.** Does freight expire like a person's patience? A pallet has no
 patience, but a delivery window might.
 
+**Sizes, dwell and the premium (added 2026-08-03).** Three refinements that
+sharpen this from "bigger passenger" into its own mechanic:
+
+- **Discrete sizes, not a continuum.** A load takes **2 or 4 slots** against the
+  base capacity of 4 (`Upgrades.CAPACITY_BASE`). At 4 slots one load *is* the
+  whole starting car, which is the interesting case: the first freight job
+  forces a dedicated trip, and `capacity` stops being an abstract number.
+- **Unloading takes time.** This is the part with real teeth. Dwell is a fixed
+  constant today — `ElevatorCar.door_ticks` (20) is the WHOLE stop regardless of
+  how many people get on or off, and `deliver()` empties the car instantly. Make
+  freight dwell longer than a person and **dwell becomes load-dependent for the
+  first time**, which turns every stop into a cost you can reason about. Note
+  this cuts against `doors` (Faster Doors): that upgrade currently buys down a
+  constant, and would start buying down something variable.
+- **It pays more.** The premium is what makes a slow, bulky load worth taking
+  instead of four fares. That trade — one big slow payment against four small
+  fast ones — is the actual decision the mechanic exists to create, and it only
+  works if the numbers are set against the delivery *rate*, not the fare.
+
+**Sequencing.** The dwell change is the risky one: it touches the tick order's
+move/doors phase, which is player-visible and pinned by tests. Sizes and the
+premium can land first and are testable on their own.
+
 ---
 
 ## Back / service entrance
@@ -353,6 +376,80 @@ the player can plan, and it is already anticipated in `passenger_sprite.gd`.
 **Note.** It also changes the *hall* rendering, not just the policy: chips would
 need to show a floor rather than an arrow, which is a width change the strip has
 to absorb.
+
+---
+
+## Emergency personnel commandeer a car
+
+**Idea.** Firefighters, paramedics and the like carry elevator keys. They take
+control of a car and use it how *they* want — the player does not get a say, and
+does not get it back until they are done.
+
+**Why it fits.** Everything that currently commands a car is either the player
+(`GameState.dispatch`) or a policy the player bought (`AutoDispatch`). This is
+the first actor that is **neither** — the building acting on the player rather
+than for them. That is a genuinely new pressure, and it costs nothing in new
+systems: a commandeered car is a car temporarily removed from the pool, which
+the dispatch problem already knows how to be starved by.
+
+**What it touches.**
+- `AutoDispatch` only ever commands an IDLE car, and a manual dispatch already
+  wins over the sweep — so a third, *higher* priority already has a shape to
+  slot into. The docstring's rule that "a manual dispatch always wins" becomes
+  "a key wins over everything".
+- `ElevatorCar` needs a state (or an owner) meaning "not yours", so the board
+  cannot dispatch it and the policy will not pick it up.
+- The view has to *say so*. A car that ignores taps with no explanation reads as
+  a bug — this is the same trap the ghost-floor work hit.
+
+**Open questions.** Does a commandeered car keep serving its riders, or dump
+them? Is it triggered by an event (a fire on a floor), by tenant kind (a
+hospital or clinic floor), or randomly? Random is cheapest and the least
+interesting; tied to a tenant kind it becomes a reason to think about *who* you
+lease to, which connects it to Spec A.
+
+**The risk to weigh:** taking control away from the player is only fun if it is
+legible and bounded. An unexplained, unbounded seizure is indistinguishable from
+the game being broken.
+
+---
+
+## Lower the fare, raise the ridership
+
+**Idea.** Cut the money per rider and increase how many riders there are, so the
+same income arrives as many small payments instead of few large ones.
+
+**Why it matters.** It changes what the player is optimising. At a base fare of
+$3.00 and roughly 0.64 trips/min per apartment floor, individual trips are
+*visible* — you can watch a single fare arrive. Push the fare down and the count
+up and the unit of play stops being the trip and becomes **throughput**, which
+is what makes capacity, dwell time and dispatch quality matter. A car that
+carries 4 instead of 3 is currently a rounding error; under high ridership it is
+the whole game.
+
+**What it touches.**
+- `base_fare` and the `rate` arrays in `data/tenants.json` — both, in opposite
+  directions, holding income roughly constant.
+- The saturation guard: `TrafficSpawner` runs **one Bernoulli trial per tick**
+  and emits at most one passenger, so the summed rate must stay under
+  `SimClock.TICKS_PER_SIM_MINUTE` (600). `TenantCatalog.largest_bucket()` and its
+  test pin this. Today's headroom is large — `MAX_ROWS (40) x 1.2` = 48 — but
+  this idea spends exactly that headroom, and a rate rise past ~15x would start
+  clipping silently at p = 1.
+- Queue rendering: `FloorRow.MAX_INDIVIDUALS` is 12 and `ChipGrid` draws one
+  square each. Many more waiting people means the chip grid stops being able to
+  show them, and the count beside them carries more of the load.
+
+**Why it is worth doing (2026-08-03).** It is one of the two honest answers to
+the live balance problem: floors cost `1.45^n` while each adds a flat
+$1.93/min, so payback runs 135 min at floor 7 and 697 min at floor 12 and the
+building stalls there. More riders per floor makes per-floor income *scale* with
+the upgrades you buy instead of being a constant, which attacks the stall from
+the income side rather than by flattening the cost curve.
+
+**Open question.** How far? A 10x rider count at a 10x lower fare is a different
+game, not a tuned one — the arithmetic holds but the feel does not survive it.
+This wants a target trips/minute chosen first, then the fare derived from it.
 
 ---
 
