@@ -26,21 +26,55 @@ var building: Building
 var spawner: TrafficSpawner
 var economy: Economy
 var tenancy: Tenancy
+var fitout: Fitout
+var catalog: TenantCatalog
 var upgrades: Upgrades
 var metrics: Metrics
 var auto: AutoDispatch
 
-func _init(rows: int, shafts: int, p_seed: int) -> void:
+## The starting assignment: six kind ids, one per row from the lobby up. NOT
+## the catalog's length -- adding a seventh KIND must not tenant a seventh ROW.
+## Both the tenanted-row count and those rows' kinds derive from this one list,
+## so they cannot drift.
+const DEFAULT_ROSTER: Array[String] = ["shops", "apartments", "apartments",
+	"apartments", "apartments", "apartments"]
+
+var _valid: bool = true
+
+func _init(rows: int, shafts: int, p_seed: int,
+		catalog_path := "res://data/tenants.json") -> void:
 	clock = SimClock.new()
 	building = Building.new(rows, shafts)
 	spawner = TrafficSpawner.new(p_seed)
 	spawner.load_curve("res://data/traffic_walkup.json")
 	economy = Economy.new()
-	tenancy = Tenancy.new(rows, rows)   # full roster prefix -- Task 9 narrows it
+
+	# Before Tenancy, which needs the roster length. Nothing constructed above
+	# needs the catalog, so this slots in with no cycle.
+	catalog = TenantCatalog.new()
+	if not catalog.load_from(catalog_path):
+		# No push_error here: GUT counts it as a test error, which turns the
+		# malformed-catalog refusal test red for the wrong reason. is_valid() is
+		# the contract, and the boot path (Task 18) draws the path on an error
+		# screen instead of relying on a console line a player cannot see.
+		_valid = false
+
+	var prefix := mini(building.row_count, DEFAULT_ROSTER.size())
+	tenancy = Tenancy.new(building.row_count, prefix)
+	fitout = Fitout.new(building.row_count)
+	for row in range(prefix):
+		tenancy.set_kind(row, DEFAULT_ROSTER[row])
+
 	upgrades = Upgrades.new()
 	upgrades.load_defs("res://data/upgrades.json")
 	metrics = Metrics.new()
 	auto = AutoDispatch.new()
+
+## RefCounted cannot fail in _init, so construction records the failure and the
+## boot path checks it. SaveCodec.decode returns null rather than handing back a
+## poisoned state.
+func is_valid() -> bool:
+	return _valid
 
 ## Buying a row extends the board, so tenancy must grow with it.
 ##
@@ -50,10 +84,19 @@ func _init(rows: int, shafts: int, p_seed: int) -> void:
 func buy(id: String) -> bool:
 	var ok := upgrades.purchase(id, economy, building)
 	if ok:
-		while tenancy.rows() < building.row_count:
-			tenancy.add_row()
+		_grow_per_floor_containers()
 		_resync_policies()
 	return ok
+
+## ONE loop for every per-floor container. Two identical loops is how a
+## container gets forgotten; the historic desync this replaces is pinned by
+## test_buying_a_row_grows_every_per_floor_container, and Spec B adds a third
+## container to this function rather than a third loop beside it.
+func _grow_per_floor_containers() -> void:
+	while tenancy.rows() < building.row_count:
+		tenancy.add_row()
+	while fitout.rows() < building.row_count:
+		fitout.add_row()
 
 ## Re-lease a vacant floor. Until now nothing in the game charged for this:
 ## Tenancy.relet() restores a tenant without touching Economy and

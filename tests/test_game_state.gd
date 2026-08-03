@@ -171,15 +171,41 @@ func test_expiry_lowers_the_generating_rows_satisfaction() -> void:
 	gs.tick(2)
 	assert_lt(gs.tenancy.satisfaction_at(3), before)
 
-func test_buying_a_row_extends_tenancy_too() -> void:
+func test_buying_a_row_grows_every_per_floor_container() -> void:
 	gs.economy.accrue(1e9)
 	assert_true(gs.buy("row"))
 	assert_eq(gs.building.row_count, 7)
+	assert_eq(gs.tenancy.rows(), 7)
+	assert_eq(gs.fitout.rows(), 7, "one loop grows every container")
 	assert_true(gs.tenancy.is_vacant(6), "a purchased floor is leased, not granted")
+	assert_eq(gs.tenancy.kind_at(6), "")
+	assert_eq(gs.fitout.tier_at(6), 1)
 
 func test_buying_without_cash_fails() -> void:
 	assert_false(gs.buy("shaft"))
 	assert_eq(gs.building.cars.size(), 1)
+
+func test_a_tall_new_building_tenants_only_the_roster() -> void:
+	# The state every --board= session and every pre-restore decode starts
+	# from. Neither the buy("row") test nor the save round-trips cover it:
+	# both pass whether or not _init applies the roster limit.
+	var tall := GameState.new(12, 1, 4242)
+	for row in range(6):
+		assert_false(tall.tenancy.is_vacant(row))
+		assert_ne(tall.tenancy.kind_at(row), "")
+	for row in range(6, 12):
+		assert_true(tall.tenancy.is_vacant(row), "row %d" % row)
+		assert_eq(tall.tenancy.kind_at(row), "")
+		assert_eq(tall.fitout.tier_at(row), 1)
+
+func test_the_starting_roster_is_shops_over_apartments() -> void:
+	assert_eq(gs.tenancy.kind_at(0), "shops")
+	for row in range(1, 6):
+		assert_eq(gs.tenancy.kind_at(row), "apartments")
+
+func test_a_malformed_catalog_makes_the_state_invalid() -> void:
+	var bad := GameState.new(6, 1, 1, "res://data/does_not_exist.json")
+	assert_false(bad.is_valid())
 
 ## Drives a row out of its lease and returns once it is vacant.
 func vacate(state: GameState, row: int) -> void:
