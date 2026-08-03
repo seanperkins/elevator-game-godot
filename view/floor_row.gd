@@ -79,7 +79,12 @@ func _ready() -> void:
 	add_child(_bar_fill)
 
 	_label = Label.new()
-	_label.add_theme_font_size_override("font_size", 17)
+	# Capped by the gutter budget, not by taste: the UI spec's coordinate table
+	# gives the floor number x 38-64, i.e. 26 units, and the people strip starts
+	# at SPRITE_X. Two digits (floors run to Building.MAX_ROWS) at 22 come to
+	# ~24 units. Going further needs the gutter widened first -- an earlier
+	# draft overlapped this label by ~12 units and it was a real bug.
+	_label.add_theme_font_size_override("font_size", 22)
 	_label.add_theme_color_override("font_color", Color("8b98aa"))
 	_label.position = Vector2(LABEL_X, 3)
 	add_child(_label)

@@ -22,7 +22,10 @@ const RED := Color("ef4444")
 ## cannot drift apart.
 const WIDTH := ChipGrid.SIZE
 const HEIGHT := ChipGrid.SIZE
-const FONT := 20
+## Bounded by the chip: ChipGrid.SIZE is 30, and a car seat holds TWO digits
+## (ShaftColumn.SEAT_FONT is this constant), so this is the largest that clears
+## both without clipping.
+const FONT := 24
 
 var _label: Label
 
