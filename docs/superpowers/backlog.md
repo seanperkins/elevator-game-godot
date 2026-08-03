@@ -362,3 +362,74 @@ to absorb.
 design spec is the least settled part of it, and a wrong guess there is a
 balance decision that is hard to walk back. A save that loses nothing is worth
 having before one that invents something.
+
+---
+
+## From implementing the tenant/class plan (2026-08-02)
+
+Ideas that surfaced while building, kept out of the plan because they are
+follow-on work, not this work.
+
+### Class as an anticipatory investment, and a vacant-floor signal
+
+`Fitout` persists through tenant change, so a class-3 floor stays class 3 while
+vacant. That makes a class upgrade something you can buy *ahead of* a tenant —
+upgrade the floor, then wait/attract who it deserves. The FloorPanel already
+filters the lease picker by the floor's class. Worth deciding whether "upgrade
+a vacant floor" is a read-as-strategy or an accidental no-op, and whether a
+vacant premium floor should draw better tenants on its own (a softer, place-based
+variant of the reputation gate — the building's *hardware*, not its service,
+advertises).
+
+### Lease cost does not know about the floor's class
+
+`lease_cost` is a flat per-kind number, so putting a tier-1 apartment on a
+class-3 floor costs exactly what it costs on a class-1 floor. A plausible second
+lever: scale the lease by floor class (the building is nicer, letting costs
+more). It gives class a role *while the floor is vacant*, not just as a gate,
+and it makes the "upgrade then lease" order a real economy. Mirror question:
+should upgrading a tenanted floor retroactively raise that tenant's lease? (I
+lean no — a signed lease at the old price — which is also what the current
+fare-only-multiplier behaviour implies.)
+
+### The lobby tenant's direction is invisible
+
+Floor 0 carries a tenant (Shops in the roster), but because the lobby is a
+pinch-point endpoint, its inbound/outbound weights collapse to interfloor —
+the right *handling*, but it means "a tenant at the door" cannot express a
+directional pattern. Not a bug (verified by
+`test_a_tenanted_lobby_generates_only_interfloor_trips`), but if a floor-0 kind
+is ever meant to have a direction (e.g. a doorman-screening tenant), this is the
+seam.
+
+### Plan-correctness rulings (do not re-fix)
+
+These are decision records, not ideas — recorded so a later reviewer does not
+"discover" them anew and spend a cycle asking.
+
+- **Task 3 delivery test** as written never dispatched the car back to the
+  lobby, so no delivery ever happened; and a full minute is exactly long enough
+  for 30 manual expiries' 1200-tick move-out countdown to vacate the floor,
+  which makes `note_delivery` (a no-op on a vacant row) suppress the asserted
+  credit. Fixed with short (200-tick) windows plus an explicit return dispatch.
+- **Task 2 factory** kept its defaulted params (the plan's snippet made them
+  required, which would break the file's short calls); it passes `source =
+  origin` as the fallback. The *constructor* stays required — only the test
+  factory defaults.
+- **Task 7** the plan anticipated the `buy` test failing as "Task 9's" but also
+  demanded a green commit. I inverted that one assertion early (a purchased row
+  is vacant) so every commit stayed green; Task 9 then replaced the whole test.
+- **Task 9** `GameState._init` must NOT `push_error` on a bad catalog: GUT
+  counts `push_error` as a test error, turning the malformed-catalog refusal
+  test red for the wrong reason. `is_valid()` is the contract; the boot path
+  (Task 18) draws the path on a screen.
+- **Task 10** two rulings. (a) The source-driven `rng` had to be seeded from
+  `p_seed` in `TrafficSpawner._init`, or determinism (pinned in
+  `test_the_sim_is_deterministic_for_a_given_seed`) silently broke; the now-dead
+  `_rng` was deleted. (b) The re-derived opening-traffic test must count off a
+  signal into an Array, not `var spawned := 0`: GDScript lambdas capture ints by
+  value (verified empirically), so a captured counter reads back zero. The
+  pre-existing test already documented this.
+- **Plan test counts** were consistently +1 off (arithmetic): actuals were
+  388/392/396/399/402/405/408 where the plan printed 389+1. Cosmetic; the suite
+  is green at whatever it is.
