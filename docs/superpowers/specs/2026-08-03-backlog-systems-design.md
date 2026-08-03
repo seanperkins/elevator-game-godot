@@ -319,3 +319,172 @@ fare derived from it — not the other way round.
 **The one sequencing rule that matters:** S4's signed-coordinate change is
 cheaper at six floors than at forty, and S5 makes the building taller. If both
 are wanted, the coordinate work comes first.
+
+---
+
+# Decisions (2026-08-03)
+
+Every open question above, answered. Three answers changed the design rather
+than just picking from it; those are marked **[revises]**.
+
+## Terminology, first — because it was overloaded  **[revises]**
+
+`Tenancy` uses **tenant** to mean *the business occupying a whole floor*. But an
+apartment floor also has **residents** — individual people who move in and out
+of it. Those are different things at different scales, and the move-in/move-out
+entry silently meant both.
+
+From here:
+
+| Word | Means | Modelled by |
+| --- | --- | --- |
+| **tenant** | the floor's occupant — a kind, one per floor | `Tenancy` + `TenantKind` |
+| **resident** | an individual living or working on a floor | not modelled; a source of events |
+| **passenger** | anyone in a car or queue | `Passenger` |
+
+Nothing in the code models a resident today, and probably nothing needs to. A
+resident's move is an *event on a floor*, not an entity.
+
+## S7 — Floor events **[revises: new system]**
+
+> "I want to have some floors that need to confiscate the lift at times for
+> events. This is just the first one I thought of."
+
+This generalises two things I had filed separately. A resident moving out and a
+hospital emergency are the same mechanic: **a floor's kind occasionally
+generates an event that takes a car for a while.** Move-in/move-out is one
+instance, not a system of its own.
+
+| Floor kind | Event | Shape |
+| --- | --- | --- |
+| Apartments | a resident moves in or out | several trips, bulky, no urgency |
+| Hospital | emergency | one trip, urgent, priority |
+| Hotel | group check-in / luggage run | several trips, bulky |
+| Restaurant | a delivery | one trip, bulky, timed |
+| Office | a fit-out | long, one-way |
+
+**One law for taking a car**, settled by the S6 answers and now shared:
+`key > manual > policy`, and **all three take only an IDLE car**. `AutoDispatch`
+already refuses to command a moving or boarding car — "a car in transit is
+committed to the trip it was given, and taking either would read as sabotage" —
+so this extends an existing rule rather than adding a second one. Riders always
+reach their floor first.
+
+Because events are driven by the floor's kind, **seizure becomes a cost you
+accepted when you leased**, not weather. That connects S7 to S3 and to the kind
+roster, and it gives the hospital a real downside worth pricing.
+
+**Consequence for churn:** losing a tenant no longer costs only a re-lease fee —
+it costs a car out of service while the move happens. Churn becomes an outage.
+
+## The answers
+
+### S1 — Loads
+1. **Capacity is an integer budget.** `board()` admits anything where
+   `sum(slots) <= capacity`. No adjacency, no packing pass; `ChipGrid` renders a
+   wider chip and `take_boardable(floor, limit)` already has the seam.
+2. **Load dwell is additive, and gets its own upgrade.** **[revises]** —
+   `dwell = car.door_ticks + load.extra_ticks`. Faster Doors buys down only the
+   base. A *separate* freight-speed upgrade buys down the surcharge, so freight
+   dwell is its own purchasable axis instead of a side effect. It joins the
+   one-shot hardware family the same way `call_direction` did.
+3. **No load is patience-free — they get a long delivery window.** Reuses
+   `patience_ticks`, the existing `_expire()` phase, and keeps
+   `patience_fraction()` meaningful so the chip still colour-ramps. No new tick
+   phase, and no permanently blocked seat.
+
+### S2 — Places
+4. **An entrance is its own object**, `{id, floor, kind}`, so one floor can have
+   both a lobby door and a loading bay. `Passenger` carries an `entrance_id`
+   alongside `origin_floor`.
+5. **A car boards someone only if its shaft serves that entrance kind.**
+   **[revises]** — so a shaft wired only to the service entrance *cannot* pick up
+   lobby passengers, even standing among them. This makes the separate entrance
+   object load-bearing rather than decorative: `answer_call()` gains a filter on
+   the waiting passengers' entrance, not on the floor. A shaft serving both
+   entrances behaves exactly as today.
+
+### S3 — Reputation
+6. **Mean, with the minimum shown in the HUD.** The mean gates leasing; the
+   minimum is displayed so a neglected floor nags without locking the game.
+7. **Ratchet the unlock, live for the display.** Once earned, a kind stays
+   leasable — mirroring `Fitout`, where a purchased class tier never lapses.
+8. **Reputation never evicts.** Reputation gates who *arrives*; satisfaction
+   decides who *stays*. Two numbers, two jobs, and the existing move-out
+   countdown remains the only eviction path.
+
+### S4 — The down axis
+9. **One budget, split.** The floor cap is a total — dig a basement, lose a tower
+   floor. Nearly free now that the purchasable cap (20) is already separate from
+   the structural one (40), and prestige raising the cap then funds both
+   directions at once.
+10. **A shaft spans both axes, and reaching down is a purchase.** One column
+    renders the whole range, so the balance cost — a longer round trip on every
+    sweep — lands as something the player opted into rather than a silent tax.
+11. **Ore is a real load.** Slots 4, long delivery window, no urgency. The mine
+    becomes a permanent freight source, which is exactly the load S1's weigher
+    and S2's service entrance exist to handle.
+
+### S5 — Prestige
+12. **A Structure node bought with Blueprints raises the cap**, not the demolish
+    itself. The base design already defines that branch as "starting rows,
+    starting shafts, era unlocks"; a max-floors node is that branch's job. And
+    because 40 floors is unservable at base mechanicals, the player must buy
+    *both* Structure and Mechanical to actually go taller.
+13. **Run one hard-caps at 10 floors — shipping in the same release as
+    prestige.** A 10-floor building needs exactly one car, so run one teaches
+    floors, tenants and manual dispatch with shafts held back as a second-run
+    reveal. **This must not ship early:** a 1.3 h wall with nothing behind it
+    would be strictly worse than today's 6.5 h one.
+14. **Only structure and mechanicals persist.** Tenant kinds reset, so every run
+    re-earns its roster and S3 stays a live system rather than being exhausted
+    after a few resets.
+
+### S6 — Deviant floors
+15. **The creature floor generates its own hall calls.** It is a `TrafficSource`
+    with a rate whose delivery pays nothing and costs reputation — reusing the
+    spawner, the tenancy slot and the chip rendering unchanged. It also lands the
+    design goal: Answer Calls will carry people there and a sweep stops
+    everywhere, so **automation becomes something you must aim**.
+16. **A seized car finishes its current trip first** (see S7's shared law).
+17. **Seizures are tied to tenant kind**, not random — see S7.
+18. **A deliberate feed costs reputation only.** It bypasses
+    `Economy.note_expiry()` (combo break, stairs penalty) and
+    `Tenancy.note_expiry()` (floor satisfaction), both of which exist to punish
+    *neglect*. "Lost through neglect" and "spent on purpose" stay genuinely
+    different events.
+
+### Balance
+19. **Target 8 trips/min at the starting building, fare ~$0.77** (4x riders,
+    1/4 fare). One car supplies 11.4/min at 6 floors, so the opening is busy but
+    servable, and it leaves ~3x headroom before the Bernoulli ceiling at ~12x.
+    The unit of play moves from the trip to throughput, which is what makes
+    capacity and dwell matter.
+
+### Tenants who will not mix
+20. **Checked live — neighbours can sour after the fact.** **[revises my
+    recommendation]** I argued for lease-time only, on the grounds that a
+    retroactive penalty is a mystery. Overruled, and the requirement that comes
+    with it is explicit: **the board must show, per floor, why satisfaction is
+    falling.** Without that surface this is indistinguishable from a bug in the
+    satisfaction system — the same trap the ghost-floor work hit. That surface is
+    now a prerequisite of this entry, not a nicety.
+
+## What this changes about the order
+
+S7 absorbs move-in/move-out out of S1 and the actor half of S6, and it depends
+only on S1 (loads) plus the kind roster. That makes it cheaper than S6 and
+worth doing earlier:
+
+1. **S5 Prestige** — with the 10-floor first run
+2. **S1 Loads** — including the freight-speed upgrade
+3. **S3 Reputation**
+4. **S7 Floor events** — needs S1; makes churn an outage
+5. **S2 Places**
+6. UI items
+7. **S4 Down axis** — coordinates early regardless
+8. **S6 Deviant floors** — needs S1 and S3
+
+The one prerequisite now on the critical path that was not before: **a per-floor
+"why is this falling?" surface**, required by decision 20 and reusable by S6's
+reputation damage and S7's outages.
