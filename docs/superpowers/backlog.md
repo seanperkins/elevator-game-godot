@@ -453,6 +453,43 @@ This wants a target trips/minute chosen first, then the fare derived from it.
 
 ---
 
+## Show the time of day
+
+**Idea.** Put the hour on screen. Right now traffic swings hard between the
+overnight trough and the 07:00 peak and the player has no way to know which they
+are in — a quiet building looks identical to a broken one.
+
+**It is already modelled; only the display is missing.** `SimClock.sim_minute()
+returns the bucket index and `TenantKind.BUCKETS` is 24, so
+`posmod(sim_minute(), 24)` **is** the hour. `START_MINUTE` is 6, so a session
+opens at 06:00. Nothing new has to be simulated or saved.
+
+**It moves at a readable speed now.** Post-pacing a bucket is 30 real seconds
+(`TICKS_PER_SIM_MINUTE` = 600), so the day is 12 real minutes and the clock
+advances about two hours per real minute — fast enough to feel alive, slow
+enough to read. Before the pacing change it was half that and would have felt
+static.
+
+**Where it goes.** `DaySparkline` already draws a kind's whole day as 24 bars,
+one per hour. A **playhead on that sparkline** is the strongest version of this:
+it answers "what time is it" and "what is about to happen to my traffic" in one
+mark, and it costs one more `_draw()` call on a widget that already exists and
+already has bar_heights() as a tested seam. A bare `07:00` label in the
+management header is the cheap version and says much less.
+
+**The naming trap.** `sim_minute()` returns an *hour* bucket, not a minute. Any
+UI that surfaces it as "minute" will be wrong, and the method name will actively
+mislead whoever writes it. Either rename it on the way in, or at minimum do not
+propagate the word outward. The same confusion already cost real time when
+`TICKS_PER_MINUTE` turned out to be doing two jobs (see the traffic-pacing spec).
+
+**Open question.** Does the clock show anywhere on the board, or only in
+management? The board is 393pt wide and every unit of the gutter is already
+spoken for — the floor-number label had to be capped at 22pt for exactly this
+reason — so "somewhere on the board" is a real layout decision, not a free one.
+
+---
+
 ## Not in this list, and deliberately
 
 **Offline earnings.** Saving is built; accruing while closed is not. §9.1 of the
