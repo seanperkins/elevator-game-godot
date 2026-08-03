@@ -48,12 +48,12 @@ func test_clamped_time_does_not_spiral_into_the_next_frame() -> void:
 func test_the_day_starts_at_the_morning_rush() -> void:
 	# The traffic curve's first six buckets are the overnight trough, 0.4 to 0.8
 	# spawns per simulated minute against a 45-second patience. A day starting at
-	# bucket 0 shows a new player an empty building for six real minutes, which is
-	# the first thing anyone sees.
+	# bucket 0 shows a new player an empty building for three real minutes, which
+	# is the first thing anyone sees.
 	assert_eq(clock.sim_minute(), SimClock.START_MINUTE)
 	assert_gt(SimClock.START_MINUTE, 0, "midnight is not where a session opens")
 
-func test_sim_minute_advances_every_1200_ticks() -> void:
+func test_sim_minute_advances_every_bucket() -> void:
 	var start := SimClock.START_MINUTE
 	assert_eq(clock.sim_minute(), start)
 	clock.note_ticks(SimClock.TICKS_PER_SIM_MINUTE - 1)

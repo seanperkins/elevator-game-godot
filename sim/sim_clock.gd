@@ -13,7 +13,7 @@ const TICKS_PER_REAL_MINUTE := 1200   # 60 s / 0.05 s
 ## from the above because the spawner's Bernoulli denominator and the bucket
 ## length must move TOGETHER: changing either alone leaves trips-per-real-minute
 ## exactly unchanged, since the day and the day's traffic scale as one.
-const TICKS_PER_SIM_MINUTE := 1200
+const TICKS_PER_SIM_MINUTE := 600     # one traffic bucket = 30 real seconds
 const MAX_TICKS_PER_FRAME := 8
 
 var ticks_executed: int = 0
@@ -41,9 +41,10 @@ func note_ticks(n: int) -> void:
 ##
 ## The day opens at the MORNING RUSH, not midnight. The curve's first six
 ## buckets are the overnight trough -- 0.4, 0.3, 0.2, 0.2, 0.3, 0.8 spawns per
-## simulated minute -- and a simulated minute is sixty real seconds, so a day
-## starting at bucket 0 showed a new player an empty building for about six real
-## minutes. A 900-tick patience is 45 seconds, so even the rare night passenger
+## simulated minute -- and a simulated minute is thirty real seconds, so a day
+## starting at bucket 0 showed a new player an empty building for about three
+## real minutes. A 900-tick patience is 45 seconds, so even the rare night
+## passenger
 ## expired before anyone looked. That was the first thing anyone saw of the game.
 ##
 ## This is an offset on the READING, not on ticks_executed: the latter means

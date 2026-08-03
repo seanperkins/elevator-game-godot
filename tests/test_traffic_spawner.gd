@@ -85,6 +85,31 @@ func test_a_trip_must_go_somewhere() -> void:
 		for p in s.spawn_from_sources(12, sources, true):
 			assert_ne(p.origin_row, p.destination_row)
 
+func test_the_spawn_threshold_is_one_bucket_not_one_real_minute() -> void:
+	# Two apartment sources at bucket 6 sum to 2 x 0.5 = 1.0 trips/bucket, so
+	# the per-tick threshold is 1.0 / TICKS_PER_SIM_MINUTE. At 600 that is
+	# 0.001667; at a real minute's 1200 it would be 0.000833. A draw of 0.001
+	# therefore spawns under the correct denominator and does NOT under the
+	# stale one -- which is exactly the mistake this pins. Halving the bucket
+	# length while leaving the spawner dividing by a real minute changes
+	# nothing at all: the day and the day's traffic scale together.
+	var cat := TenantCatalog.new()
+	cat.load_from("res://data/tenants.json")
+	var apt := cat.kind("apartments")
+	assert_eq(apt.rate_at(6), 0.5, "the fixture this test's arithmetic rests on")
+
+	var sources := _sources(2, apt)
+
+	var below := TrafficSpawner.new(1)
+	below.rng = CountingRng.new(0.001)
+	assert_eq(below.spawn_from_sources(6, sources, true).size(), 1,
+		"0.001 is under 1.0/600 and must spawn")
+
+	var above := TrafficSpawner.new(1)
+	above.rng = CountingRng.new(0.002)
+	assert_eq(above.spawn_from_sources(6, sources, true).size(), 0,
+		"0.002 is over 1.0/600 and must not")
+
 func test_rush_hour_generates_more_than_the_overnight_trough() -> void:
 	# Was :22, which used the deleted rate_at_minute. The property is worth
 	# keeping; the symbol is not.

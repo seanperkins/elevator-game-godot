@@ -80,9 +80,10 @@ func test_passengers_only_board_a_car_at_their_own_row() -> void:
 func test_spawned_passengers_join_the_waiting_queues() -> void:
 	# Counted off the signal, not off total_waiting(): patience is 900 ticks, so
 	# over a window this long a spawn can arrive and expire without ever showing
-	# up in a queue snapshot. Twenty minutes spans the morning rush (~43.6
+	# up in a queue snapshot. Twenty BUCKETS spans the morning rush (~43.6
 	# expected spawns), so zero is not a plausible seed, unlike the overnight
-	# trough's 1.4.
+	# trough's 1.4. Buckets, not real minutes -- one bucket is thirty seconds,
+	# so this is ten real minutes of ticks.
 	#
 	# The queue is sampled DURING the run rather than at the end. A closing
 	# snapshot only ever worked by accident: twenty minutes from the opening
