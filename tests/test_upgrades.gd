@@ -87,11 +87,19 @@ func test_row_upgrade_adds_a_row() -> void:
 	up.purchase("row", econ, b)
 	assert_eq(b.row_count, 7)
 
-func test_row_purchases_stop_at_the_board_cap() -> void:
+func test_row_purchases_stop_at_the_purchasable_cap() -> void:
+	# The PURCHASABLE ceiling (row.max_level) and the STRUCTURAL one
+	# (Building.MAX_ROWS) are deliberately different numbers -- see the
+	# building-cost-curve spec. A run tops out at 20 floors, while the board can
+	# still hold 40 and the spawner's saturation guard is sized against that 40.
+	# This used to assert the two were equal, which is the assumption the spec
+	# changes; what still has to hold is that purchases never exceed the board.
 	econ.accrue(1e15)
 	for i in range(60):
 		up.purchase("row", econ, b)
-	assert_eq(b.row_count, Building.MAX_ROWS, "the board never scrolls")
+	assert_true(up.is_maxed("row"), "purchases stop at row.max_level")
+	assert_eq(b.row_count, 20, "which tops the building at 20 floors")
+	assert_lt(b.row_count, Building.MAX_ROWS, "and never past the board cap")
 
 func test_a_maxed_upgrade_cannot_be_bought() -> void:
 	econ.accrue(1e15)
