@@ -62,7 +62,7 @@ func spawn_from_sources(minute: int, sources: Array[TrafficSource],
 		total += s.rate_at(minute)
 	if total <= 0.0:
 		return out
-	if rng.randf() >= total / float(SimClock.TICKS_PER_MINUTE):
+	if rng.randf() >= total / float(SimClock.TICKS_PER_SIM_MINUTE):
 		return out
 
 	var pick := rng.randf() * total

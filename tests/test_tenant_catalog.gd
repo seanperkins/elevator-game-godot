@@ -41,7 +41,7 @@ func test_the_total_rate_cannot_saturate_the_bernoulli_trial() -> void:
 	# worst case, exhaustive by construction -- "every kind combination" is
 	# 6^40 and is not a writable test.
 	assert_lt(float(Building.MAX_ROWS) * cat.largest_bucket(),
-		float(SimClock.TICKS_PER_MINUTE))
+		float(SimClock.TICKS_PER_SIM_MINUTE))
 
 func _catalog_from(data: Dictionary) -> TenantCatalog:
 	var c := TenantCatalog.new()

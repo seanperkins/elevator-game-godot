@@ -151,8 +151,9 @@ func max_tier() -> int:
 	return _max_tier
 
 ## The largest single rate bucket across every kind. MAX_ROWS x this is the
-## worst-case summed rate, which must stay under TICKS_PER_MINUTE or the
-## Bernoulli trial clips silently at p = 1.
+## worst-case summed rate, which must stay under TICKS_PER_SIM_MINUTE -- the
+## spawner's denominator, not a real minute -- or the Bernoulli trial clips
+## silently at p = 1.
 func largest_bucket() -> float:
 	var top := 0.0
 	for k in _kinds:

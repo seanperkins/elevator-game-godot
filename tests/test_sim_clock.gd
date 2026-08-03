@@ -56,14 +56,14 @@ func test_the_day_starts_at_the_morning_rush() -> void:
 func test_sim_minute_advances_every_1200_ticks() -> void:
 	var start := SimClock.START_MINUTE
 	assert_eq(clock.sim_minute(), start)
-	clock.note_ticks(1199)
-	assert_eq(clock.sim_minute(), start, "1199 ticks is still the opening minute")
+	clock.note_ticks(SimClock.TICKS_PER_SIM_MINUTE - 1)
+	assert_eq(clock.sim_minute(), start, "one tick short is still the opening minute")
 	clock.note_ticks(1)
-	assert_eq(clock.sim_minute(), start + 1, "1200 ticks is one minute on")
+	assert_eq(clock.sim_minute(), start + 1, "one bucket of ticks is one minute on")
 
 func test_sim_minute_uses_integer_arithmetic() -> void:
 	# Indexing by a float accumulator lands 1.27e-12 below 60.0 after 1200
 	# additions of 0.05, so a >= 60.0 test fires one tick late.
-	clock.note_ticks(1200 * 137)
+	clock.note_ticks(SimClock.TICKS_PER_SIM_MINUTE * 137)
 	assert_eq(clock.sim_minute(), SimClock.START_MINUTE + 137,
 		"exact at a high minute count")

@@ -93,7 +93,7 @@ func test_spawned_passengers_join_the_waiting_queues() -> void:
 	var spawned := []
 	gs.passenger_spawned.connect(func(p): spawned.append(p))
 	var queued := []
-	for i in range(SimClock.TICKS_PER_MINUTE * 20):
+	for i in range(SimClock.TICKS_PER_SIM_MINUTE * 20):
 		gs.tick(1)
 		if gs.building.total_waiting() > 0:
 			queued.append(i)
@@ -117,7 +117,7 @@ func test_an_idle_building_earns_nothing() -> void:
 	# The point of removing rent: no money for doing nothing. Income has to be
 	# bought, with automation, rather than arriving on a timer.
 	var before := gs.economy.cash
-	gs.tick(SimClock.TICKS_PER_MINUTE * 3)
+	gs.tick(SimClock.TICKS_PER_REAL_MINUTE * 3)
 	assert_almost_eq(gs.economy.cash, before, 1e-9,
 		"nobody was carried, so nobody paid")
 
@@ -315,7 +315,7 @@ func test_the_metrics_window_advances_with_the_sim() -> void:
 	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0, 3))   # off the car's floor
 	gs.tick(2)
 	assert_eq(gs.metrics.expiries(), 1)
-	gs.tick(SimClock.TICKS_PER_MINUTE + BUCKET_SLACK)
+	gs.tick(SimClock.TICKS_PER_REAL_MINUTE + BUCKET_SLACK)
 	assert_eq(gs.metrics.expiries(), 0, "it left the window")
 
 func test_upgrading_a_tenanted_floor_changes_its_fare_on_the_next_spawn() -> void:
@@ -441,7 +441,7 @@ func test_the_opening_minutes_carry_real_traffic() -> void:
 	# captured counter increments a copy and reads back zero.
 	var spawned := []
 	gs.passenger_spawned.connect(func(p): spawned.append(p))
-	gs.tick(SimClock.TICKS_PER_MINUTE * 3)
+	gs.tick(SimClock.TICKS_PER_SIM_MINUTE * 3)
 	assert_gt(spawned.size(), 4, "the opening is a rush, not a trickle")
 
 func test_the_opening_rate_is_a_rush_rate() -> void:

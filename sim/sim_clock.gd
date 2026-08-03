@@ -6,7 +6,14 @@ extends RefCounted
 ## so frames are accumulated instead.
 
 const TICK_SECONDS := 0.05
-const TICKS_PER_MINUTE := 1200        # 60 s / 0.05 s
+## Elapsed real time. sim/metrics.gd's window is the same length by its own
+## construction, and tests use this to advance "a minute".
+const TICKS_PER_REAL_MINUTE := 1200   # 60 s / 0.05 s
+## One traffic bucket -- the unit data/tenants.json quotes its rates in. Split
+## from the above because the spawner's Bernoulli denominator and the bucket
+## length must move TOGETHER: changing either alone leaves trips-per-real-minute
+## exactly unchanged, since the day and the day's traffic scale as one.
+const TICKS_PER_SIM_MINUTE := 1200
 const MAX_TICKS_PER_FRAME := 8
 
 var ticks_executed: int = 0
@@ -48,4 +55,4 @@ func note_ticks(n: int) -> void:
 const START_MINUTE := 6
 
 func sim_minute() -> int:
-	return START_MINUTE + ticks_executed / TICKS_PER_MINUTE
+	return START_MINUTE + ticks_executed / TICKS_PER_SIM_MINUTE
