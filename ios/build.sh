@@ -10,9 +10,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DEVICE=$(xcrun devicectl list devices 2>/dev/null \
-  | awk '/iPhone/ {print $(NF-3); exit}')
-[ -z "$DEVICE" ] && { echo "no paired iPhone found"; exit 1; }
+# devicectl's table columns shift with the model name's width, so read the JSON
+# and select on hardware type -- grepping the rendered table matches any device
+# merely *named* "iPhone" and lands on the wrong column.
+DEVICE="${IOS_DEVICE:-}"
+if [ -z "$DEVICE" ]; then
+  JSON=$(mktemp -t devicectl)
+  trap 'rm -f "$JSON"' EXIT
+  xcrun devicectl list devices --json-output "$JSON" >/dev/null
+  DEVICE=$(jq -r 'first(.result.devices[]
+    | select(.hardwareProperties.deviceType == "iPhone")
+    | select(.connectionProperties.pairingState == "paired")
+    | .identifier) // empty' "$JSON")
+fi
+[ -z "$DEVICE" ] && { echo "no paired iPhone found (set IOS_DEVICE=<udid> to override)"; exit 1; }
 
 rm -rf build/ios && mkdir -p build/ios
 godot --headless --export-release "iOS" build/ios/elevator.xcodeproj
