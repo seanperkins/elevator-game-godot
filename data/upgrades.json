@@ -6,7 +6,7 @@
     { "id": "capacity", "name": "Bigger Car",    "base": 120.0,  "growth": 1.90, "max_level": 8 },
     { "id": "shaft",    "name": "New Shaft",     "base": 500.0,  "growth": 3.20, "max_level": 7 },
     { "id": "row",      "name": "Build a Floor", "base": 200.0,  "growth": 1.45, "max_level": 34 },
-    { "id": "auto",     "name": "Auto-Dispatch", "base": 750.0,  "growth": 2.60, "max_level": 8,
+    { "id": "auto",     "name": "Auto-Dispatch", "base": 200.0,  "growth": 2.60, "max_level": 8,
       "note": "one more shaft may run itself" },
 
     { "id": "hall_buttons",  "name": "Hall Call Buttons", "base": 1200.0, "growth": 1.0, "max_level": 1,
