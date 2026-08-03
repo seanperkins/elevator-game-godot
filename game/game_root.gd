@@ -40,6 +40,7 @@ var panel: FloorPanel
 var last_selected_floor: int = -1
 var _cash_label: Label
 var _rate_label: Label
+var _clock_label: Label
 var _view_button: Button
 var _prev_shaft: Button
 var _next_shaft: Button
@@ -91,6 +92,16 @@ func _ready() -> void:
 	_rate_label.add_theme_font_size_override("font_size", 16)
 	_rate_label.position = Vector2(16 + _safe.x, 48 + _safe.y)
 	add_child(_rate_label)
+
+	# Third line of the left column. Cash occupies y 10-44 and the rate 48-68,
+	# so 72-92 is the last free band inside HUD_HEIGHT (96) -- nothing moves to
+	# make room. Dimmed to the pager's grey: the hour is context, not a number
+	# the player acts on.
+	_clock_label = Label.new()
+	_clock_label.add_theme_font_size_override("font_size", 16)
+	_clock_label.add_theme_color_override("font_color", Color("7c8899"))
+	_clock_label.position = Vector2(16 + _safe.x, 72 + _safe.y)
+	add_child(_clock_label)
 
 	_view = BuildingView.new()
 	_view.position = Vector2(_safe.x, HUD_HEIGHT + _safe.y)
@@ -286,3 +297,6 @@ func _physics_process(delta: float) -> void:
 	# this is the number the player is actually paid for.
 	_rate_label.text = "%s riders/min   combo %.2fx" % [
 		Metrics.format_rate(state.metrics.deliveries()), state.economy.combo]
+	# A bucket is 30 real seconds, so this advances about two hours a minute --
+	# enough to read the rush coming rather than just noticing it arrived.
+	_clock_label.text = "%02d:00" % state.clock.hour_of_day()

@@ -67,3 +67,22 @@ func test_sim_minute_uses_integer_arithmetic() -> void:
 	clock.note_ticks(SimClock.TICKS_PER_SIM_MINUTE * 137)
 	assert_eq(clock.sim_minute(), SimClock.START_MINUTE + 137,
 		"exact at a high minute count")
+
+# --- time of day -------------------------------------------------------------
+
+func test_the_clock_opens_at_six_in_the_morning() -> void:
+	assert_eq(clock.hour_of_day(), 6, "START_MINUTE is an hour bucket, not a minute")
+
+func test_the_hour_wraps_past_midnight() -> void:
+	# sim_minute() counts up forever; the hour is that modulo the 24 buckets, so
+	# a long session must roll over rather than index past the curve.
+	clock.note_ticks(SimClock.TICKS_PER_SIM_MINUTE * 18)
+	assert_eq(clock.hour_of_day(), 0, "6 + 18 is midnight, not hour 24")
+	clock.note_ticks(SimClock.TICKS_PER_SIM_MINUTE * 7)
+	assert_eq(clock.hour_of_day(), 7)
+
+func test_the_hour_is_the_bucket_the_traffic_curve_is_indexed_by() -> void:
+	# The whole point of the seam: what the player is shown and what the spawner
+	# reads must be the same number, or the clock lies about the traffic.
+	clock.note_ticks(SimClock.TICKS_PER_SIM_MINUTE * 9)
+	assert_eq(clock.hour_of_day(), posmod(clock.sim_minute(), TenantKind.BUCKETS))

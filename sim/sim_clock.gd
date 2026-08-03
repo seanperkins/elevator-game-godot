@@ -57,3 +57,15 @@ const START_MINUTE := 6
 
 func sim_minute() -> int:
 	return START_MINUTE + ticks_executed / TICKS_PER_SIM_MINUTE
+
+## The hour of the day, 0-23 -- what a clock should show.
+##
+## sim_minute() counts up forever and the traffic curve indexes it with its own
+## posmod, so this is the SAME number the spawner reads, not a parallel one. A
+## clock derived separately would be free to drift from the traffic it claims to
+## describe.
+##
+## Named "hour", not "minute": sim_minute() returns an hour bucket, and a UI that
+## repeated that word would be wrong. This is the seam where the misnomer stops.
+func hour_of_day() -> int:
+	return posmod(sim_minute(), TenantKind.BUCKETS)

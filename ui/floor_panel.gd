@@ -107,6 +107,7 @@ func show_floor(state: GameState, floor_index: int) -> void:
 
 	_bar.value = _sat_fraction(vacant) * 100.0
 	_sparkline.show_kind(kind)
+	_sparkline.set_now(_state.clock.hour_of_day())
 
 	var cost := _state.class_upgrade_cost(floor_index)
 	_upgrade.text = "UPGRADE CLASS  $%s" % NumberFormat.compact(cost)

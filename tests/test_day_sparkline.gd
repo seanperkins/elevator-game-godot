@@ -48,3 +48,27 @@ func test_the_mix_collapses_to_interfloor_when_it_must() -> void:
 	s.show_kind(cat.kind("shops"))
 	var seg := s.segment_shares(12)
 	assert_almost_eq(seg.z, 0.5, 1e-5)
+
+# --- the playhead ------------------------------------------------------------
+
+func test_no_playhead_until_an_hour_is_set() -> void:
+	# A sparkline in the floor panel with no clock bound must not claim it is
+	# midnight -- the absence of a marker and "the marker is at 0" are different
+	# statements, and only one of them is true.
+	var s := _sparkline()
+	s.show_kind(_apartments())
+	assert_eq(s.playhead_bar(), -1, "-1 means no marker, not bucket zero")
+
+func test_the_playhead_marks_the_current_hour() -> void:
+	var s := _sparkline()
+	s.show_kind(_apartments())
+	s.set_now(7)
+	assert_eq(s.playhead_bar(), 7)
+
+func test_the_playhead_wraps_with_the_curve() -> void:
+	# set_now takes whatever SimClock.hour_of_day gives it; a caller passing a
+	# raw sim_minute must land on the same bar the spawner reads.
+	var s := _sparkline()
+	s.show_kind(_apartments())
+	s.set_now(30)
+	assert_eq(s.playhead_bar(), 6, "30 mod 24")
