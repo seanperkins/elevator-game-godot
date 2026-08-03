@@ -27,6 +27,9 @@ var state: GameState
 var _view: BuildingView
 var _management: ManagementView
 var _relet_confirm: ReletConfirm
+## A test-facing seam for hall selection until the FloorPanel lands (Task 17/
+## 18): the hall tap sets this, which is what lets the input tests observe it.
+var last_selected_floor: int = -1
 var _cash_label: Label
 var _rate_label: Label
 var _view_button: Button
@@ -77,7 +80,7 @@ func _ready() -> void:
 	_view.bind(state)
 	_view.floor_purchase_requested.connect(func() -> void: state.buy("row"))
 	_view.shaft_purchase_requested.connect(_on_buy_shaft)
-	_view.relet_requested.connect(_on_relet_requested)
+	_view.hall_floor_selected.connect(_on_hall_floor_selected)
 
 	_management = ManagementView.new()
 	_management.position = Vector2(_safe.x, HUD_HEIGHT + _safe.y)
@@ -156,8 +159,8 @@ func _on_buy_shaft() -> void:
 	if state.buy("shaft"):
 		_view.scroll_to_end()   # show the shaft that was just paid for
 
-func _on_relet_requested(floor_index: int) -> void:
-	_relet_confirm.open_for(floor_index)
+func _on_hall_floor_selected(floor_index: int) -> void:
+	last_selected_floor = floor_index
 
 func _on_toggle_view() -> void:
 	var showing_board := _management.visible

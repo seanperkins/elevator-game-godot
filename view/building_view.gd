@@ -16,7 +16,10 @@ extends Control
 
 signal floor_purchase_requested()
 signal shaft_purchase_requested()
-signal relet_requested(floor_index: int)
+## Re-broadcast of the (recreated) HallColumn's floor_selected. hall_column is
+## rebuilt whenever the board grows, and a fresh instance carries no
+## connections, so the persistent consumer -- GameRoot -- binds to this instead.
+signal hall_floor_selected(floor_index: int)
 
 const SHAFT_AREA_X := FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH   # 240
 ## Three columns across the 480-unit viewport. Five at a 96-unit pitch drew each
@@ -26,7 +29,6 @@ const SHAFT_AREA_X := FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH   # 240
 ## seat is 34, which can. The cost is paging sooner: eight shafts is three pages
 ## rather than two.
 const SHAFT_WIDTH := 160.0
-const RELET_SPAN := SHAFT_AREA_X # the vacant-floor tap reaches the whole gutter+strip
 
 ## Every row, always. 88 units is 48pt at the 0.546 iPhone scale -- the same
 ## touch floor every other control uses -- and it no longer shrinks as the
@@ -42,6 +44,8 @@ var _shaft_offset: float = 0.0
 var _shaft_viewport: Control
 var _ghost_row: Control
 var _ghost_label: Label
+var _ghost_gesture: Gesture
+var hall_column: HallColumn
 var _columns: Array[ShaftColumn] = []
 var _slots: Array[Control] = []
 var _rows: Array[FloorRow] = []
@@ -68,11 +72,14 @@ func rebuild() -> void:
 		_ghost_row.queue_free()
 		_ghost_row = null
 		_ghost_label = null
+	if hall_column != null:
+		hall_column.queue_free()
+		hall_column = null
 	_columns.clear()
 	_slots.clear()
 	_rows.clear()
 	_build_all()
-	# The viewport must stay on top of the rows it was created before.
+	# The viewport must stay on top of everything it was created before.
 	move_child(_shaft_viewport, get_child_count() - 1)
 
 func _build_all() -> void:
@@ -83,6 +90,10 @@ func _build_all() -> void:
 	_coords.scroll_to(previous)
 
 	_build_rows()
+	# The hall column spans the full board height so its local y IS board y.
+	# It is added BEFORE the ghost row, which keeps the ghost's band on top and
+	# so keeps the tap above the roof a floor purchase rather than a selection.
+	_build_hall_column()
 	if _state.building.row_count < Building.MAX_ROWS:
 		_build_ghost_floor()
 
@@ -138,6 +149,22 @@ func _build_rows() -> void:
 		row.set_row(i)
 		_rows.append(row)
 
+## The hall region's one touch target, spanning x in [0, STRIP_RIGHT). It
+## replaces BuildingView._gui_input's relet tap path: TAP selects a floor,
+## DRAG pans. Its local y is board y, so a touch goes straight to y_to_floor
+## with no offset arithmetic -- the property that kept ShaftColumn correct.
+func _build_hall_column() -> void:
+	hall_column = HallColumn.new()
+	hall_column.position = Vector2.ZERO
+	hall_column.size = Vector2(FloorRow.STRIP_RIGHT, size.y)
+	hall_column.setup(_coords)
+	hall_column.pan_requested.connect(pan_board_by)
+	hall_column.floor_selected.connect(_on_hall_floor_selected)
+	add_child(hall_column)
+
+func _on_hall_floor_selected(floor_index: int) -> void:
+	hall_floor_selected.emit(floor_index)
+
 ## A full-height empty row above the top floor. A row, not a button, so the next
 ## floor is always visibly there; at the cap the term simply leaves the divisor.
 func _build_ghost_floor() -> void:
@@ -159,10 +186,25 @@ func _build_ghost_floor() -> void:
 	_ghost_label = label
 
 	_ghost_row.gui_input.connect(_on_ghost_input)
+	_ghost_gesture = Gesture.new(_coords)
 
+## The ghost band keeps its TAP -- the floor above the roof buys a floor, not a
+## selection, because y_to_floor clamps there. It also gains the hall region's
+## PAN: a drag that starts on the ghost translates to scrolling, as it does on
+## every column, so a glance down a taller-than-screen building is not blocked
+## by the single row of sky above the roof.
 func _on_ghost_input(event: InputEvent) -> void:
-	if _is_tap(event):
-		floor_purchase_requested.emit()
+	if PointerEvents.is_press(event):
+		_ghost_gesture.press(event.position, _coords.top_floor + 1)
+	elif PointerEvents.is_drag(event):
+		_ghost_gesture.move(event.position)
+		if _ghost_gesture.is_panning():
+			var delta := _ghost_gesture.take_pan_delta()
+			if delta != Vector2.ZERO:
+				pan_board_by(delta)
+	elif PointerEvents.is_release(event):
+		if _ghost_gesture.release() == Gesture.Result.TAP:
+			floor_purchase_requested.emit()
 
 ## All five visible positions draw a placeholder so the early board reads as
 ## room to grow. Only the TRAILING one -- index `owned` -- is priced and takes
@@ -276,19 +318,6 @@ func _on_dispatch(shaft_index: int, floor_index: int) -> void:
 func _on_surge(_shaft_index: int) -> void:
 	# Surge is Milestone 3+; the verb is wired so the input model is complete.
 	pass
-
-## A vacant floor's whole gutter-plus-strip span is the re-lease target. The
-## 26-unit gutter alone is ~16pt tall at the cap, far under the touch floor, and
-## the confirm (ui/relet_confirm.gd) exists for the same reason.
-func _gui_input(event: InputEvent) -> void:
-	if not _is_tap(event):
-		return
-	var local: Vector2 = event.position
-	if local.x >= RELET_SPAN:
-		return
-	var floor_index := _coords.y_to_floor(local.y)
-	if _state.tenancy.is_vacant(floor_index):
-		relet_requested.emit(floor_index)
 
 ## Touch emulation delivers one physical tap twice -- see PointerEvents. Reading
 ## both families here bought two floors, or two shafts, for one thumb.

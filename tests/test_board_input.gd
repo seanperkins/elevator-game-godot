@@ -260,7 +260,7 @@ func test_the_leftmost_visible_column_commands_its_own_shaft() -> void:
 	assert_ne(root.state.building.cars[0].target_row, 2,
 		"shaft 0 is off screen and must not have moved")
 
-# --- re-lease --------------------------------------------------------------
+# --- the hall column: select, pan, and the ghost keeps its band -----------
 
 func vacate(row: int) -> void:
 	while root.state.tenancy.satisfaction_at(row) > Tenancy.MOVE_OUT_THRESHOLD:
@@ -269,23 +269,58 @@ func vacate(row: int) -> void:
 		root.state.tenancy.accrue_for_tick()
 	view.refresh()
 
-func test_a_tap_on_a_vacant_floors_gutter_opens_the_confirm() -> void:
-	vacate(2)
-	await do_tap(100.0, floor_centre_y(2))
-	assert_true(root._relet_confirm.visible, "the confirm is shown")
-	assert_eq(root._relet_confirm.floor_index, 2)
+func test_a_tap_on_the_hall_selects_the_floor_it_looks_like_after_scrolling() -> void:
+	# THE mirrored-board check for the hall: a board wrong by a scroll offset is
+	# self-consistent on screen and catastrophic in play.
+	root.state.economy.accrue(1e9)
+	for i in range(14):
+		root.state.buy("row")
+	await wait_physics_frames(2)
+	var target := 12
+	view.pan_board_by(Vector2(0, 300))
+	await wait_physics_frames(2)
+	root.last_selected_floor = -1
+	await do_tap(100.0, floor_centre_y(target))
+	assert_eq(root.last_selected_floor, target)
 
-func test_a_tap_past_the_strip_reaches_the_column_not_the_confirm() -> void:
-	vacate(2)
-	await do_tap(300.0, floor_centre_y(2))
-	assert_false(root._relet_confirm.visible,
-		"x=300 is the shaft viewport, not the re-lease span")
-	assert_eq(root.state.building.cars[0].target_row, 2,
-		"and it reached the column, which now dispatches on a tap")
+func test_a_drag_on_the_hall_pans_and_does_not_select() -> void:
+	root.state.economy.accrue(1e9)
+	for i in range(14):
+		root.state.buy("row")
+	await wait_physics_frames(2)
+	root.last_selected_floor = -1
+	var before: float = view.board_scroll_offset()
+	await do_drag(100.0, 400.0, 250.0)
+	assert_eq(root.last_selected_floor, -1, "a pan is not a selection")
+	assert_ne(view.board_scroll_offset(), before, "the board moved")
 
-func test_a_tap_on_a_tenanted_floor_does_nothing() -> void:
-	await do_tap(100.0, floor_centre_y(3))
-	assert_false(root._relet_confirm.visible)
+func test_a_tap_on_the_ghost_band_buys_a_floor_and_opens_no_panel() -> void:
+	root.last_selected_floor = -1
+	root.state.economy.accrue(1e6)
+	var before: int = root.state.building.row_count
+	await do_tap(100.0, ghost_centre_y())
+	assert_eq(root.state.building.row_count, before + 1, "the ghost buys a floor")
+	assert_eq(root.last_selected_floor, -1,
+		"a tap above the roof is a purchase, not the top floor's panel")
+
+func test_the_ghost_still_wins_after_a_rebuild() -> void:
+	# rebuild() moves the shaft viewport last, so "the ghost is the last child"
+	# holds only on the first build; the ghost must still beat the hall column.
+	root.state.economy.accrue(1e6)
+	view.rebuild()
+	await wait_physics_frames(2)
+	root.last_selected_floor = -1
+	var before: int = root.state.building.row_count
+	await do_tap(100.0, ghost_centre_y())
+	assert_eq(root.state.building.row_count, before + 1)
+	assert_eq(root.last_selected_floor, -1)
+
+func test_a_tap_at_exactly_the_shaft_boundary_reaches_the_shaft() -> void:
+	# Rewritten from test_a_tap_past_the_strip_reaches_the_column_not_the_confirm.
+	await do_tap(BuildingView.SHAFT_AREA_X, floor_centre_y(1))
+	assert_eq(root.last_selected_floor, -1, "x = 240 belongs to the shaft, not the hall")
+	assert_eq(root.state.building.cars[0].target_row, 1,
+		"and it reached the shaft, which dispatches on a tap")
 
 # --- the hall call: direction now, destination only once aboard -----------
 
