@@ -151,3 +151,74 @@ func test_the_shipped_six_floor_start_matches_the_curve_exactly() -> void:
 			total += spawner.spawn_for_tick(8, floors).size()
 	var expected := spawner.rate_at_minute(8) * float(minutes)
 	assert_between(float(total), expected * 0.85, expected * 1.15)
+
+class CountingRng:
+	var draws: int = 0
+	var _next: float
+	func _init(next_value: float) -> void:
+		_next = next_value
+	func randf() -> float:
+		draws += 1
+		return _next
+	func randi_range(a: int, b: int) -> int:
+		draws += 1
+		return a
+
+func _sources(n: int, kind: TenantKind) -> Array[TrafficSource]:
+	var out: Array[TrafficSource] = []
+	for i in range(n):
+		out.append(TrafficSource.new(i, kind, 1.0))
+	return out
+
+func test_the_draw_count_is_independent_of_source_count() -> void:
+	# Pin the BRANCH first: a 40-source building has a larger total and so a
+	# larger p, which means a different branch and a different draw count for
+	# reasons that have nothing to do with the property being tested. An RNG
+	# returning 0.0 makes both take the spawning path (the guard is
+	# `if randf() >= per_tick: return`), and only then is a count comparison
+	# meaningful.
+	var cat := TenantCatalog.new()
+	cat.load_from("res://data/tenants.json")
+	var kind := cat.kind("apartments")
+
+	var small := TrafficSpawner.new(1)
+	small.rng = CountingRng.new(0.0)
+	small.spawn_from_sources(8, _sources(6, kind), true)
+
+	var large := TrafficSpawner.new(1)
+	large.rng = CountingRng.new(0.0)
+	large.spawn_from_sources(8, _sources(40, kind), true)
+
+	assert_eq(large.rng.draws, small.rng.draws,
+		"the weighted pick costs a constant number of draws, not one per source")
+
+func test_a_tenanted_lobby_generates_only_interfloor_trips() -> void:
+	# The shipped starting building puts Shops on floor 0, so this is the
+	# default code path from the first frame -- an inbound trip for floor 0
+	# would be lobby -> lobby.
+	var cat := TenantCatalog.new()
+	cat.load_from("res://data/tenants.json")
+	var s := TrafficSpawner.new(99)
+	var sources: Array[TrafficSource] = [
+		TrafficSource.new(0, cat.kind("shops"), 1.0),
+		TrafficSource.new(3, cat.kind("apartments"), 1.0),
+	]
+	for tick in range(20000):
+		for p in s.spawn_from_sources(9, sources, true):
+			if p.source_row == 0:
+				assert_ne(p.origin_row, p.destination_row, "a trip must go somewhere")
+
+func test_the_fare_comes_from_the_kind_and_the_floors_class() -> void:
+	var cat := TenantCatalog.new()
+	cat.load_from("res://data/tenants.json")
+	var s := TrafficSpawner.new(7)
+	var sources: Array[TrafficSource] = [
+		TrafficSource.new(2, cat.kind("office"), 1.8),
+		TrafficSource.new(5, cat.kind("office"), 1.8),
+	]
+	var seen := false
+	for tick in range(20000):
+		for p in s.spawn_from_sources(8, sources, true):
+			assert_almost_eq(p.fare, 4.0 * 1.8, 1e-5)
+			seen = true
+	assert_true(seen, "the fixture must actually spawn something")
