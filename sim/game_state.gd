@@ -196,8 +196,11 @@ func _deliver() -> void:
 			continue
 		for p in car.take_arrivals():
 			var paid := economy.credit_delivery(p.fare)
-			# The destination row's tenant is the one whose visitor arrived.
-			tenancy.note_delivery(p.destination_row)
+			# The floor that GENERATED the trip, not the endpoint. Under
+			# directional traffic most trips have the lobby at one end, so
+			# endpoint attribution would credit floor 0 for everyone else's
+			# service and leave an outbound-peak floor unable to recover.
+			tenancy.note_delivery(p.source_row)
 			metrics.record_delivery(p.waited_ticks())
 			passenger_delivered.emit(p, paid)
 		var seats := car.capacity - car.riders.size()
@@ -214,7 +217,7 @@ func _expire() -> void:
 			p.decay(1)
 			if p.is_expired():
 				economy.note_expiry(p.fare)
-				tenancy.note_expiry(p.origin_row)
+				tenancy.note_expiry(p.source_row)
 				metrics.record_expiry()
 				passenger_expired.emit(p)
 			else:

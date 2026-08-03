@@ -133,7 +133,39 @@ func test_a_real_expiry_deducts_the_stairs_penalty() -> void:
 	assert_almost_eq(gs.economy.cash, before - 10.0, 1e-9,
 		"one expiry costs exactly min(fare, cash)")
 
-func test_expiry_lowers_the_origin_rows_satisfaction() -> void:
+func test_delivery_credits_the_generating_floor_not_the_destination() -> void:
+	# An outbound trip: floor 4's tenant sent somebody to the lobby.
+	# The credit belongs to 4, which generated it, not to 0, which received it.
+	for i in range(30):
+		gs.tenancy.note_expiry(4)
+	var before := gs.tenancy.satisfaction_at(4)
+	var lobby_before := gs.tenancy.satisfaction_at(0)
+	var p := Passenger.new(4, 0, 900, 4.0, 4)
+	gs.building.cars[0].dispatch_to(4)
+	gs.building.enqueue(p)
+	# Short windows, deliberately NOT a full minute: 30 expiries start a
+	# 1200-tick move-out countdown, so a full minute is just long enough for
+	# floor 4 to VACATE -- and note_delivery is a no-op on a vacant row, which
+	# would suppress the very credit this test asserts.
+	gs.tick(200)                         # car reaches 4, doors open, boards
+	gs.building.cars[0].dispatch_to(0)   # send it back so the rider alights
+	gs.tick(200)                         # travel down, alight, credit the source
+	assert_gt(gs.tenancy.satisfaction_at(4), before, "the generator is credited")
+	assert_almost_eq(gs.tenancy.satisfaction_at(0), lobby_before, 1e-9,
+		"the lobby received the trip but did not generate it")
+
+func test_expiry_blames_the_generating_floor_not_the_origin() -> void:
+	# An inbound trip: floor 3's visitor gave up in the lobby.
+	# The blame belongs to 3, not to the lobby they were standing in.
+	var before := gs.tenancy.satisfaction_at(3)
+	var lobby_before := gs.tenancy.satisfaction_at(0)
+	gs.building.enqueue(Passenger.new(0, 3, 0, 10.0, 3))
+	gs.tick(2)
+	assert_lt(gs.tenancy.satisfaction_at(3), before, "the generator is blamed")
+	assert_almost_eq(gs.tenancy.satisfaction_at(0), lobby_before, 1e-9,
+		"the lobby held the queue but did not generate it")
+
+func test_expiry_lowers_the_generating_rows_satisfaction() -> void:
 	var before := gs.tenancy.satisfaction_at(3)
 	gs.building.enqueue(Passenger.new(3, 1, 0, 10.0, 3))   # off the car's floor
 	gs.tick(2)
