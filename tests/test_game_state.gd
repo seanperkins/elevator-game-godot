@@ -222,50 +222,70 @@ func vacate(state: GameState, row: int) -> void:
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
 		state.tenancy.accrue_for_tick()
 
-func test_relet_charges_the_cost() -> void:
-	vacate(gs, 0)
+func test_leasing_charges_the_kinds_price_and_sets_the_kind() -> void:
 	gs.economy.accrue(1000.0)
+	gs.tenancy.restore_row(3, 1.0, true, 0)
 	var before := gs.economy.cash
-	assert_true(gs.relet(0))
-	assert_false(gs.tenancy.is_vacant(0))
-	assert_almost_eq(gs.economy.cash, before - Tenancy.RELET_COST, 1e-6,
-		"re-leasing has never actually charged before this")
+	assert_true(gs.lease(3, "apartments"))
+	assert_false(gs.tenancy.is_vacant(3))
+	assert_eq(gs.tenancy.kind_at(3), "apartments")
+	assert_almost_eq(gs.economy.cash, before - 60.0, 1e-6)
 
-func test_relet_is_free_when_nothing_is_tenanted() -> void:
+func test_a_kind_above_the_floors_class_is_refused() -> void:
+	gs.economy.accrue(1e6)
+	gs.tenancy.restore_row(3, 1.0, true, 0)
+	assert_false(gs.lease(3, "law_firm"), "class 1 cannot take a tier-3 tenant")
+	assert_true(gs.tenancy.is_vacant(3))
+
+func test_only_the_cheapest_eligible_kind_is_free_below_two_tenants() -> void:
+	# The guarantee must be exact -- a $0 player can always recover -- without
+	# rewarding collapse. An already-upgraded floor would otherwise hand out a
+	# free premium tenant.
+	for row in range(1, 6):
+		gs.tenancy.restore_row(row, 1.0, true, 0)
+	gs.fitout.set_tier(3, 3)
+	gs.economy.cash = 0.0
+	assert_false(gs.lease(3, "law_firm"), "the expensive one is not free")
+	assert_true(gs.lease(3, "apartments"), "the cheapest eligible one is")
+
+func test_leasing_is_free_when_nothing_is_tenanted() -> void:
 	for row in range(gs.building.row_count):
 		vacate(gs, row)
 	assert_eq(gs.tenancy.tenanted_count(), 0)
 	var before := gs.economy.cash
-	assert_true(gs.relet(0), "the no-fail guarantee")
+	assert_true(gs.lease(0, "apartments"), "the no-fail guarantee")
 	assert_almost_eq(gs.economy.cash, before, 1e-6)
 
-func test_relet_is_refused_when_unaffordable_and_charges_nothing() -> void:
+func test_leasing_is_refused_when_unaffordable_and_charges_nothing() -> void:
+	# Row 0 vacated but rows 1-5 stay tenanted, so a full $60 apartments lease
+	# applies -- and a $0 player cannot take it.
 	vacate(gs, 0)
-	assert_lt(gs.economy.cash, Tenancy.RELET_COST)
+	assert_lt(gs.economy.cash, 60.0, "apartments lease $60 while traffic earns")
 	var before := gs.economy.cash
-	assert_false(gs.relet(0))
+	assert_false(gs.lease(0, "apartments"))
 	assert_true(gs.tenancy.is_vacant(0), "still vacant")
 	assert_almost_eq(gs.economy.cash, before, 1e-6)
 
-func test_relet_is_refused_on_a_tenanted_row() -> void:
+func test_leasing_is_refused_on_a_tenanted_row() -> void:
 	gs.economy.accrue(1000.0)
 	var before := gs.economy.cash
-	assert_false(gs.relet(2))
+	assert_false(gs.lease(2, "apartments"))
 	assert_almost_eq(gs.economy.cash, before, 1e-6, "must not charge")
 
-func test_relet_is_refused_outside_the_building() -> void:
+func test_leasing_is_refused_outside_the_building() -> void:
 	gs.economy.accrue(1000.0)
-	assert_false(gs.relet(-1))
-	assert_false(gs.relet(99))
+	assert_false(gs.lease(-1, "apartments"))
+	assert_false(gs.lease(99, "apartments"))
 
-func test_relet_reads_the_cost_before_reletting() -> void:
-	# relet_cost is derived from tenanted_count, and relet() flips it. Reletting
-	# first would turn the free last-row case into a $40 charge.
-	var solo := GameState.new(1, 1, 5)
-	vacate(solo, 0)
-	var before := solo.economy.cash
-	assert_true(solo.relet(0))
-	assert_almost_eq(solo.economy.cash, before, 1e-6, "free, not $40")
+func test_lease_reads_the_cost_before_mutating_tenancy() -> void:
+	# Cost derives from tenanted_count(), which leasing increments, so the
+	# order decides whether the last row costs nothing or full price.
+	for row in range(1, 6):
+		gs.tenancy.restore_row(row, 1.0, true, 0)
+	gs.economy.cash = 0.0
+	var before := gs.economy.cash
+	assert_true(gs.lease(3, "apartments"))
+	assert_almost_eq(gs.economy.cash, before, 1e-6, "free, not $60")
 
 const BUCKET_SLACK := 40   # one bucket either side of the boundary
 

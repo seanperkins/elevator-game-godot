@@ -58,10 +58,11 @@ func bind(state: GameState) -> void:
 
 func open_for(p_floor_index: int) -> void:
 	floor_index = p_floor_index
-	var cost := _state.tenancy.relet_cost(floor_index)
-	var price := "free" if cost <= 0.0 else "$" + NumberFormat.compact(cost)
-	_title.text = "Re-lease floor %d — %s" % [floor_index, price]
-	_confirm.disabled = not _state.economy.can_afford(cost)
+	# Task 17 deletes this file. relet_cost is gone and leasing now needs a
+	# KIND, which a single confirm cannot carry, so the price and the
+	# affordability gate are dropped for the interim.
+	_title.text = "Re-lease floor %d" % floor_index
+	_confirm.disabled = false
 	visible = true
 
 func close() -> void:
@@ -71,5 +72,7 @@ func close() -> void:
 func _on_confirm() -> void:
 	var target := floor_index
 	close()
-	if _state.relet(target):
+	# Interim stand-in for the kind picker FloorPanel builds in Task 17:
+	# confirm leases the apartments tenant the floor's class allows.
+	if _state.lease(target, "apartments"):
 		confirmed.emit(target)

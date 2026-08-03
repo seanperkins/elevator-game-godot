@@ -101,25 +101,42 @@ func _grow_per_floor_containers() -> void:
 	while fitout.rows() < building.row_count:
 		fitout.add_row()
 
-## Re-lease a vacant floor. Until now nothing in the game charged for this:
-## Tenancy.relet() restores a tenant without touching Economy and
-## Tenancy.relet_cost() had no caller outside tests, so wiring the view straight
-## to tenancy would have made re-leasing free forever -- hollowing out §5.3's
-## guarantee, which is that re-leasing is free CONDITIONALLY.
+## Lease a vacant floor to a chosen kind.
 ##
-## The cost is read BEFORE the relet: relet_cost derives from tenanted_count,
-## and relet() increments it, so the order decides whether the last row costs
-## nothing or forty dollars.
-func relet(row: int) -> bool:
+## The cost is read BEFORE tenancy is mutated: it derives from tenanted_count(),
+## which leasing increments, so the order decides whether the last row costs
+## nothing or full price.
+##
+## Refused here rather than merely greyed in the view, because a disabled
+## button is bypassed by two taps queued during a stalled frame.
+func lease(row: int, kind_id: String) -> bool:
 	if row < 0 or row >= building.row_count:
 		return false
 	if not tenancy.is_vacant(row):
 		return false
-	var cost := tenancy.relet_cost(row)
+	var k := catalog.kind(kind_id)
+	if k == null or k.requires_class > fitout.tier_at(row):
+		return false
+	var cost := lease_cost(row, kind_id)
 	if not economy.spend(cost):
 		return false
-	tenancy.relet(row)
+	tenancy.lease(row, kind_id)
 	return true
+
+## Below two tenants the CHEAPEST ELIGIBLE kind is free. Making every kind free
+## would hand a floor already upgraded to class 3 a free Law Firm, which is a
+## strategy rather than a safety net.
+func lease_cost(row: int, kind_id: String) -> float:
+	var k := catalog.kind(kind_id)
+	if k == null:
+		return INF
+	if tenancy.tenanted_count() >= Tenancy.MIN_ROWS_FOR_TRAFFIC:
+		return k.lease_cost
+	var cheapest := catalog.cheapest_for_class(fitout.tier_at(row))
+	return 0.0 if cheapest != null and cheapest.id == kind_id else k.lease_cost
+
+func available_kinds(row: int) -> Array[TenantKind]:
+	return catalog.available_for_class(fitout.tier_at(row))
 
 ## Turning a sweep on needs a LICENCE: the Auto-Dispatch upgrade's level is how
 ## many shafts may run a policy at once. Enforced here rather than in the view,

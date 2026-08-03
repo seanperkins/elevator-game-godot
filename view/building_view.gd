@@ -310,13 +310,13 @@ func refresh() -> void:
 	for i in range(_rows.size()):
 		var waiting := _state.building.waiting_at(i)
 		var vacant := _state.tenancy.is_vacant(i)
-		var cost := _state.tenancy.relet_cost(i)
-		var price := "FREE" if cost <= 0.0 else "$" + NumberFormat.compact(cost)
+		# Task 17 removes the price from the strip; for now pass an empty label
+		# so this compiles without the deleted relet_cost.
 		# Tenant first: set_waiting reads the vacancy to pick its sprite cap.
 		_rows[i].set_tenant(
 			_state.tenancy.satisfaction_at(i), vacant,
 			_state.tenancy.is_moving_out(i),
-			_state.tenancy.move_out_ticks_left(i), price)
+			_state.tenancy.move_out_ticks_left(i), "")
 		_rows[i].set_waiting(waiting)
 	if _ghost_label != null:
 		var row_cost := _state.upgrades.cost_of("row")

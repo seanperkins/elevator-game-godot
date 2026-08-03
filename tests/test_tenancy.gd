@@ -65,19 +65,19 @@ func test_vacant_rows_earn_nothing() -> void:
 		t.accrue_for_tick()
 	assert_true(t.is_vacant(0), "the countdown ran out and they left")
 
-func test_a_single_tenant_can_never_be_charged_to_re_lease() -> void:
-	# A trip needs two floors, so one tenant earns exactly what none does.
-	# Charging to escape that would be a fail state with a price on the exit.
+func test_leasing_retenants_a_mostly_vacated_row() -> void:
+	# Pricing moved out to GameState.lease_cost (Tenancy.lease never charges), so
+	# what is left to pin here is the behaviour: leasing re-tenants a floor.
 	var pair := Tenancy.new(2, 2)
 	while pair.satisfaction_at(1) > Tenancy.MOVE_OUT_THRESHOLD:
 		pair.note_expiry(1)
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
 		pair.accrue_for_tick()
 	assert_eq(pair.tenanted_count(), 1, "one left, one remains")
-	assert_almost_eq(pair.relet_cost(1), 0.0, 1e-9,
-		"one tenant cannot generate traffic, so the way back must be free")
+	pair.lease(1, "apartments")
+	assert_false(pair.is_vacant(1), "leasing re-tenants the floor")
 
-func test_reletting_the_last_row_is_free() -> void:
+func test_leasing_the_last_vacant_row_retenants() -> void:
 	# The single no-fail rule: recovery is always reachable, so
 	# all-rows-vacant-and-broke can never be terminal.
 	var solo := Tenancy.new(1, 1)
@@ -86,35 +86,36 @@ func test_reletting_the_last_row_is_free() -> void:
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
 		solo.accrue_for_tick()
 	assert_eq(solo.tenanted_count(), 0)
-	assert_almost_eq(solo.relet_cost(0), 0.0, 1e-9, "free when nothing is tenanted")
+	solo.lease(0, "apartments")
+	assert_false(solo.is_vacant(0), "recovery is reachable")
 
-func test_reletting_costs_money_while_other_rows_still_pay() -> void:
+func test_leasing_a_vacated_row_among_tenants_retenants() -> void:
 	while t.satisfaction_at(0) > Tenancy.MOVE_OUT_THRESHOLD:
 		t.note_expiry(0)
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
 		t.accrue_for_tick()
 	assert_gt(t.tenanted_count(), 0)
-	assert_gt(t.relet_cost(0), 0.0)
+	t.lease(0, "shops")
+	assert_false(t.is_vacant(0))
 
-func test_relet_restores_the_row() -> void:
+func test_lease_restores_the_row() -> void:
 	while t.satisfaction_at(0) > Tenancy.MOVE_OUT_THRESHOLD:
 		t.note_expiry(0)
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
 		t.accrue_for_tick()
-	t.relet(0)
+	t.lease(0, "shops")
 	assert_false(t.is_vacant(0))
 	assert_gt(t.satisfaction_at(0), Tenancy.MOVE_OUT_THRESHOLD)
 
 func test_recovery_is_reachable_from_the_worst_state() -> void:
-	# Spec §9.2 test 4: drive every tenant out at zero cash, assert recovery.
+	# Spec §9.2 test 4: drive every tenant out, assert recovery through lease.
 	for row in range(6):
 		while t.satisfaction_at(row) > Tenancy.MOVE_OUT_THRESHOLD:
 			t.note_expiry(row)
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
 		t.accrue_for_tick()
 	assert_eq(t.tenanted_count(), 0, "everyone left")
-	assert_almost_eq(t.relet_cost(0), 0.0, 1e-9, "so re-leasing must be free")
-	t.relet(0)
+	t.lease(0, "shops")
 	assert_true(t.occupied_rows().has(0), "and the floor carries traffic again")
 
 func test_add_row_extends_tenancy_with_a_vacant_row() -> void:

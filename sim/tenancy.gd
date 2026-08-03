@@ -12,11 +12,11 @@ extends RefCounted
 ## loses that floor's fares -- and it means the game pays nothing at all for
 ## doing nothing until automation is bought.
 ##
-## NO FAIL STATE, guaranteed by ONE rule: re-leasing is free whenever the player
-## cannot generate traffic, which is whenever FEWER THAN TWO rows are tenanted.
-## A trip needs an origin and a destination, so a single tenanted floor earns
-## exactly as much as none -- and charging for the re-lease that would fix it
-## would strand the player with no income and no way back.
+## NO FAIL STATE, guaranteed by ONE rule: the cheapest tenant eligible for a
+## floor is FREE whenever the player cannot generate traffic. The pricing
+## itself lives in GameState.lease_cost, which only charges while
+## tenanted_count() >= MIN_ROWS_FOR_TRAFFIC; Tenancy owns the threshold and
+## the kind the lease writes.
 ##
 ## Any row, including the lobby, may vacate. A second rule ("the lobby never
 ## vacates") would make this guard unreachable and the recovery test unwritable,
@@ -24,7 +24,6 @@ extends RefCounted
 
 const MOVE_OUT_THRESHOLD := 0.2
 const MOVE_OUT_TICKS := 1200          # one simulated minute of grace
-const RELET_COST := 40.0
 
 const _DELIVERY_GAIN := 0.02
 const _EXPIRY_LOSS := 0.05
@@ -155,20 +154,19 @@ func tenanted_count() -> int:
 			n += 1
 	return n
 
-## Free while the player cannot earn. A trip needs two tenanted floors, so one
-## tenant earns exactly what none does; charging to escape that would be a fail
-## state with a price tag on the exit.
+## Free while the player cannot earn. Under directional traffic a lone tenant
+## COULD generate lobby trips, so this is now a deliberate policy guard rather
+## than arithmetic -- but the guarantee it protects is unchanged: there must
+## always be something a $0 player can take.
 const MIN_ROWS_FOR_TRAFFIC := 2
 
-func relet_cost(_row: int) -> float:
-	return 0.0 if tenanted_count() < MIN_ROWS_FOR_TRAFFIC else RELET_COST
-
-func relet(row: int) -> void:
+func lease(row: int, kind_id: String) -> void:
 	if not _valid(row):
 		return
 	_vacant[row] = false
 	_satisfaction[row] = 1.0
 	_move_out_left[row] = 0
+	_kind[row] = kind_id
 	_revision += 1
 
 func _valid(row: int) -> bool:
