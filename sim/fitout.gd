@@ -20,32 +20,32 @@ const BASE_TIER := 1
 var _tier: PackedInt32Array = PackedInt32Array()
 var _revision: int = 0
 
-func _init(row_count: int) -> void:
-	for i in range(maxi(row_count, 0)):
+func _init(floor_count: int) -> void:
+	for i in range(maxi(floor_count, 0)):
 		_tier.append(BASE_TIER)
 
-func rows() -> int:
+func floors() -> int:
 	return _tier.size()
 
-func add_row() -> void:
+func add_floor() -> void:
 	_tier.append(BASE_TIER)
 	_revision += 1
 
-func tier_at(row: int) -> int:
-	return _tier[row] if _valid(row) else BASE_TIER
+func tier_at(floor_index: int) -> int:
+	return _tier[floor_index] if _valid(floor_index) else BASE_TIER
 
 ## Moves the revision, because a cached TrafficSource carries this floor's fare
 ## multiplier. Without that a class upgrade on a TENANTED floor would leave the
 ## stale multiplier cached until the next tenancy event -- which on a
 ## well-served floor may be never, making the purchase inert.
-func set_tier(row: int, tier: int) -> void:
-	if not _valid(row):
+func set_tier(floor_index: int, tier: int) -> void:
+	if not _valid(floor_index):
 		return
-	_tier[row] = tier
+	_tier[floor_index] = tier
 	_revision += 1
 
 func revision() -> int:
 	return _revision
 
-func _valid(row: int) -> bool:
-	return row >= 0 and row < _tier.size()
+func _valid(floor_index: int) -> bool:
+	return floor_index >= 0 and floor_index < _tier.size()

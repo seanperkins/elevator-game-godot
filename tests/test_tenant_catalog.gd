@@ -37,10 +37,10 @@ func test_offices_are_inbound_at_eight_and_apartments_outbound_at_seven() -> voi
 
 func test_the_total_rate_cannot_saturate_the_bernoulli_trial() -> void:
 	# spec §5.6: the spawner clips silently at p = 1 and emits at most one
-	# passenger per tick. MAX_ROWS x the largest single bucket is the
+	# passenger per tick. MAX_FLOORS x the largest single bucket is the
 	# worst case, exhaustive by construction -- "every kind combination" is
 	# 6^40 and is not a writable test.
-	assert_lt(float(Building.MAX_ROWS) * cat.largest_bucket(),
+	assert_lt(float(Building.MAX_FLOORS) * cat.largest_bucket(),
 		float(SimClock.TICKS_PER_SIM_MINUTE))
 
 func _catalog_from(data: Dictionary) -> TenantCatalog:

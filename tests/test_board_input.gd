@@ -53,12 +53,12 @@ func after_each() -> void:
 	view = null
 
 ## Board-frame y of the centre of a floor's band. The ghost band no longer
-## offsets this: the board scrolls, so the ghost row rides the same transform as
+## offsets this: the board scrolls, so the ghost floor rides the same transform as
 ## every floor and there is one frame again.
 func floor_centre_y(f: int) -> float:
 	return root.HUD_HEIGHT + view.coords().band_centre_y(f)
 
-## The "+ BUILD FLOOR" band sits one row above the top floor and scrolls with it.
+## The "+ BUILD FLOOR" band sits one floor above the top floor and scrolls with it.
 func ghost_centre_y() -> float:
 	return root.HUD_HEIGHT + view.coords().floor_to_y(view.coords().top_floor) \
 		- BuildingView.ROW_HEIGHT * 0.5
@@ -115,8 +115,8 @@ func test_the_board_under_test_is_the_board_that_ships() -> void:
 	# and a no-op look identical from the sim's side.
 	assert_eq(root.size, BOARD_SIZE, "720x1280, not GUT's container")
 	assert_eq(view.visible_shafts(), 3, "three columns on a 160-unit pitch")
-	assert_almost_eq(view.coords().row_height, BuildingView.ROW_HEIGHT, 0.01,
-		"rows are a fixed height now, not squeezed to fit")
+	assert_almost_eq(view.coords().floor_height, BuildingView.ROW_HEIGHT, 0.01,
+		"floors are a fixed height now, not squeezed to fit")
 	var col: ShaftColumn = view._columns[0]
 	assert_true(col.get_global_rect().has_point(
 		Vector2(column_x(0), floor_centre_y(1))),
@@ -129,21 +129,21 @@ func test_a_drag_pans_the_board_and_dispatches_nothing() -> void:
 	# a car now moves the window.
 	root.state.economy.accrue(1e9)
 	for i in range(14):
-		root.state.buy("row")           # taller than the screen, so it can scroll
+		root.state.buy("floor")           # taller than the screen, so it can scroll
 	await wait_physics_frames(2)
-	var target: int = root.state.building.cars[0].target_row
+	var target: int = root.state.building.cars[0].target_floor
 	var before: float = view.board_scroll_offset()
 	# Floor 12, not 6: unscrolled, a twenty-floor building puts floor 6's centre
 	# just past the bottom of the board, so the press would land on nothing.
 	await do_drag(column_x(0), floor_centre_y(12), floor_centre_y(12) - 250.0)
 	assert_ne(view.board_scroll_offset(), before, "the board moved")
-	assert_eq(root.state.building.cars[0].target_row, target,
+	assert_eq(root.state.building.cars[0].target_floor, target,
 		"and the car did not")
 
 func test_the_board_cannot_be_panned_off_either_end() -> void:
 	root.state.economy.accrue(1e9)
 	for i in range(14):
-		root.state.buy("row")
+		root.state.buy("floor")
 	await wait_physics_frames(2)
 	await do_drag(column_x(0), floor_centre_y(12), floor_centre_y(12) + 5000.0)
 	assert_almost_eq(view.board_scroll_offset(), 0.0, 0.01, "not past the ground")
@@ -155,19 +155,19 @@ func test_a_tap_on_a_column_dispatches_to_the_floor_tapped() -> void:
 	# would catch a mirror in the tap path even if the drag path were correct.
 	for target in [4, 1, 3]:
 		await do_tap(column_x(0), floor_centre_y(target))
-		assert_eq(root.state.building.cars[0].target_row, target,
+		assert_eq(root.state.building.cars[0].target_floor, target,
 			"tap on floor %d's band" % target)
 
 func test_a_tap_ignores_the_cars_current_floor() -> void:
-	root.state.building.cars[0].position_row = 5.0
+	root.state.building.cars[0].position_floor = 5.0
 	await do_tap(column_x(0), floor_centre_y(2))
-	assert_eq(root.state.building.cars[0].target_row, 2,
+	assert_eq(root.state.building.cars[0].target_floor, 2,
 		"the floor touched, not the floor the car was parked on")
 
 func test_the_car_renders_at_the_floor_it_is_on() -> void:
 	# The car and the label must agree; they are the two surfaces that mirror
 	# together.
-	root.state.building.cars[0].position_row = 0.0
+	root.state.building.cars[0].position_floor = 0.0
 	view.refresh()
 	var car_y: float = view._columns[0]._car_rect.position.y
 	var lobby_y: float = view.coords().floor_to_y(0)
@@ -179,29 +179,29 @@ func test_a_tap_after_scrolling_still_hits_the_floor_it_looks_like() -> void:
 	# by a scroll offset is self-consistent on screen and catastrophic in play.
 	root.state.economy.accrue(1e9)
 	for i in range(14):
-		root.state.buy("row")
+		root.state.buy("floor")
 	await wait_physics_frames(2)
 	view.scroll_board_by(300.0)
 	await wait_physics_frames(2)
 	for target in [4, 9, 12]:
 		await do_tap(column_x(0), floor_centre_y(target))
-		assert_eq(root.state.building.cars[0].target_row, target,
+		assert_eq(root.state.building.cars[0].target_floor, target,
 			"tap on floor %d after scrolling" % target)
 
 # --- purchases -------------------------------------------------------------
 
 func test_a_tap_in_the_ghost_band_buys_a_floor() -> void:
 	root.state.economy.accrue(1e6)
-	var before: int = root.state.building.row_count
+	var before: int = root.state.building.floor_count
 	await do_tap(400.0, ghost_centre_y())
-	assert_eq(root.state.building.row_count, before + 1,
+	assert_eq(root.state.building.floor_count, before + 1,
 		"the ghost band is tappable at x=400, where the columns used to be")
 
 func test_a_tap_in_the_ghost_band_does_not_dispatch() -> void:
 	root.state.economy.accrue(1e6)
-	var before: int = root.state.building.cars[0].target_row
+	var before: int = root.state.building.cars[0].target_floor
 	await do_tap(400.0, ghost_centre_y())
-	assert_eq(root.state.building.cars[0].target_row, before,
+	assert_eq(root.state.building.cars[0].target_floor, before,
 		"a floor purchase is not a dispatch: the columns stop below the band")
 
 func test_every_shaft_up_to_the_cap_is_reachable() -> void:
@@ -245,10 +245,10 @@ func test_a_paged_out_column_cannot_be_touched_through_the_people_strip() -> voi
 	await buy_shafts(6)
 	var targets := []
 	for c in root.state.building.cars:
-		targets.append(c.target_row)
+		targets.append(c.target_floor)
 	await do_tap(120.0, floor_centre_y(1))
 	for i in range(root.state.building.cars.size()):
-		assert_eq(root.state.building.cars[i].target_row, targets[i],
+		assert_eq(root.state.building.cars[i].target_floor, targets[i],
 			"shaft %d must not move" % i)
 
 func test_the_leftmost_visible_column_commands_its_own_shaft() -> void:
@@ -256,15 +256,15 @@ func test_the_leftmost_visible_column_commands_its_own_shaft() -> void:
 	var first := view.first_visible_shaft()
 	assert_gt(first, 0, "the strip must actually be paged for this to mean anything")
 	await do_tap(column_x(0), floor_centre_y(2))
-	assert_eq(root.state.building.cars[first].target_row, 2)
-	assert_ne(root.state.building.cars[0].target_row, 2,
+	assert_eq(root.state.building.cars[first].target_floor, 2)
+	assert_ne(root.state.building.cars[0].target_floor, 2,
 		"shaft 0 is off screen and must not have moved")
 
 # --- the hall column: select, pan, and the ghost keeps its band -----------
 
-func vacate(row: int) -> void:
-	while root.state.tenancy.satisfaction_at(row) > Tenancy.MOVE_OUT_THRESHOLD:
-		root.state.tenancy.note_expiry(row)
+func vacate(floor_index: int) -> void:
+	while root.state.tenancy.satisfaction_at(floor_index) > Tenancy.MOVE_OUT_THRESHOLD:
+		root.state.tenancy.note_expiry(floor_index)
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
 		root.state.tenancy.accrue_for_tick()
 	view.refresh()
@@ -274,7 +274,7 @@ func test_a_tap_on_the_hall_selects_the_floor_it_looks_like_after_scrolling() ->
 	# self-consistent on screen and catastrophic in play.
 	root.state.economy.accrue(1e9)
 	for i in range(14):
-		root.state.buy("row")
+		root.state.buy("floor")
 	await wait_physics_frames(2)
 	var target := 12
 	view.pan_board_by(Vector2(0, 300))
@@ -286,7 +286,7 @@ func test_a_tap_on_the_hall_selects_the_floor_it_looks_like_after_scrolling() ->
 func test_a_drag_on_the_hall_pans_and_does_not_select() -> void:
 	root.state.economy.accrue(1e9)
 	for i in range(14):
-		root.state.buy("row")
+		root.state.buy("floor")
 	await wait_physics_frames(2)
 	root.last_selected_floor = -1
 	var before: float = view.board_scroll_offset()
@@ -297,9 +297,9 @@ func test_a_drag_on_the_hall_pans_and_does_not_select() -> void:
 func test_a_tap_on_the_ghost_band_buys_a_floor_and_opens_no_panel() -> void:
 	root.last_selected_floor = -1
 	root.state.economy.accrue(1e6)
-	var before: int = root.state.building.row_count
+	var before: int = root.state.building.floor_count
 	await do_tap(100.0, ghost_centre_y())
-	assert_eq(root.state.building.row_count, before + 1, "the ghost buys a floor")
+	assert_eq(root.state.building.floor_count, before + 1, "the ghost buys a floor")
 	assert_eq(root.last_selected_floor, -1,
 		"a tap above the roof is a purchase, not the top floor's panel")
 
@@ -310,16 +310,16 @@ func test_the_ghost_still_wins_after_a_rebuild() -> void:
 	view.rebuild()
 	await wait_physics_frames(2)
 	root.last_selected_floor = -1
-	var before: int = root.state.building.row_count
+	var before: int = root.state.building.floor_count
 	await do_tap(100.0, ghost_centre_y())
-	assert_eq(root.state.building.row_count, before + 1)
+	assert_eq(root.state.building.floor_count, before + 1)
 	assert_eq(root.last_selected_floor, -1)
 
 func test_a_tap_at_exactly_the_shaft_boundary_reaches_the_shaft() -> void:
 	# Rewritten from test_a_tap_past_the_strip_reaches_the_column_not_the_confirm.
 	await do_tap(BuildingView.SHAFT_AREA_X, floor_centre_y(1))
 	assert_eq(root.last_selected_floor, -1, "x = 240 belongs to the shaft, not the hall")
-	assert_eq(root.state.building.cars[0].target_row, 1,
+	assert_eq(root.state.building.cars[0].target_floor, 1,
 		"and it reached the shaft, which dispatches on a tap")
 
 # --- the floor panel --------------------------------------------------------
@@ -329,7 +329,7 @@ func test_the_lease_picker_is_hidden_while_the_floor_is_tenanted() -> void:
 	assert_false(root.panel.picker_visible(), "you choose who moves in, not out")
 
 func test_the_lease_picker_appears_when_the_floor_is_vacant() -> void:
-	root.state.tenancy.restore_row(3, 1.0, true, 0)
+	root.state.tenancy.restore_floor(3, 1.0, true, 0)
 	root.panel.show_floor(root.state, 3)
 	assert_true(root.panel.picker_visible())
 
@@ -342,7 +342,7 @@ func test_a_floor_counting_down_to_move_out_still_counts_as_tenanted() -> void:
 		"the move-out clock keeps its teeth")
 
 func test_kinds_above_the_floors_class_are_shown_locked() -> void:
-	root.state.tenancy.restore_row(3, 1.0, true, 0)
+	root.state.tenancy.restore_floor(3, 1.0, true, 0)
 	root.panel.show_floor(root.state, 3)
 	assert_true(root.panel.is_locked("law_firm"), "law firm needs class 3")
 	assert_false(root.panel.is_locked("apartments"))
@@ -360,7 +360,7 @@ func fit(id: String) -> void:
 func test_a_waiting_passenger_hides_its_direction_until_the_upgrade() -> void:
 	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
 	view.refresh()
-	var sprite: PassengerSprite = view._rows[2]._sprites[0]
+	var sprite: PassengerSprite = view._floors[2]._sprites[0]
 	assert_true(sprite.visible, "the chip is still drawn -- someone IS waiting")
 	assert_eq(sprite.label_text(), FloorRow.CALL_UNKNOWN,
 		"which way they are going is not readable until it is bought")
@@ -369,7 +369,7 @@ func test_buying_call_direction_reveals_the_arrow() -> void:
 	fit("call_direction")
 	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
 	view.refresh()
-	assert_eq(view._rows[2]._sprites[0].label_text(), FloorRow.CALL_UP)
+	assert_eq(view._floors[2]._sprites[0].label_text(), FloorRow.CALL_UP)
 
 func test_a_waiting_passenger_shows_its_call_direction_not_its_floor() -> void:
 	# A hall call button is UP or DOWN. Where they are actually going is not
@@ -378,7 +378,7 @@ func test_a_waiting_passenger_shows_its_call_direction_not_its_floor() -> void:
 	fit("call_direction")
 	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
 	view.refresh()
-	var sprite: PassengerSprite = view._rows[2]._sprites[0]
+	var sprite: PassengerSprite = view._floors[2]._sprites[0]
 	assert_true(sprite.visible, "the passenger is drawn")
 	assert_eq(sprite.label_text(), FloorRow.CALL_UP, "floor 2 to floor 5 is a call up")
 	assert_false(sprite.label_text().contains("5"),
@@ -388,7 +388,7 @@ func test_a_downward_call_shows_a_downward_arrow() -> void:
 	fit("call_direction")
 	root.state.building.enqueue(Passenger.new(4, 1, 900, 4.0, 4))
 	view.refresh()
-	assert_eq(view._rows[4]._sprites[0].label_text(), FloorRow.CALL_DOWN)
+	assert_eq(view._floors[4]._sprites[0].label_text(), FloorRow.CALL_DOWN)
 
 func test_waiting_passengers_show_their_own_directions() -> void:
 	fit("call_direction")
@@ -397,7 +397,7 @@ func test_waiting_passengers_show_their_own_directions() -> void:
 	view.refresh()
 	var shown := []
 	for i in range(3):
-		shown.append(view._rows[2]._sprites[i].label_text())
+		shown.append(view._floors[2]._sprites[i].label_text())
 	assert_eq(shown, [FloorRow.CALL_UP, FloorRow.CALL_DOWN, FloorRow.CALL_UP],
 		"in queue order, FIFO like boarding")
 
@@ -513,9 +513,9 @@ func thumb_tap(x: float, y: float) -> void:
 
 func test_one_thumb_tap_buys_exactly_one_floor() -> void:
 	root.state.economy.accrue(1e9)
-	var before: int = root.state.building.row_count
+	var before: int = root.state.building.floor_count
 	await thumb_tap(400.0, ghost_centre_y())
-	assert_eq(root.state.building.row_count, before + 1,
+	assert_eq(root.state.building.floor_count, before + 1,
 		"one thumb, one floor -- touch emulation delivers the tap twice")
 
 func test_one_thumb_tap_buys_exactly_one_shaft() -> void:
@@ -527,7 +527,7 @@ func test_one_thumb_tap_buys_exactly_one_shaft() -> void:
 
 func test_a_thumb_tap_on_a_column_still_dispatches() -> void:
 	await thumb_tap(column_x(0), floor_centre_y(3))
-	assert_eq(root.state.building.cars[0].target_row, 3,
+	assert_eq(root.state.building.cars[0].target_floor, 3,
 		"dropping the duplicate must not drop the gesture itself")
 
 # --- the dwell is visible --------------------------------------------------
@@ -603,16 +603,16 @@ func test_a_shaft_bought_on_the_board_gets_a_toggle() -> void:
 func test_the_building_survives_a_restart() -> void:
 	# The whole point: quitting must not cost you what you built.
 	root.state.economy.accrue(1e6)
-	assert_true(root.state.buy("row"))
+	assert_true(root.state.buy("floor"))
 	assert_true(root.state.buy("shaft"))
-	var floors: int = root.state.building.row_count
+	var floors: int = root.state.building.floor_count
 	var shafts: int = root.state.building.cars.size()
 	var cash: float = root.state.economy.cash
 	root.save_now()
 
 	var reloaded := SaveStore.load_state()
 	assert_not_null(reloaded, "a save was written")
-	assert_eq(reloaded.building.row_count, floors)
+	assert_eq(reloaded.building.floor_count, floors)
 	assert_eq(reloaded.building.cars.size(), shafts)
 	assert_almost_eq(reloaded.economy.cash, cash, 1e-6)
 
@@ -665,12 +665,12 @@ func test_a_sideways_pan_does_not_dispatch() -> void:
 	for i in range(5):
 		root.state.buy("shaft")
 	await wait_physics_frames(2)
-	var before: int = root.state.building.cars[0].target_row
+	var before: int = root.state.building.cars[0].target_floor
 	press_at(column_x(0), floor_centre_y(3))
 	await wait_physics_frames(2)
 	drag_to(column_x(0) - 250.0, floor_centre_y(3))
 	await wait_physics_frames(2)
 	release_at(column_x(0) - 250.0, floor_centre_y(3))
 	await wait_physics_frames(2)
-	assert_eq(root.state.building.cars[0].target_row, before,
+	assert_eq(root.state.building.cars[0].target_floor, before,
 		"looking sideways is not commanding either")

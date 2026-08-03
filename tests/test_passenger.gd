@@ -6,14 +6,14 @@ func _p(origin := 0, dest := 5, patience := 100, fare := 10.0, source := -1) -> 
 
 func test_stores_its_trip() -> void:
 	var p := _p(2, 7)
-	assert_eq(p.origin_row, 2)
-	assert_eq(p.destination_row, 7)
+	assert_eq(p.origin_floor, 2)
+	assert_eq(p.destination_floor, 7)
 
 func test_a_passenger_remembers_which_floor_generated_it() -> void:
 	# An inbound trip starts at the lobby but belongs to floor 5.
 	var p := Passenger.new(0, 5, 900, 4.0, 5)
-	assert_eq(p.origin_row, 0)
-	assert_eq(p.source_row, 5, "the generating floor, not the endpoint")
+	assert_eq(p.origin_floor, 0)
+	assert_eq(p.source_floor, 5, "the generating floor, not the endpoint")
 
 func test_starts_unboarded() -> void:
 	assert_false(_p().boarded)

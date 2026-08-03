@@ -19,7 +19,7 @@ extends RefCounted
 signal passenger_spawned(p: Passenger)
 signal passenger_delivered(p: Passenger, paid: float)
 signal passenger_expired(p: Passenger)
-signal car_arrived(shaft_index: int, row: int)
+signal car_arrived(shaft_index: int, floor_index: int)
 
 var clock: SimClock
 var building: Building
@@ -35,19 +35,19 @@ var auto: AutoDispatch
 var _source_cache: Array[TrafficSource] = []
 var _source_revision: int = -1
 
-## The starting assignment: six kind ids, one per row from the lobby up. NOT
+## The starting assignment: six kind ids, one per floor from the lobby up. NOT
 ## the catalog's length -- adding a seventh KIND must not tenant a seventh ROW.
-## Both the tenanted-row count and those rows' kinds derive from this one list,
+## Both the tenanted-floor count and those floors' kinds derive from this one list,
 ## so they cannot drift.
 const DEFAULT_ROSTER: Array[String] = ["shops", "apartments", "apartments",
 	"apartments", "apartments", "apartments"]
 
 var _valid: bool = true
 
-func _init(rows: int, shafts: int, p_seed: int,
+func _init(floors: int, shafts: int, p_seed: int,
 		catalog_path := "res://data/tenants.json") -> void:
 	clock = SimClock.new()
-	building = Building.new(rows, shafts)
+	building = Building.new(floors, shafts)
 	spawner = TrafficSpawner.new(p_seed)
 	spawner.load_curve("res://data/traffic_walkup.json")
 	economy = Economy.new()
@@ -62,11 +62,11 @@ func _init(rows: int, shafts: int, p_seed: int,
 		# screen instead of relying on a console line a player cannot see.
 		_valid = false
 
-	var prefix := mini(building.row_count, DEFAULT_ROSTER.size())
-	tenancy = Tenancy.new(building.row_count, prefix)
-	fitout = Fitout.new(building.row_count)
-	for row in range(prefix):
-		tenancy.set_kind(row, DEFAULT_ROSTER[row])
+	var prefix := mini(building.floor_count, DEFAULT_ROSTER.size())
+	tenancy = Tenancy.new(building.floor_count, prefix)
+	fitout = Fitout.new(building.floor_count)
+	for floor_index in range(prefix):
+		tenancy.set_kind(floor_index, DEFAULT_ROSTER[floor_index])
 
 	upgrades = Upgrades.new()
 	upgrades.load_defs("res://data/upgrades.json")
@@ -79,11 +79,11 @@ func _init(rows: int, shafts: int, p_seed: int,
 func is_valid() -> bool:
 	return _valid
 
-## Buying a row extends the board, so tenancy must grow with it.
+## Buying a floor extends the board, so tenancy must grow with it.
 ##
-## The guard reads tenancy.rows(), not a tenanted/vacant tally: is_vacant()
-## reports true for a row tenancy does not have, so counting vacancies over the
-## NEW row_count always equals it and the loop would never run.
+## The guard reads tenancy.floors(), not a tenanted/vacant tally: is_vacant()
+## reports true for a floor tenancy does not have, so counting vacancies over the
+## NEW floor_count always equals it and the loop would never run.
 func buy(id: String) -> bool:
 	var ok := upgrades.purchase(id, economy, building)
 	if ok:
@@ -96,68 +96,68 @@ func buy(id: String) -> bool:
 ## test_buying_a_row_grows_every_per_floor_container, and Spec B adds a third
 ## container to this function rather than a third loop beside it.
 func _grow_per_floor_containers() -> void:
-	while tenancy.rows() < building.row_count:
-		tenancy.add_row()
-	while fitout.rows() < building.row_count:
-		fitout.add_row()
+	while tenancy.floors() < building.floor_count:
+		tenancy.add_floor()
+	while fitout.floors() < building.floor_count:
+		fitout.add_floor()
 
 ## Lease a vacant floor to a chosen kind.
 ##
 ## The cost is read BEFORE tenancy is mutated: it derives from tenanted_count(),
-## which leasing increments, so the order decides whether the last row costs
+## which leasing increments, so the order decides whether the last floor costs
 ## nothing or full price.
 ##
 ## Refused here rather than merely greyed in the view, because a disabled
 ## button is bypassed by two taps queued during a stalled frame.
-func lease(row: int, kind_id: String) -> bool:
-	if row < 0 or row >= building.row_count:
+func lease(floor_index: int, kind_id: String) -> bool:
+	if floor_index < 0 or floor_index >= building.floor_count:
 		return false
-	if not tenancy.is_vacant(row):
+	if not tenancy.is_vacant(floor_index):
 		return false
 	var k := catalog.kind(kind_id)
-	if k == null or k.requires_class > fitout.tier_at(row):
+	if k == null or k.requires_class > fitout.tier_at(floor_index):
 		return false
-	var cost := lease_cost(row, kind_id)
+	var cost := lease_cost(floor_index, kind_id)
 	if not economy.spend(cost):
 		return false
-	tenancy.lease(row, kind_id)
+	tenancy.lease(floor_index, kind_id)
 	return true
 
 ## Below two tenants the CHEAPEST ELIGIBLE kind is free. Making every kind free
 ## would hand a floor already upgraded to class 3 a free Law Firm, which is a
 ## strategy rather than a safety net.
-func lease_cost(row: int, kind_id: String) -> float:
+func lease_cost(floor_index: int, kind_id: String) -> float:
 	var k := catalog.kind(kind_id)
 	if k == null:
 		return INF
 	if tenancy.tenanted_count() >= Tenancy.MIN_ROWS_FOR_TRAFFIC:
 		return k.lease_cost
-	var cheapest := catalog.cheapest_for_class(fitout.tier_at(row))
+	var cheapest := catalog.cheapest_for_class(fitout.tier_at(floor_index))
 	return 0.0 if cheapest != null and cheapest.id == kind_id else k.lease_cost
 
-func available_kinds(row: int) -> Array[TenantKind]:
-	return catalog.available_for_class(fitout.tier_at(row))
+func available_kinds(floor_index: int) -> Array[TenantKind]:
+	return catalog.available_for_class(fitout.tier_at(floor_index))
 
 ## The fare multiplier is why this is not inert on a tenanted floor. Class
 ## gates leasing and leasing only happens on vacancy, so a purchase with no
 ## live effect would pay nothing until the tenant left -- a button you
 ## rationally never press except in a crisis.
-func class_upgrade_cost(row: int) -> float:
-	var next := fitout.tier_at(row) + 1
+func class_upgrade_cost(floor_index: int) -> float:
+	var next := fitout.tier_at(floor_index) + 1
 	if next > catalog.max_tier():
 		return INF
 	return catalog.class_cost(next)
 
-func upgrade_class(row: int) -> bool:
-	if row < 0 or row >= building.row_count:
+func upgrade_class(floor_index: int) -> bool:
+	if floor_index < 0 or floor_index >= building.floor_count:
 		return false
-	var next := fitout.tier_at(row) + 1
+	var next := fitout.tier_at(floor_index) + 1
 	if next > catalog.max_tier():
 		return false
-	var cost := class_upgrade_cost(row)
+	var cost := class_upgrade_cost(floor_index)
 	if not economy.spend(cost):
 		return false
-	fitout.set_tier(row, next)
+	fitout.set_tier(floor_index, next)
 	return true
 
 ## Turning a sweep on needs a LICENCE: the Auto-Dispatch upgrade's level is how
@@ -223,19 +223,19 @@ func _resync_policies() -> void:
 func auto_licences() -> int:
 	return upgrades.level_of("auto")
 
-func dispatch(shaft_index: int, row: int) -> bool:
+func dispatch(shaft_index: int, floor_index: int) -> bool:
 	if shaft_index < 0 or shaft_index >= building.cars.size():
 		return false
-	if row < 0 or row >= building.row_count:
+	if floor_index < 0 or floor_index >= building.floor_count:
 		return false
 	var car: ElevatorCar = building.cars[shaft_index]
 	if car.is_committed():
 		return false                    # a launched car cannot be called off
-	if ElevatorCar.is_spring_trip(car.current_row(), row, building.row_count) \
+	if ElevatorCar.is_spring_trip(car.current_floor(), floor_index, building.floor_count) \
 			and car.spring_multiplier > 1.0:
-		car.launch_to(row)
+		car.launch_to(floor_index)
 	else:
-		car.dispatch_to(row)
+		car.dispatch_to(floor_index)
 	return true
 
 func tick(n: int) -> void:
@@ -255,8 +255,8 @@ func _tick_once() -> void:
 	# The tenant left, so their visitors stop arriving. NOT charged as
 	# expiries: the expiries that caused the move-out were already charged,
 	# and charging again would double-penalise one failure.
-	for row in tenancy.accrue_for_tick():
-		building.remove_waiting_from_source(row)
+	for floor_index in tenancy.accrue_for_tick():
+		building.remove_waiting_from_source(floor_index)
 	# update combo -- handled inside Economy on each delivery/expiry
 	clock.note_ticks(1)
 
@@ -268,14 +268,14 @@ func _sources() -> Array[TrafficSource]:
 	var revision := tenancy.revision() + fitout.revision()
 	if revision != _source_revision:
 		_source_cache = []
-		for row in range(building.row_count):
-			if tenancy.is_vacant(row):
+		for floor_index in range(building.floor_count):
+			if tenancy.is_vacant(floor_index):
 				continue
-			var k := catalog.kind(tenancy.kind_at(row))
+			var k := catalog.kind(tenancy.kind_at(floor_index))
 			if k == null:
 				continue
-			_source_cache.append(TrafficSource.new(row, k,
-				catalog.fare_multiplier(fitout.tier_at(row))))
+			_source_cache.append(TrafficSource.new(floor_index, k,
+				catalog.fare_multiplier(fitout.tier_at(floor_index))))
 		_source_revision = revision
 	return _source_cache
 
@@ -294,8 +294,8 @@ func _move_and_doors() -> void:
 		var was_moving := car.state == ElevatorCar.State.MOVING
 		car.step(1)
 		if was_moving and car.state == ElevatorCar.State.DOORS:
-			car_arrived.emit(i, car.current_row())
-		if not building.waiting_at(car.current_row()).is_empty():
+			car_arrived.emit(i, car.current_floor())
+		if not building.waiting_at(car.current_floor()).is_empty():
 			car.answer_call()
 
 ## Alight first, then board -- riders leaving free the seats arrivals take.
@@ -309,26 +309,26 @@ func _deliver() -> void:
 			# directional traffic most trips have the lobby at one end, so
 			# endpoint attribution would credit floor 0 for everyone else's
 			# service and leave an outbound-peak floor unable to recover.
-			tenancy.note_delivery(p.source_row)
+			tenancy.note_delivery(p.source_floor)
 			metrics.record_delivery(p.waited_ticks())
 			passenger_delivered.emit(p, paid)
 		var seats := car.capacity - car.riders.size()
-		for p in building.take_boardable(car.current_row(), seats):
+		for p in building.take_boardable(car.current_floor(), seats):
 			car.board(p)
 
 ## Waiting passengers decay. Riders aboard a car do not -- they are being
 ## served. Expiry runs AFTER delivery so the zero boundary favours the player.
 func _expire() -> void:
-	for row in range(building.row_count):
-		var queue: Array[Passenger] = building.waiting[row]
+	for floor_index in range(building.floor_count):
+		var queue: Array[Passenger] = building.waiting[floor_index]
 		var survivors: Array[Passenger] = []
 		for p in queue:
 			p.decay(1)
 			if p.is_expired():
 				economy.note_expiry(p.fare)
-				tenancy.note_expiry(p.source_row)
+				tenancy.note_expiry(p.source_floor)
 				metrics.record_expiry()
 				passenger_expired.emit(p)
 			else:
 				survivors.append(p)
-		building.waiting[row] = survivors
+		building.waiting[floor_index] = survivors

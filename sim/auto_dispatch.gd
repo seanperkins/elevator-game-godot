@@ -69,13 +69,13 @@ func step(building: Building) -> void:
 		var car: ElevatorCar = building.cars[i]
 		if car.state != ElevatorCar.State.IDLE:
 			continue
-		var result := policy.choose(car.current_row(), building.row_count,
+		var result := policy.choose(car.current_floor(), building.floor_count,
 			waiting, _rider_floors(car), _direction[i],
 			car.riders.size() >= car.capacity)
 		_direction[i] = result.y
-		if result.x == DispatchPolicy.STAY_PUT or result.x == car.current_row():
+		if result.x == DispatchPolicy.STAY_PUT or result.x == car.current_floor():
 			continue
-		if ElevatorCar.is_spring_trip(car.current_row(), result.x, building.row_count) \
+		if ElevatorCar.is_spring_trip(car.current_floor(), result.x, building.floor_count) \
 				and car.spring_multiplier > 1.0:
 			car.launch_to(result.x)
 		else:
@@ -85,14 +85,14 @@ func step(building: Building) -> void:
 ## a policy without them never receives this list.
 func _waiting_floors(building: Building) -> PackedInt32Array:
 	var out := PackedInt32Array()
-	for row in range(building.row_count):
-		if not building.waiting_at(row).is_empty():
-			out.append(row)
+	for floor_index in range(building.floor_count):
+		if not building.waiting_at(floor_index).is_empty():
+			out.append(floor_index)
 	return out
 
 ## Where the people already aboard want to go: the car call buttons.
 func _rider_floors(car: ElevatorCar) -> PackedInt32Array:
 	var out := PackedInt32Array()
 	for p in car.riders:
-		out.append(p.destination_row)
+		out.append(p.destination_floor)
 	return out

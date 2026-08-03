@@ -19,7 +19,7 @@ signal pan_requested(delta: Vector2)
 ##
 ## There is NO occupancy count while the rack is drawn. Four filled squares of
 ## four is the count -- printing "4/4" beside it says the same thing twice and
-## spends the only line of type the car has. The count returns only when the row
+## spends the only line of type the car has. The count returns only when the floor
 ## is too short to draw seats at all, which is the one case where the picture is
 ## gone and the number is all there is.
 const SEAT_SIZE := Vector2(ChipGrid.SIZE, ChipGrid.SIZE)
@@ -104,7 +104,7 @@ func setup(index: int, coords: BoardCoords, car_floor_provider: Callable) -> voi
 	_door_left = _make_door()
 	_door_right = _make_door()
 
-## position_row is FRACTIONAL -- a car mid-trip sits at 2.4 -- so this uses the
+## position_floor is FRACTIONAL -- a car mid-trip sits at 2.4 -- so this uses the
 ## continuous car_y rather than the integer floor mapping. Coercing to an int
 ## would make a moving car jump between floors instead of gliding.
 func _make_door() -> ColorRect:
@@ -131,11 +131,11 @@ func set_doors(open_fraction: float) -> void:
 func door_width() -> float:
 	return _door_left.size.x if _door_left != null else 0.0
 
-func set_car_position(position_row: float) -> void:
+func set_car_position(position_floor: float) -> void:
 	_shaft_bg.position = Vector2(0, _coords.floor_to_y(_coords.top_floor))
 	_shaft_bg.size = Vector2(size.x, _coords.content_height())
-	_car_rect.position = Vector2(3, _coords.car_y(position_row) + 2.0)
-	_car_rect.size = Vector2(size.x - 6.0, _coords.row_height - 4.0)
+	_car_rect.position = Vector2(3, _coords.car_y(position_floor) + 2.0)
+	_car_rect.size = Vector2(size.x - 6.0, _coords.floor_height - 4.0)
 	_car_label.size = _car_rect.size
 
 ## What is aboard, where it is going, and how much room is left -- as a picture
@@ -167,14 +167,14 @@ func set_riders(riders: Array, capacity: int) -> void:
 			_seats[i].visible = false
 			var p: Passenger = riders[i]
 			_chips[i].position = at
-			_chips[i].show_as(p.patience_fraction(), str(p.destination_row))
-			_listed.append(str(p.destination_row))
+			_chips[i].show_as(p.patience_fraction(), str(p.destination_floor))
+			_listed.append(str(p.destination_floor))
 		else:
 			_chips[i].recycle()
 			_seats[i].visible = true
 			_seats[i].position = at
 
-## The row is too short for even one rank of seats -- at the 40-floor cap the
+## The floor is too short for even one rank of seats -- at the 40-floor cap the
 ## car is 25.6 units tall. The picture is gone, so the count comes back, with as
 ## many destinations as the line can hold.
 func _draw_header_only(riders: Array, capacity: int) -> void:
@@ -191,7 +191,7 @@ func _header_for(riders: Array, capacity: int) -> String:
 	var head := "%d/%d" % [riders.size(), capacity]
 	var tail := ""
 	for p in riders:
-		var floor_text := str((p as Passenger).destination_row)
+		var floor_text := str((p as Passenger).destination_floor)
 		var candidate := tail + " " + floor_text
 		if head.length() + candidate.length() > HEADER_BUDGET:
 			break
@@ -250,7 +250,7 @@ func _gui_input(event: InputEvent) -> void:
 	elif PointerEvents.is_release(event):
 		match _gesture.release():
 			Gesture.Result.TAP:
-				dispatch_requested.emit(shaft_index, _gesture.selected_row())
+				dispatch_requested.emit(shaft_index, _gesture.selected_floor())
 			Gesture.Result.SURGE:
 				surge_requested.emit(shaft_index)
 			_:

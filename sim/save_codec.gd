@@ -16,20 +16,56 @@ extends RefCounted
 ##
 ## FORMAT IS VERSIONED. A save written by an older build must either load or be
 ## refused, never be half-read into a state that looks fine and is not. v2 adds a
-## kind and a class per row; v1 migrates -- §4.3 defines what rows past the
-## roster get, so a v1 fallthrough is read, not refused.
+## kind and a class per floor; v1 migrates -- §4.3 defines what floors past the
+## roster get, so a v1 fallthrough is read, not refused. v3 renames the domain
+## vocabulary from "row" to "floor" and migrates the keys on read.
 
-const VERSION := 2
-const SUPPORTED_VERSIONS := [1, 2]
+const VERSION := 3
+const SUPPORTED_VERSIONS := [1, 2, 3]
+
+## v3 is a KEY RENAME, not a format change: a v1 or v2 save differs only in how
+## these are spelled. Migration runs before _is_usable, which indexes the new
+## names.
+##
+## `version` is deliberately NOT rewritten. The v1 and v2 branches further down
+## still have to know which one they are reading, and a save that claimed to be
+## v3 after a key rename would skip the tenancy migration it still needs.
+const V3_KEYS := {"row_count": "floor_count", "rows": "floors"}
+const V3_CAR_KEYS := {
+	"position_row": "position_floor",
+	"target_row": "target_floor",
+	"rows_per_tick": "floors_per_tick",
+}
+
+static func _migrate_to_v3(data: Dictionary) -> Dictionary:
+	if int(data.get("version", -1)) >= 3:
+		return data
+	var out := data.duplicate(true)
+	for old in V3_KEYS:
+		if out.has(old):
+			out[V3_KEYS[old]] = out[old]
+			out.erase(old)
+	for car in out.get("cars", []):
+		if typeof(car) != TYPE_DICTIONARY:
+			continue
+		for old in V3_CAR_KEYS:
+			if car.has(old):
+				car[V3_CAR_KEYS[old]] = car[old]
+				car.erase(old)
+	var levels: Dictionary = out.get("levels", {})
+	if levels.has("row"):
+		levels["floor"] = levels["row"]
+		levels.erase("row")
+	return out
 
 static func encode(state: GameState) -> Dictionary:
 	var cars := []
 	for car in state.building.cars:
 		cars.append({
-			"position_row": car.position_row,
-			"target_row": car.target_row,
+			"position_floor": car.position_floor,
+			"target_floor": car.target_floor,
 			"capacity": car.capacity,
-			"rows_per_tick": car.rows_per_tick,
+			"floors_per_tick": car.floors_per_tick,
 			"door_ticks": car.door_ticks,
 			"spring_multiplier": car.spring_multiplier,
 		})
@@ -42,22 +78,22 @@ static func encode(state: GameState) -> Dictionary:
 	for shaft in range(state.building.cars.size()):
 		policies.append(state.auto.preset_of(shaft))
 
-	# Tenancy is stored per row rather than as a summary: satisfaction is what
+	# Tenancy is stored per floor rather than as a summary: satisfaction is what
 	# rent is scaled by, and a vacancy the player has not paid to re-lease is a
 	# debt they would otherwise reload their way out of.
-	var rows := []
-	for row in range(state.building.row_count):
-		rows.append({
-			"satisfaction": state.tenancy.satisfaction_at(row),
-			"vacant": state.tenancy.is_vacant(row),
-			"move_out_left": state.tenancy.move_out_ticks_left(row),
+	var floors := []
+	for floor_index in range(state.building.floor_count):
+		floors.append({
+			"satisfaction": state.tenancy.satisfaction_at(floor_index),
+			"vacant": state.tenancy.is_vacant(floor_index),
+			"move_out_left": state.tenancy.move_out_ticks_left(floor_index),
 			# null, not absent: v2 requires the field present, and a vacant or
 			# newly purchased floor genuinely has no kind. Without an explicit
 			# encoding "a missing kind is malformed" and "vacant floors have no
 			# kind" contradict each other.
-			"kind": null if state.tenancy.kind_at(row).is_empty() \
-				else state.tenancy.kind_at(row),
-			"class": state.fitout.tier_at(row),
+			"kind": null if state.tenancy.kind_at(floor_index).is_empty() \
+				else state.tenancy.kind_at(floor_index),
+			"class": state.fitout.tier_at(floor_index),
 		})
 
 	return {
@@ -69,22 +105,23 @@ static func encode(state: GameState) -> Dictionary:
 		"combo": state.economy.combo,
 		"streak": state.economy.streak,
 		"riders_served": state.economy.riders_served,
-		"row_count": state.building.row_count,
+		"floor_count": state.building.floor_count,
 		"cars": cars,
 		"levels": levels,
 		"policies": policies,
-		"rows": rows,
+		"floors": floors,
 	}
 
 ## Rebuilds a state from a save. Returns null when the save is unusable, so the
 ## caller starts fresh rather than running on a half-applied one.
-static func decode(data: Dictionary) -> GameState:
+static func decode(p_data: Dictionary) -> GameState:
+	var data := _migrate_to_v3(p_data)
 	if not _is_usable(data):
 		return null
 
-	var rows: int = int(data["row_count"])
+	var floors: int = int(data["floor_count"])
 	var cars: Array = data["cars"]
-	var state := GameState.new(rows, maxi(cars.size(), 1), int(data["seed"]))
+	var state := GameState.new(floors, maxi(cars.size(), 1), int(data["seed"]))
 
 	state.clock.ticks_executed = int(data["ticks"])
 	state.economy.cash = float(data["cash"])
@@ -100,32 +137,35 @@ static func decode(data: Dictionary) -> GameState:
 	for i in range(mini(cars.size(), state.building.cars.size())):
 		var saved: Dictionary = cars[i]
 		var car: ElevatorCar = state.building.cars[i]
-		car.position_row = float(saved.get("position_row", 0.0))
-		car.target_row = int(saved.get("target_row", 0))
+		car.position_floor = float(saved.get("position_floor", 0.0))
+		car.target_floor = int(saved.get("target_floor", 0))
 		car.capacity = int(saved.get("capacity", car.capacity))
-		car.rows_per_tick = float(saved.get("rows_per_tick", car.rows_per_tick))
+		car.floors_per_tick = float(saved.get("floors_per_tick", car.floors_per_tick))
 		car.door_ticks = int(saved.get("door_ticks", car.door_ticks))
 		car.spring_multiplier = float(saved.get("spring_multiplier", 1.0))
 
 	var version := int(data["version"])
-	var saved_rows: Array = data.get("rows", [])
-	# v1 may fall through -- §4.3 defines what rows past the roster get.
+	var saved_floors: Array = data.get("floors", [])
+	# v1 may fall through -- §4.3 defines what floors past the roster get.
 	# v2 may not: a short array silently keeps a constructor default that
 	# contradicts the save, and past the roster that default is VACANCY, i.e.
 	# the silent loss of a floor the player leased.
-	if version == 2 and saved_rows.size() < state.building.row_count:
+	# `>= 2`, not `== 2`: v3 is v2's format with renamed keys, so it inherits
+	# this refusal. Pinning the literal is how the guard silently stopped
+	# covering current saves the moment VERSION moved.
+	if version >= 2 and saved_floors.size() < state.building.floor_count:
 		return null
 
-	for row in range(mini(saved_rows.size(), state.building.row_count)):
-		var r: Dictionary = saved_rows[row]
-		if version == 2 and not (r.has("kind") and r.has("class")):
+	for floor_index in range(mini(saved_floors.size(), state.building.floor_count)):
+		var r: Dictionary = saved_floors[floor_index]
+		if version >= 2 and not (r.has("kind") and r.has("class")):
 			return null
 		var vacant := bool(r.get("vacant", false))
-		state.tenancy.restore_row(row, float(r.get("satisfaction", 1.0)),
+		state.tenancy.restore_floor(floor_index, float(r.get("satisfaction", 1.0)),
 			vacant, int(r.get("move_out_left", 0)))
-		state.fitout.set_tier(row, clampi(int(r.get("class", 1)), 1,
+		state.fitout.set_tier(floor_index, clampi(int(r.get("class", 1)), 1,
 			state.catalog.max_tier()))
-		state.tenancy.set_kind(row, _restore_kind(state, row, version, r, vacant))
+		state.tenancy.set_kind(floor_index, _restore_kind(state, floor_index, version, r, vacant))
 
 	# Policies go through set_policy, so a save cannot grant a shaft a policy
 	# the hardware does not support or more licences than were bought.
@@ -135,12 +175,12 @@ static func decode(data: Dictionary) -> GameState:
 
 	return state
 
-## A vacant row has no kind. A v1 row infers `apartments`; a v2 row carries an
+## A vacant floor has no kind. A v1 floor infers `apartments`; a v2 floor carries an
 ## explicit id or null. Either way the result is cross-checked against the
 ## restored class, because independent validation lets {class: 1, kind:
 ## "law_firm"} through -- a known id skips the unknown-id fallback and the
 ## class clamp never looks at the kind.
-static func _restore_kind(state: GameState, row: int, version: int,
+static func _restore_kind(state: GameState, floor_index: int, version: int,
 		r: Dictionary, vacant: bool) -> String:
 	if vacant:
 		return ""
@@ -153,7 +193,7 @@ static func _restore_kind(state: GameState, row: int, version: int,
 	if id.is_empty():
 		return ""
 	var k := state.catalog.kind(id)
-	var tier := state.fitout.tier_at(row)
+	var tier := state.fitout.tier_at(floor_index)
 	if k == null or k.requires_class > tier:
 		var fallback := state.catalog.cheapest_for_class(tier)
 		return "" if fallback == null else fallback.id
@@ -165,9 +205,9 @@ static func _restore_kind(state: GameState, row: int, version: int,
 static func _is_usable(data: Dictionary) -> bool:
 	if not SUPPORTED_VERSIONS.has(int(data.get("version", -1))):
 		return false
-	for key in ["seed", "ticks", "cash", "row_count", "cars"]:
+	for key in ["seed", "ticks", "cash", "floor_count", "cars"]:
 		if not data.has(key):
 			return false
 	if typeof(data["cars"]) != TYPE_ARRAY:
 		return false
-	return int(data["row_count"]) >= 1
+	return int(data["floor_count"]) >= 1

@@ -19,7 +19,7 @@ func press(f: int, car_floor: int) -> void:
 	g.press(Vector2(0, centre_of(f)), car_floor)
 
 func test_threshold_is_under_half_a_row() -> void:
-	# Half a row is 14.8 at the real board height. Under it, or dispatching to
+	# Half a floor is 14.8 at the real board height. Under it, or dispatching to
 	# the floor your thumb is on is unreachable.
 	assert_lt(Gesture.DRAG_THRESHOLD, H * 0.5)
 
@@ -28,18 +28,18 @@ func test_a_tap_resolves_to_the_floor_under_the_thumb() -> void:
 	# the car's floor.
 	press(10, 30)
 	assert_eq(g.release(), Gesture.Result.TAP)
-	assert_eq(g.selected_row(), 10, "the floor touched, not the car's floor")
+	assert_eq(g.selected_floor(), 10, "the floor touched, not the car's floor")
 
 func test_a_tap_anywhere_in_a_band_selects_that_band() -> void:
 	for frac in [0.01, 0.5, 0.99]:
 		g.press(Vector2(0, float(FLOORS - 1 - 7) * H + H * frac), 0)
 		assert_eq(g.release(), Gesture.Result.TAP)
-		assert_eq(g.selected_row(), 7, "%.0f%% into floor 7's band" % [frac * 100.0])
+		assert_eq(g.selected_floor(), 7, "%.0f%% into floor 7's band" % [frac * 100.0])
 
 func test_a_tap_on_the_lobby_selects_the_lobby() -> void:
 	press(0, 20)
 	assert_eq(g.release(), Gesture.Result.TAP)
-	assert_eq(g.selected_row(), 0)
+	assert_eq(g.selected_floor(), 0)
 
 func test_a_wobble_under_the_threshold_is_still_a_tap() -> void:
 	# Below DRAG_THRESHOLD nothing is a drag, so a tap resolves against the
@@ -47,7 +47,7 @@ func test_a_wobble_under_the_threshold_is_still_a_tap() -> void:
 	press(10, 30)
 	g.move(Vector2(0, centre_of(10) + Gesture.DRAG_THRESHOLD - 0.1))
 	assert_eq(g.release(), Gesture.Result.TAP)
-	assert_eq(g.selected_row(), 10)
+	assert_eq(g.selected_floor(), 10)
 
 func test_crossing_the_threshold_becomes_a_pan() -> void:
 	press(10, 10)
@@ -61,16 +61,16 @@ func test_a_pan_keeps_the_cars_floor_untouched() -> void:
 	press(10, 7)
 	g.move(Vector2(0, centre_of(10) - Gesture.DRAG_THRESHOLD - 0.1))
 	g.release()
-	assert_eq(g.selected_row(), 7)
+	assert_eq(g.selected_floor(), 7)
 
 func test_the_board_is_bottom_up() -> void:
 	g.press(Vector2(0, 0.0), 0)
 	assert_eq(g.release(), Gesture.Result.TAP)
-	assert_eq(g.selected_row(), FLOORS - 1, "the top of the column is the top floor")
+	assert_eq(g.selected_floor(), FLOORS - 1, "the top of the column is the top floor")
 
 	g.press(Vector2(0, float(FLOORS) * H - 1.0), 0)
 	assert_eq(g.release(), Gesture.Result.TAP)
-	assert_eq(g.selected_row(), 0, "the bottom of the column is the lobby")
+	assert_eq(g.selected_floor(), 0, "the bottom of the column is the lobby")
 
 func test_pan_delta_is_cumulative_and_consumed() -> void:
 	press(10, 10)
@@ -85,7 +85,7 @@ func test_release_without_press_is_none() -> void:
 
 func test_rail_starts_at_the_cars_floor() -> void:
 	press(4, 12)
-	assert_eq(g.selected_row(), 12, "before any movement, the car's floor")
+	assert_eq(g.selected_floor(), 12, "before any movement, the car's floor")
 
 func test_a_second_press_resets_state() -> void:
 	press(0, 0)
@@ -94,4 +94,4 @@ func test_a_second_press_resets_state() -> void:
 	press(0, 3)
 	assert_false(g.is_panning(), "the previous drag must not carry over")
 	assert_eq(g.release(), Gesture.Result.TAP)
-	assert_eq(g.selected_row(), 0, "the second press's own floor, not floor 10")
+	assert_eq(g.selected_floor(), 0, "the second press's own floor, not floor 10")

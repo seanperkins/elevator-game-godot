@@ -58,11 +58,11 @@ func uses(source: int) -> bool:
 
 ## Floors worth considering from `from`, sorted, never including `from` itself:
 ## a car does not travel to where it already is.
-func candidates(from: int, row_count: int, waiting: PackedInt32Array,
+func candidates(from: int, floor_count: int, waiting: PackedInt32Array,
 		rider_floors: PackedInt32Array, car_is_full := false) -> PackedInt32Array:
 	var seen := {}
 	if uses(Source.EVERY_FLOOR):
-		for f in range(row_count):
+		for f in range(floor_count):
 			seen[f] = true
 	# A full car still has to deliver the people inside it, so car calls always
 	# count; only the hall calls it cannot serve are passed.
@@ -74,19 +74,19 @@ func candidates(from: int, row_count: int, waiting: PackedInt32Array,
 			seen[f] = true
 	var out := PackedInt32Array()
 	for f in seen.keys():
-		if f != from and f >= 0 and f < row_count:
+		if f != from and f >= 0 and f < floor_count:
 			out.append(f)
 	out.sort()
 	return out
 
-## The next floor and the direction to carry forward, as (row, direction).
-## `row` is STAY_PUT when there is nothing to do and nowhere to idle.
-func choose(from: int, row_count: int, waiting: PackedInt32Array,
+## The next floor and the direction to carry forward, as (floor, direction).
+## `floor` is STAY_PUT when there is nothing to do and nowhere to idle.
+func choose(from: int, floor_count: int, waiting: PackedInt32Array,
 		rider_floors: PackedInt32Array, direction: int,
 		car_is_full := false) -> Vector2i:
-	if row_count <= 1:
+	if floor_count <= 1:
 		return Vector2i(STAY_PUT, direction)
-	var options := candidates(from, row_count, waiting, rider_floors, car_is_full)
+	var options := candidates(from, floor_count, waiting, rider_floors, car_is_full)
 	if options.is_empty():
 		# Homing is what stops a call-driven car from parking wherever it
 		# happened to finish, which on a tall building is usually the worst

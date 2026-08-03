@@ -7,7 +7,7 @@ func before_each() -> void:
 
 func test_dispatch_moves_the_named_car() -> void:
 	assert_true(gs.dispatch(0, 3))
-	assert_eq(gs.building.cars[0].target_row, 3)
+	assert_eq(gs.building.cars[0].target_floor, 3)
 
 func test_dispatch_rejects_an_unknown_shaft() -> void:
 	assert_false(gs.dispatch(9, 3))
@@ -26,7 +26,7 @@ func test_delivery_beats_expiry_at_exactly_zero_patience() -> void:
 	var p := Passenger.new(0, 1, 1, 10.0, 0)
 	gs.building.enqueue(p)
 	var car: ElevatorCar = gs.building.cars[0]
-	car.dispatch_to(0)                 # doors open at row 0
+	car.dispatch_to(0)                 # doors open at floor 0
 	var delivered := []
 	gs.passenger_delivered.connect(func(pp, _paid): delivered.append(pp))
 	var expired := []
@@ -35,8 +35,8 @@ func test_delivery_beats_expiry_at_exactly_zero_patience() -> void:
 	assert_eq(expired.size(), 0, "must not expire at exactly zero")
 
 func test_expiry_fires_below_zero_patience() -> void:
-	# Row 3, not row 0: the car parks at the lobby and now answers calls there,
-	# so a passenger left at floor 0 is rescued before it can expire. The row was
+	# Row 3, not floor 0: the car parks at the lobby and now answers calls there,
+	# so a passenger left at floor 0 is rescued before it can expire. The floor was
 	# always incidental here -- this test is about the patience boundary.
 	var p := Passenger.new(3, 1, 0, 10.0, 3)
 	gs.building.enqueue(p)
@@ -55,18 +55,18 @@ func test_expiry_breaks_the_combo() -> void:
 
 func test_a_full_trip_boards_delivers_and_pays() -> void:
 	var car: ElevatorCar = gs.building.cars[0]
-	car.rows_per_tick = 1.0            # one row per tick, fast for the test
+	car.floors_per_tick = 1.0            # one floor per tick, fast for the test
 	# Two ticks of dwell, not one: doors are stepped in the move/doors phase,
 	# which runs BEFORE deliver, so a one-tick dwell opened between ticks shuts
 	# before anyone can board. At the shipped 20-tick dwell this is invisible.
 	car.door_ticks = 2
 	gs.building.enqueue(Passenger.new(0, 2, 100000, 10.0, 0))
-	gs.dispatch(0, 0)                  # open at row 0 to board
+	gs.dispatch(0, 0)                  # open at floor 0 to board
 	gs.tick(1)
 	assert_eq(car.riders.size(), 1, "boarded while the doors were open")
 	gs.dispatch(0, 2)
 	gs.tick(5)
-	assert_eq(car.riders.size(), 0, "alighted at row 2")
+	assert_eq(car.riders.size(), 0, "alighted at floor_index 2")
 	assert_gt(gs.economy.cash, 0.0, "the fare was paid")
 	assert_eq(gs.economy.riders_served, 1)
 
@@ -75,7 +75,7 @@ func test_passengers_only_board_a_car_at_their_own_row() -> void:
 	gs.building.enqueue(Passenger.new(4, 0, 100000, 10.0, 4))
 	gs.dispatch(0, 0)
 	gs.tick(1)
-	assert_eq(car.riders.size(), 0, "the car is at row 0, they wait at row 4")
+	assert_eq(car.riders.size(), 0, "the car is at floor_index 0, they wait at floor_index 4")
 
 func test_spawned_passengers_join_the_waiting_queues() -> void:
 	# Counted off the signal, not off total_waiting(): patience is 900 ticks, so
@@ -99,7 +99,7 @@ func test_spawned_passengers_join_the_waiting_queues() -> void:
 		if gs.building.total_waiting() > 0:
 			queued.append(i)
 	assert_gt(spawned.size(), 0, "traffic must actually appear")
-	assert_false(queued.is_empty(), "and it queues on its origin row")
+	assert_false(queued.is_empty(), "and it queues on its origin floor_index")
 
 func test_the_sim_is_deterministic_for_a_given_seed() -> void:
 	var a := GameState.new(6, 1, 777)
@@ -146,7 +146,7 @@ func test_delivery_credits_the_generating_floor_not_the_destination() -> void:
 	gs.building.enqueue(p)
 	# Short windows, deliberately NOT a full minute: 30 expiries start a
 	# 1200-tick move-out countdown, so a full minute is just long enough for
-	# floor 4 to VACATE -- and note_delivery is a no-op on a vacant row, which
+	# floor 4 to VACATE -- and note_delivery is a no-op on a vacant floor, which
 	# would suppress the very credit this test asserts.
 	gs.tick(200)                         # car reaches 4, doors open, boards
 	gs.building.cars[0].dispatch_to(0)   # send it back so the rider alights
@@ -174,10 +174,10 @@ func test_expiry_lowers_the_generating_rows_satisfaction() -> void:
 
 func test_buying_a_row_grows_every_per_floor_container() -> void:
 	gs.economy.accrue(1e9)
-	assert_true(gs.buy("row"))
-	assert_eq(gs.building.row_count, 7)
-	assert_eq(gs.tenancy.rows(), 7)
-	assert_eq(gs.fitout.rows(), 7, "one loop grows every container")
+	assert_true(gs.buy("floor"))
+	assert_eq(gs.building.floor_count, 7)
+	assert_eq(gs.tenancy.floors(), 7)
+	assert_eq(gs.fitout.floors(), 7, "one loop grows every container")
 	assert_true(gs.tenancy.is_vacant(6), "a purchased floor is leased, not granted")
 	assert_eq(gs.tenancy.kind_at(6), "")
 	assert_eq(gs.fitout.tier_at(6), 1)
@@ -188,21 +188,21 @@ func test_buying_without_cash_fails() -> void:
 
 func test_a_tall_new_building_tenants_only_the_roster() -> void:
 	# The state every --board= session and every pre-restore decode starts
-	# from. Neither the buy("row") test nor the save round-trips cover it:
+	# from. Neither the buy("floor") test nor the save round-trips cover it:
 	# both pass whether or not _init applies the roster limit.
 	var tall := GameState.new(12, 1, 4242)
-	for row in range(6):
-		assert_false(tall.tenancy.is_vacant(row))
-		assert_ne(tall.tenancy.kind_at(row), "")
-	for row in range(6, 12):
-		assert_true(tall.tenancy.is_vacant(row), "row %d" % row)
-		assert_eq(tall.tenancy.kind_at(row), "")
-		assert_eq(tall.fitout.tier_at(row), 1)
+	for floor_index in range(6):
+		assert_false(tall.tenancy.is_vacant(floor_index))
+		assert_ne(tall.tenancy.kind_at(floor_index), "")
+	for floor_index in range(6, 12):
+		assert_true(tall.tenancy.is_vacant(floor_index), "floor_index %d" % floor_index)
+		assert_eq(tall.tenancy.kind_at(floor_index), "")
+		assert_eq(tall.fitout.tier_at(floor_index), 1)
 
 func test_the_starting_roster_is_shops_over_apartments() -> void:
 	assert_eq(gs.tenancy.kind_at(0), "shops")
-	for row in range(1, 6):
-		assert_eq(gs.tenancy.kind_at(row), "apartments")
+	for floor_index in range(1, 6):
+		assert_eq(gs.tenancy.kind_at(floor_index), "apartments")
 
 func test_a_malformed_catalog_makes_the_state_invalid() -> void:
 	var bad := GameState.new(6, 1, 1, "res://data/does_not_exist.json")
@@ -213,19 +213,19 @@ func test_a_malformed_catalog_makes_the_state_invalid() -> void:
 ## Replaces `spawner.curve = PackedFloat32Array()`, which set a field that is
 ## gone.
 func _silence(state: GameState) -> void:
-	for row in range(1, state.building.row_count):
-		state.tenancy.restore_row(row, 1.0, true, 0)
+	for floor_index in range(1, state.building.floor_count):
+		state.tenancy.restore_floor(floor_index, 1.0, true, 0)
 
-## Drives a row out of its lease and returns once it is vacant.
-func vacate(state: GameState, row: int) -> void:
-	while state.tenancy.satisfaction_at(row) > Tenancy.MOVE_OUT_THRESHOLD:
-		state.tenancy.note_expiry(row)
+## Drives a floor out of its lease and returns once it is vacant.
+func vacate(state: GameState, floor_index: int) -> void:
+	while state.tenancy.satisfaction_at(floor_index) > Tenancy.MOVE_OUT_THRESHOLD:
+		state.tenancy.note_expiry(floor_index)
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
 		state.tenancy.accrue_for_tick()
 
 func test_leasing_charges_the_kinds_price_and_sets_the_kind() -> void:
 	gs.economy.accrue(1000.0)
-	gs.tenancy.restore_row(3, 1.0, true, 0)
+	gs.tenancy.restore_floor(3, 1.0, true, 0)
 	var before := gs.economy.cash
 	assert_true(gs.lease(3, "apartments"))
 	assert_false(gs.tenancy.is_vacant(3))
@@ -234,7 +234,7 @@ func test_leasing_charges_the_kinds_price_and_sets_the_kind() -> void:
 
 func test_a_kind_above_the_floors_class_is_refused() -> void:
 	gs.economy.accrue(1e6)
-	gs.tenancy.restore_row(3, 1.0, true, 0)
+	gs.tenancy.restore_floor(3, 1.0, true, 0)
 	assert_false(gs.lease(3, "law_firm"), "class 1 cannot take a tier-3 tenant")
 	assert_true(gs.tenancy.is_vacant(3))
 
@@ -242,23 +242,23 @@ func test_only_the_cheapest_eligible_kind_is_free_below_two_tenants() -> void:
 	# The guarantee must be exact -- a $0 player can always recover -- without
 	# rewarding collapse. An already-upgraded floor would otherwise hand out a
 	# free premium tenant.
-	for row in range(1, 6):
-		gs.tenancy.restore_row(row, 1.0, true, 0)
+	for floor_index in range(1, 6):
+		gs.tenancy.restore_floor(floor_index, 1.0, true, 0)
 	gs.fitout.set_tier(3, 3)
 	gs.economy.cash = 0.0
 	assert_false(gs.lease(3, "law_firm"), "the expensive one is not free")
 	assert_true(gs.lease(3, "apartments"), "the cheapest eligible one is")
 
 func test_leasing_is_free_when_nothing_is_tenanted() -> void:
-	for row in range(gs.building.row_count):
-		vacate(gs, row)
+	for floor_index in range(gs.building.floor_count):
+		vacate(gs, floor_index)
 	assert_eq(gs.tenancy.tenanted_count(), 0)
 	var before := gs.economy.cash
 	assert_true(gs.lease(0, "apartments"), "the no-fail guarantee")
 	assert_almost_eq(gs.economy.cash, before, 1e-6)
 
 func test_leasing_is_refused_when_unaffordable_and_charges_nothing() -> void:
-	# Row 0 vacated but rows 1-5 stay tenanted, so a full $60 apartments lease
+	# Row 0 vacated but floors 1-5 stay tenanted, so a full $60 apartments lease
 	# applies -- and a $0 player cannot take it.
 	vacate(gs, 0)
 	assert_lt(gs.economy.cash, 60.0, "apartments lease $60 while traffic earns")
@@ -280,9 +280,9 @@ func test_leasing_is_refused_outside_the_building() -> void:
 
 func test_lease_reads_the_cost_before_mutating_tenancy() -> void:
 	# Cost derives from tenanted_count(), which leasing increments, so the
-	# order decides whether the last row costs nothing or full price.
-	for row in range(1, 6):
-		gs.tenancy.restore_row(row, 1.0, true, 0)
+	# order decides whether the last floor costs nothing or full price.
+	for floor_index in range(1, 6):
+		gs.tenancy.restore_floor(floor_index, 1.0, true, 0)
 	gs.economy.cash = 0.0
 	var before := gs.economy.cash
 	assert_true(gs.lease(3, "apartments"))
@@ -292,7 +292,7 @@ const BUCKET_SLACK := 40   # one bucket either side of the boundary
 
 func test_deliveries_reach_the_metrics_window() -> void:
 	var car: ElevatorCar = gs.building.cars[0]
-	car.rows_per_tick = 1.0
+	car.floors_per_tick = 1.0
 	car.door_ticks = 2
 	gs.building.enqueue(Passenger.new(0, 2, 100000, 10.0, 0))
 	gs.dispatch(0, 0)
@@ -328,13 +328,13 @@ func test_upgrading_a_tenanted_floor_changes_its_fare_on_the_next_spawn() -> voi
 	gs.economy.accrue(1e6)
 	var before := 0.0
 	for s in gs._sources():
-		if s.floor_row == 3:
+		if s.floor_index == 3:
 			before = s.fare_multiplier
 	assert_almost_eq(before, 1.0, 1e-9)
 	assert_true(gs.upgrade_class(3))
 	var after := 0.0
 	for s in gs._sources():
-		if s.floor_row == 3:
+		if s.floor_index == 3:
 			after = s.fare_multiplier
 	assert_almost_eq(after, 1.35, 1e-9,
 		"the upgrade pays immediately, with no intervening tenancy event")
@@ -366,10 +366,10 @@ func test_a_new_tenant_on_a_class_three_floor_is_charged_the_multiplier() -> voi
 	gs.economy.accrue(1e6)
 	gs.upgrade_class(3)
 	gs.upgrade_class(3)
-	gs.tenancy.restore_row(3, 1.0, true, 0)
+	gs.tenancy.restore_floor(3, 1.0, true, 0)
 	assert_true(gs.lease(3, "law_firm"))
 	for s in gs._sources():
-		if s.floor_row == 3:
+		if s.floor_index == 3:
 			assert_almost_eq(s.kind.base_fare * s.fare_multiplier, 9.0 * 1.8, 1e-5)
 
 func test_a_move_out_removes_that_floors_waiting_passengers_from_every_queue() -> void:
@@ -383,9 +383,9 @@ func test_a_move_out_removes_that_floors_waiting_passengers_from_every_queue() -
 	# they outlive the move-out window, because patience 900 would expire the
 	# survivor naturally inside 1201 ticks and this test must distinguish
 	# source removal from ordinary expiry.
-	for row in range(gs.building.row_count):
-		if row != 4:
-			gs.tenancy.restore_row(row, 1.0, true, 0)
+	for floor_index in range(gs.building.floor_count):
+		if floor_index != 4:
+			gs.tenancy.restore_floor(floor_index, 1.0, true, 0)
 	# Send the car to the roof FIRST and let it get away from the lobby: a car
 	# parked at floor 0 answers the origin-0 calls below and BOARDs them,
 	# turning waiting passengers into riders. Once parked at 5 it stays there
@@ -407,14 +407,14 @@ func test_a_move_out_removes_that_floors_waiting_passengers_from_every_queue() -
 	assert_true(gs.tenancy.is_vacant(4))
 
 	var left: Array[Passenger] = []
-	for row in range(gs.building.row_count):
-		for p in gs.building.waiting_at(row):
+	for floor_index in range(gs.building.floor_count):
+		for p in gs.building.waiting_at(floor_index):
 			left.append(p)
 	for p in left:
-		assert_ne(p.source_row, 4, "no passenger from the vacated floor remains")
+		assert_ne(p.source_floor, 4, "no passenger from the vacated floor remains")
 	var survivors := 0
 	for p in left:
-		if p.source_row == 2:
+		if p.source_floor == 2:
 			survivors += 1
 	assert_eq(survivors, 1, "another floor's lobby queue is untouched")
 	assert_gte(gs.economy.cash, cash_before,
@@ -458,13 +458,13 @@ func test_the_source_cache_rebuilds_when_a_floor_vacates() -> void:
 	gs.tick(Tenancy.MOVE_OUT_TICKS + 1)
 	assert_true(gs.tenancy.is_vacant(3))
 	for s in gs._sources():
-		assert_ne(s.floor_row, 3, "a vacated floor stops generating traffic")
+		assert_ne(s.floor_index, 3, "a vacated floor stops generating traffic")
 
 # --- a parked car answers a call at its own floor --------------------------
 
 ## Silences traffic so these assert the rule and not the seed.
-func quiet_state(rows := 6, shafts := 1) -> GameState:
-	var st := GameState.new(rows, shafts, 4242)
+func quiet_state(floors := 6, shafts := 1) -> GameState:
+	var st := GameState.new(floors, shafts, 4242)
 	_silence(st)
 	return st
 
@@ -489,8 +489,8 @@ func test_answering_a_call_is_not_dispatch_automation() -> void:
 	st.tick(1)
 	st.building.enqueue(Passenger.new(0, 4, 900, 4.0, 0))
 	st.tick(3)
-	assert_eq(car.target_row, 0, "still targeting the floor it is parked on")
-	assert_almost_eq(car.position_row, 0.0, 1e-9, "and it has not moved")
+	assert_eq(car.target_floor, 0, "still targeting the floor it is parked on")
+	assert_almost_eq(car.position_floor, 0.0, 1e-9, "and it has not moved")
 
 func test_a_parked_car_ignores_a_call_on_a_different_floor() -> void:
 	var st := quiet_state()
@@ -517,7 +517,7 @@ func test_a_full_parked_car_does_not_open_its_doors() -> void:
 func test_a_moving_car_does_not_answer_calls_it_passes() -> void:
 	var st := quiet_state()
 	var car: ElevatorCar = st.building.cars[0]
-	car.rows_per_tick = 0.2
+	car.floors_per_tick = 0.2
 	st.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
 	st.dispatch(0, 5)
 	st.tick(3)

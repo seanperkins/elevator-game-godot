@@ -150,7 +150,7 @@ func fare_multiplier(tier: int) -> float:
 func max_tier() -> int:
 	return _max_tier
 
-## The largest single rate bucket across every kind. MAX_ROWS x this is the
+## The largest single rate bucket across every kind. MAX_FLOORS x this is the
 ## worst-case summed rate, which must stay under TICKS_PER_SIM_MINUTE -- the
 ## spawner's denominator, not a real minute -- or the Bernoulli trial clips
 ## silently at p = 1.

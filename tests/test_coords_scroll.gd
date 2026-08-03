@@ -1,11 +1,11 @@
 extends GutTest
 
-## The scrolling board's transform: a FIXED row height, a scroll offset, and
+## The scrolling board's transform: a FIXED floor height, a scroll offset, and
 ## floors that may go below zero.
 ##
 ## The old model derived height from the floor count so everything fitted one
 ## screen. This one fixes the height and moves the window instead, which is what
-## makes a 48pt row and a basement possible at the same time.
+## makes a 48pt floor and a basement possible at the same time.
 
 const H := 88.0
 
@@ -15,7 +15,7 @@ func tower(top: int, bottom := 0) -> BoardCoords:
 func test_a_row_is_the_same_height_however_tall_the_building() -> void:
 	# The whole point: legibility stops depending on how much you have built.
 	for top in [5, 39, 200]:
-		assert_almost_eq(tower(top).row_height, H, 1e-9, "top=%d" % top)
+		assert_almost_eq(tower(top).floor_height, H, 1e-9, "top=%d" % top)
 
 func test_floors_still_run_bottom_up() -> void:
 	var c := tower(5)

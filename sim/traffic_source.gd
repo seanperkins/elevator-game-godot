@@ -5,12 +5,12 @@ extends RefCounted
 ## trips are worth. Exists so the spawner never learns about Tenancy or Fitout
 ## -- it is handed a plain array and knows nothing about where it came from.
 
-var floor_row: int
+var floor_index: int
 var kind: TenantKind
 var fare_multiplier: float
 
 func _init(p_floor: int, p_kind: TenantKind, p_multiplier: float) -> void:
-	floor_row = p_floor
+	floor_index = p_floor
 	kind = p_kind
 	fare_multiplier = p_multiplier
 

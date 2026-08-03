@@ -1,14 +1,14 @@
 class_name BoardCoords
 extends RefCounted
 
-## The single row<->y identity for the board. Floors run bottom-up, and the
+## The single floor<->y identity for the board. Floors run bottom-up, and the
 ## bottom is not necessarily zero: a building with a basement runs from a
 ## negative floor upward.
 ##
 ## ROW HEIGHT IS FIXED, and the board scrolls to whatever does not fit. It used
 ## to be derived -- `1184 / floors` -- so every floor fitted one screen, and
 ## that single expression was upstream of every compromise the board made: 16pt
-## rows at the cap, the crowd-bar tier, the seat rack collapsing to text, the
+## floors at the cap, the crowd-bar tier, the seat rack collapsing to text, the
 ## 40-floor limit, and a basement competing with the tower for screen height.
 ## Those were not six problems. They were one problem counted six times.
 ##
@@ -27,7 +27,7 @@ extends RefCounted
 
 var bottom_floor: int = 0
 var top_floor: int = 0
-var row_height: float
+var floor_height: float
 var scroll_offset: float = 0.0
 
 var _viewport_height: float = 0.0
@@ -40,12 +40,12 @@ static func fixed(bottom: int, top: int, height: float) -> BoardCoords:
 	c.top_floor = maxi(top, bottom)
 	return c
 
-func _init(p_floor_count: int, p_row_height: float) -> void:
+func _init(p_floor_count: int, p_floor_height: float) -> void:
 	floor_count = maxi(p_floor_count, 1)
-	row_height = maxf(p_row_height, 0.001)
+	floor_height = maxf(p_floor_height, 0.001)
 	top_floor = floor_count - 1
 	for k in range(floor_count + 1):
-		_edges.append(float(k) * row_height)
+		_edges.append(float(k) * floor_height)
 
 var floor_count: int:
 	set(value):
@@ -56,7 +56,7 @@ var _floor_count: int = 1
 
 ## How tall the whole building is, scrolled or not.
 func content_height() -> float:
-	return float(floor_count) * row_height
+	return float(floor_count) * floor_height
 
 ## The window the board is looking through. Needed to clamp scrolling: you can
 ## see past the roof only if there is nothing below to come into view.
@@ -77,7 +77,7 @@ func scroll_by(delta: float) -> void:
 ## slack goes above it -- the lobby stays at the bottom of the screen and the
 ## empty space is sky, which is also where the "+ BUILD FLOOR" band lives. Left
 ## unhandled, a six-floor tower hangs from the top of the board with a void
-## beneath it and the ghost row off-screen entirely.
+## beneath it and the ghost floor off-screen entirely.
 func _ground_offset() -> float:
 	return maxf(_viewport_height - content_height(), 0.0)
 
@@ -86,12 +86,12 @@ func floor_to_y(f: int) -> float:
 	return _unscrolled_y(f) + _ground_offset() - scroll_offset
 
 func band_centre_y(f: int) -> float:
-	return floor_to_y(f) + row_height * 0.5
+	return floor_to_y(f) + floor_height * 0.5
 
 ## Continuous form, for a car at a fractional floor like 2.4 -- or -1.5, on the
 ## way into the basement. Agrees with floor_to_y bit-for-bit at integers.
-func car_y(position_row: float) -> float:
-	return (float(top_floor) - position_row) * row_height \
+func car_y(position_floor: float) -> float:
+	return (float(top_floor) - position_floor) * floor_height \
 		+ _ground_offset() - scroll_offset
 
 ## The floor whose band contains y, by comparison against the same edges

@@ -7,20 +7,20 @@ extends RefCounted
 
 enum State { IDLE, MOVING, DOORS }
 
-var position_row: float
-var target_row: int
+var position_floor: float
+var target_floor: int
 var state: int = State.IDLE
 var riders: Array[Passenger] = []
 
 var capacity: int = 4
-## 0.04 rows per tick is 0.8 floors a second at 20Hz -- about 1.25s a floor.
+## 0.04 floors per tick is 0.8 floors a second at 20Hz -- about 1.25s a floor.
 ## It was 0.1, i.e. two floors a second, which read as a lift on a wire rather
 ## than one carrying people, and left the speed upgrade with nothing to buy.
 ##
 ## This MUST match Upgrades.SPEED_BASE: the starting car is never _sync_car'd,
 ## so it runs on this default while every later car runs on the upgrade curve.
 ## A test pins the two together.
-var rows_per_tick: float = 0.04
+var floors_per_tick: float = 0.04
 var door_ticks: int = 20
 
 ## The lobby launch spring: a mechanical assist that throws the car from the
@@ -30,14 +30,14 @@ var spring_multiplier: float = 1.0
 var _door_remaining: int = 0
 var _launched: bool = false
 
-func _init(start_row: int) -> void:
-	position_row = float(start_row)
-	target_row = start_row
+func _init(start_floor: int) -> void:
+	position_floor = float(start_floor)
+	target_floor = start_floor
 
 ## A spring trip is the lobby to the top floor and nothing else. Whoever
 ## dispatches decides, because the car does not know how tall the building is.
-static func is_spring_trip(from: int, to: int, row_count: int) -> bool:
-	return row_count > 1 and from == 0 and to == row_count - 1
+static func is_spring_trip(from: int, to: int, floor_count: int) -> bool:
+	return floor_count > 1 and from == 0 and to == floor_count - 1
 
 ## A launched car is COMMITTED: it cannot be stopped or redirected until it
 ## arrives. That is the trade the spring makes -- four times the speed, and no
@@ -45,19 +45,19 @@ static func is_spring_trip(from: int, to: int, row_count: int) -> bool:
 func is_committed() -> bool:
 	return _launched and state == State.MOVING
 
-func launch_to(row: int) -> void:
-	dispatch_to(row, true)
+func launch_to(floor_index: int) -> void:
+	dispatch_to(floor_index, true)
 
 ## `express` is passed rather than set around the call: setting it beforehand
 ## and letting dispatch_to clear it is order-dependent, and it silently undid
 ## every launch.
-func dispatch_to(row: int, express := false) -> void:
+func dispatch_to(floor_index: int, express := false) -> void:
 	if is_committed():
 		return
 	_launched = express
-	target_row = row
-	if is_equal_approx(position_row, float(row)):
-		position_row = float(row)
+	target_floor = floor_index
+	if is_equal_approx(position_floor, float(floor_index)):
+		position_floor = float(floor_index)
 		_open_doors()
 	else:
 		state = State.MOVING
@@ -72,15 +72,15 @@ func step(delta_ticks: int) -> void:
 			pass
 
 func _step_moving(delta_ticks: int) -> void:
-	var rate := rows_per_tick * (spring_multiplier if _launched else 1.0)
+	var rate := floors_per_tick * (spring_multiplier if _launched else 1.0)
 	var travel := rate * float(delta_ticks)
-	var remaining := float(target_row) - position_row
+	var remaining := float(target_floor) - position_floor
 	if absf(remaining) <= travel:
-		position_row = float(target_row)   # snap; never overshoot
+		position_floor = float(target_floor)   # snap; never overshoot
 		_launched = false
 		_open_doors()
 	else:
-		position_row += signf(remaining) * travel
+		position_floor += signf(remaining) * travel
 
 func _step_doors(delta_ticks: int) -> void:
 	_door_remaining -= delta_ticks
@@ -127,8 +127,8 @@ func answer_call() -> bool:
 	_open_doors()
 	return true
 
-func current_row() -> int:
-	return int(roundf(position_row))
+func current_floor() -> int:
+	return int(roundf(position_floor))
 
 ## Boarding and alighting happen only while the doors are OPEN -- not merely
 ## while the car is stopped. The window excludes the opening and closing slides,
@@ -147,15 +147,15 @@ func board(p: Passenger) -> bool:
 	riders.append(p)
 	return true
 
-## Removes and returns the riders whose destination is the current row.
+## Removes and returns the riders whose destination is the current floor.
 func take_arrivals() -> Array[Passenger]:
 	var out: Array[Passenger] = []
 	if not is_available():
 		return out
-	var row := current_row()
+	var floor_index := current_floor()
 	var staying: Array[Passenger] = []
 	for p in riders:
-		if p.destination_row == row:
+		if p.destination_floor == floor_index:
 			out.append(p)
 		else:
 			staying.append(p)

@@ -8,7 +8,7 @@ func height_for(floors: int) -> float:
 func test_floor_zero_is_the_bottom_band() -> void:
 	var c := BoardCoords.new(6, height_for(6))
 	assert_almost_eq(c.floor_to_y(0), 5.0 * height_for(6), 1e-9,
-		"the lobby's top edge is one row above the column's bottom")
+		"the lobby's top edge is one floor_index above the column's bottom")
 	assert_almost_eq(c.floor_to_y(5), 0.0, 1e-9, "the top floor starts at y=0")
 
 func test_round_trip_is_exact_at_every_floor_count() -> void:
@@ -60,12 +60,12 @@ func test_car_y_is_continuous() -> void:
 	assert_almost_eq(c.car_y(5.0), 0.0, 1e-9)
 
 func test_car_y_agrees_exactly_with_floor_to_y_at_integers() -> void:
-	# The car and the row it stops at must not disagree by a float hair.
+	# The car and the floor it stops at must not disagree by a float hair.
 	for floors in [6, 29, 40]:
 		var c := BoardCoords.new(floors, height_for(floors))
 		for f in range(floors):
 			assert_eq(c.car_y(float(f)), c.floor_to_y(f),
-				"N=%d floor %d: car and row must be bit-identical" % [floors, f])
+				"N=%d floor %d: car and floor_index must be bit-identical" % [floors, f])
 
 func test_a_single_floor_building_is_valid() -> void:
 	var c := BoardCoords.new(1, 1184.0)

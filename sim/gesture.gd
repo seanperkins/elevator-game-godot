@@ -9,7 +9,7 @@ extends RefCounted
 ## and dispatch-by-drag could not coexist. Handing dispatch to the tap freed the
 ## drag, and the freed drag is what lets the board be taller than the screen.
 ##
-## What that bought: a fixed 48pt row at any building height, no density tiers,
+## What that bought: a fixed 48pt floor at any building height, no density tiers,
 ## no floor cap, and floors below the lobby. What it cost: the rail preview and
 ## the cancel gesture, both of which existed because a 16pt target invited
 ## mistakes that a 48pt one does not.
@@ -20,7 +20,7 @@ extends RefCounted
 
 enum Result { NONE, TAP, PAN, SURGE }
 
-## Only has to beat thumb wobble now. It used to have to stay under half a row,
+## Only has to beat thumb wobble now. It used to have to stay under half a floor,
 ## because a drag that crossed a band boundary changed the target.
 const DRAG_THRESHOLD := 12.0
 
@@ -30,7 +30,7 @@ var _panning := false
 var _press_pos := Vector2.ZERO
 var _last_pos := Vector2.ZERO
 var _pan_delta := Vector2.ZERO
-var _selected_row := 0
+var _selected_floor := 0
 
 func _init(coords: BoardCoords) -> void:
 	_coords = coords
@@ -41,7 +41,7 @@ func press(pos: Vector2, car_floor: int) -> void:
 	_press_pos = pos
 	_last_pos = pos
 	_pan_delta = Vector2.ZERO
-	_selected_row = car_floor
+	_selected_floor = car_floor
 
 ## Panning is TWO-dimensional: a building is taller than the screen and, with
 ## eight shafts, wider than it too. Looking around is one gesture in both axes
@@ -71,13 +71,13 @@ func release() -> int:
 		return Result.NONE
 	var out := Result.PAN if _panning else Result.TAP
 	if out == Result.TAP:
-		_selected_row = _coords.y_to_floor(_press_pos.y)
+		_selected_floor = _coords.y_to_floor(_press_pos.y)
 	_active = false
 	_panning = false
 	return out
 
-func selected_row() -> int:
-	return _selected_row
+func selected_floor() -> int:
+	return _selected_floor
 
 func is_panning() -> bool:
 	return _panning

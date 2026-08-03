@@ -17,14 +17,14 @@ extends Control
 ## are informative, the refusal is authoritative. picker_visible() and
 ## is_locked() are the seams the input tests read.
 
-signal lease_requested(row: int, kind_id: String)
-signal upgrade_requested(row: int)
+signal lease_requested(floor_index: int, kind_id: String)
+signal upgrade_requested(floor_index: int)
 
 const BUTTON_HEIGHT := 72.0            # 39pt at the 0.546 board scale
 const SHEET_FRACTION := 0.46
 
 var _state: GameState
-var _row: int = -1
+var _floor: int = -1
 
 var _bg: ColorRect
 var _box: VBoxContainer
@@ -92,23 +92,23 @@ func bind(state: GameState) -> void:
 	_picker.add_theme_constant_override("separation", 6)
 	_box.add_child(_picker)
 
-## Populates the sheet for `row` and shows it. Safe to call repeatedly -- the
+## Populates the sheet for `floor` and shows it. Safe to call repeatedly -- the
 ## panel is rebuilt from current state each time, never once.
-func show_floor(state: GameState, row: int) -> void:
+func show_floor(state: GameState, floor_index: int) -> void:
 	_state = state
-	_row = row
-	var vacant := _state.tenancy.is_vacant(row)
-	var tier := _state.fitout.tier_at(row)
-	var kind_id := _state.tenancy.kind_at(row)
+	_floor = floor_index
+	var vacant := _state.tenancy.is_vacant(floor_index)
+	var tier := _state.fitout.tier_at(floor_index)
+	var kind_id := _state.tenancy.kind_at(floor_index)
 	var kind := _state.catalog.kind(kind_id)
 
 	var tenant := "" if kind == null else (" ·  " + kind.display_name)
-	_header.text = "Floor %d%s   Class %d" % [row, "" if vacant else tenant, tier]
+	_header.text = "Floor %d%s   Class %d" % [floor_index, "" if vacant else tenant, tier]
 
 	_bar.value = _sat_fraction(vacant) * 100.0
 	_sparkline.show_kind(kind)
 
-	var cost := _state.class_upgrade_cost(row)
+	var cost := _state.class_upgrade_cost(floor_index)
 	_upgrade.text = "UPGRADE CLASS  $%s" % NumberFormat.compact(cost)
 	_upgrade.disabled = not is_finite(cost) or not _state.economy.can_afford(cost)
 
@@ -118,7 +118,7 @@ func show_floor(state: GameState, row: int) -> void:
 func _sat_fraction(vacant: bool) -> float:
 	if vacant:
 		return 0.0
-	return clampf(_state.tenancy.satisfaction_at(_row), 0.0, 1.0)
+	return clampf(_state.tenancy.satisfaction_at(_floor), 0.0, 1.0)
 
 ## The lease picker is present only while the floor is vacant. Rebuilt each
 ## show so the available kinds and prices reflect the current class and cash.
@@ -129,37 +129,37 @@ func _rebuild_picker(vacant: bool) -> void:
 	_picker.visible = vacant
 	if not vacant:
 		return
-	for k in _state.available_kinds(_row):
+	for k in _state.available_kinds(_floor):
 		var b := Button.new()
 		b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
 		b.add_theme_font_size_override("font_size", 15)
-		var cost := _state.lease_cost(_row, k.id)
+		var cost := _state.lease_cost(_floor, k.id)
 		var locked := is_locked(k.id)
 		b.text = "%s  $%s%s" % [k.display_name, NumberFormat.compact(cost),
 			"  (locked)" if locked else ""]
 		b.disabled = locked or not _state.economy.can_afford(cost)
-		var r := _row
+		var r := _floor
 		var id := k.id
 		b.pressed.connect(func() -> void: lease_requested.emit(r, id))
 		_picker.add_child(b)
 		_lease_buttons.append(b)
 
 func picker_visible() -> bool:
-	return _picker != null and _picker.visible and _state != null and _row >= 0 \
-		and _state.tenancy.is_vacant(_row)
+	return _picker != null and _picker.visible and _state != null and _floor >= 0 \
+		and _state.tenancy.is_vacant(_floor)
 
 ## A kind the floor's current class cannot host.
 func is_locked(kind_id: String) -> bool:
-	if _state == null or _row < 0:
+	if _state == null or _floor < 0:
 		return true
 	var k := _state.catalog.kind(kind_id)
 	if k == null:
 		return true
-	return k.requires_class > _state.fitout.tier_at(_row)
+	return k.requires_class > _state.fitout.tier_at(_floor)
 
 func _on_upgrade() -> void:
-	upgrade_requested.emit(_row)
+	upgrade_requested.emit(_floor)
 
 func close() -> void:
 	visible = false
-	_row = -1
+	_floor = -1

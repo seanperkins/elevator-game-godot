@@ -28,16 +28,16 @@ const SIZE := 30.0     # a square: people are the same shape everywhere
 const GAP := 4.0
 
 ## Columns and rows for `count` items, bounded by what the area can hold.
-static func shape(count: int, max_cols: int, max_rows: int) -> Vector2i:
-	if count <= 0 or max_cols <= 0 or max_rows <= 0:
+static func shape(count: int, max_cols: int, max_floors: int) -> Vector2i:
+	if count <= 0 or max_cols <= 0 or max_floors <= 0:
 		return Vector2i.ZERO
 	var rows := maxi(int(sqrt(float(count))), 1)
 	var cols := int(ceil(float(count) / float(rows)))
 	if cols > max_cols:
 		cols = maxi(max_cols, 1)
 		rows = int(ceil(float(count) / float(cols)))
-	if rows > max_rows:
-		rows = maxi(max_rows, 1)
+	if rows > max_floors:
+		rows = maxi(max_floors, 1)
 		cols = mini(int(ceil(float(count) / float(rows))), maxi(max_cols, 1))
 	return Vector2i(cols, rows)
 

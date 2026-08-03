@@ -13,7 +13,7 @@ const BUTTON_HEIGHT := 88.0       # 48pt at the 0.546 iPhone scale
 const MARGIN := 12.0
 
 var _state: GameState
-var _rows: Dictionary = {}        # id -> Button
+var _floors: Dictionary = {}        # id -> Button
 var _riders: Label
 var _wait: Label
 var _gaveup: Label
@@ -44,7 +44,7 @@ func bind(state: GameState) -> void:
 	box.add_child(_build_readout())
 	box.add_child(_heading("SPEND"))
 	for id in _state.upgrades.ids():
-		if id == "shaft" or id == "row":
+		if id == "shaft" or id == "floor":
 			continue          # bought on the board, where they appear
 		box.add_child(_build_upgrade_row(id))
 
@@ -74,13 +74,13 @@ func _heading(text: String) -> Control:
 ## collapses it improves while "gave up" climbs.
 func _build_readout() -> Control:
 	var panel := PanelContainer.new()
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 20)
-	panel.add_child(row)
+	var floor_index := HBoxContainer.new()
+	floor_index.add_theme_constant_override("separation", 20)
+	panel.add_child(floor_index)
 
-	_riders = _stat(row, "riders / min")
-	_wait = _stat(row, "avg wait")
-	_gaveup = _stat(row, "gave up")
+	_riders = _stat(floor_index, "riders / min")
+	_wait = _stat(floor_index, "avg wait")
+	_gaveup = _stat(floor_index, "gave up")
 	return panel
 
 func _stat(parent: Control, caption: String) -> Label:
@@ -102,7 +102,7 @@ func _build_upgrade_row(id: String) -> Control:
 	b.add_theme_font_size_override("font_size", 18)
 	var captured := id
 	b.pressed.connect(func() -> void: _state.buy(captured))
-	_rows[id] = b
+	_floors[id] = b
 	return b
 
 ## Annotations state MECHANICAL effects read from Upgrades -- never a predicted
@@ -118,8 +118,8 @@ func refresh() -> void:
 
 	_refresh_dispatch()
 
-	for id in _rows.keys():
-		var b: Button = _rows[id]
+	for id in _floors.keys():
+		var b: Button = _floors[id]
 		var label_name := _state.upgrades.name_of(id)
 		var lvl := _state.upgrades.level_of(id)
 		if _state.upgrades.is_maxed(id):
@@ -189,7 +189,7 @@ func _effect_text(id: String, from_level: int, to_level: int) -> String:
 		"doors":
 			return "doors %d → %d ticks" % [int(a), int(b)]
 		"speed":
-			return "speed %.2f → %.2f rows/tick" % [a, b]
+			return "speed %.2f → %.2f floors/tick" % [a, b]
 		"capacity":
 			return "capacity %d → %d" % [int(a), int(b)]
 		"auto":

@@ -48,11 +48,11 @@ var _last_shape := Vector2i.ZERO
 
 func _ready() -> void:
 	_safe = SafeArea.current(size)
-	var rows := START_ROWS
+	var floors := START_ROWS
 	var shafts := START_SHAFTS
 	var override := _debug_board_override()
 	if override != Vector2i.ZERO:
-		rows = override.x
+		floors = override.x
 		shafts = override.y
 	# A debug board is a throwaway: it neither loads a save nor overwrites one,
 	# so taking a screenshot cannot cost somebody their building.
@@ -61,11 +61,11 @@ func _ready() -> void:
 		catalog_path = DEFAULT_CATALOG
 	if override != Vector2i.ZERO:
 		_saving_enabled = false
-		state = GameState.new(rows, shafts, START_SEED, catalog_path)
+		state = GameState.new(floors, shafts, START_SEED, catalog_path)
 	else:
 		state = SaveStore.load_state()
 		if state == null:
-			state = GameState.new(rows, shafts, START_SEED, catalog_path)
+			state = GameState.new(floors, shafts, START_SEED, catalog_path)
 
 	# A malformed shipped tenants.json is a build error a player can hit. A
 	# blank board with a console message they cannot see is indistinguishable
@@ -98,7 +98,7 @@ func _ready() -> void:
 		size.y - HUD_HEIGHT - _safe.y - _safe.w)
 	add_child(_view)
 	_view.bind(state)
-	_view.floor_purchase_requested.connect(func() -> void: state.buy("row"))
+	_view.floor_purchase_requested.connect(func() -> void: state.buy("floor"))
 	_view.shaft_purchase_requested.connect(_on_buy_shaft)
 	_view.hall_floor_selected.connect(_on_hall_floor_selected)
 
@@ -142,7 +142,7 @@ func _ready() -> void:
 	_view_button.pressed.connect(_on_toggle_view)
 	add_child(_view_button)
 
-	_last_shape = Vector2i(state.building.row_count, state.building.cars.size())
+	_last_shape = Vector2i(state.building.floor_count, state.building.cars.size())
 	_refresh_pager()
 
 ## Screenshot and device testing need boards that cost 1.36e8 to reach by play.
@@ -161,7 +161,7 @@ func _debug_board_override() -> Vector2i:
 		if spec.size() != 2:
 			continue
 		return Vector2i(
-			clampi(int(spec[0]), 1, Building.MAX_ROWS),
+			clampi(int(spec[0]), 1, Building.MAX_FLOORS),
 			clampi(int(spec[1]), 1, Building.MAX_SHAFTS))
 	return Vector2i.ZERO
 
@@ -184,13 +184,13 @@ func _on_hall_floor_selected(floor_index: int) -> void:
 	last_selected_floor = floor_index
 	panel.show_floor(state, floor_index)
 
-func _on_lease_requested(row: int, kind_id: String) -> void:
-	if state.lease(row, kind_id):
-		panel.show_floor(state, row)   # reflect the new tenant and close the picker
+func _on_lease_requested(floor_index: int, kind_id: String) -> void:
+	if state.lease(floor_index, kind_id):
+		panel.show_floor(state, floor_index)   # reflect the new tenant and close the picker
 
-func _on_upgrade_requested(row: int) -> void:
-	if state.upgrade_class(row):
-		panel.show_floor(state, row)   # reflect the new class and its newly freed kinds
+func _on_upgrade_requested(floor_index: int) -> void:
+	if state.upgrade_class(floor_index):
+		panel.show_floor(state, floor_index)   # reflect the new class and its newly freed kinds
 
 ## A named refusal to start: the file is the offence, so it is on the screen.
 func _show_error_screen(catalog_path: String) -> void:
@@ -268,7 +268,7 @@ func _physics_process(delta: float) -> void:
 	if ticks > 0:
 		state.tick(ticks)
 
-	var shape := Vector2i(state.building.row_count, state.building.cars.size())
+	var shape := Vector2i(state.building.floor_count, state.building.cars.size())
 	if shape != _last_shape:
 		_view.rebuild()
 		if shape.y > _last_shape.y:

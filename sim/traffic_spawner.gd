@@ -74,16 +74,16 @@ func spawn_from_sources(minute: int, sources: Array[TrafficSource],
 			chosen = s
 			break
 
-	var origin := chosen.floor_row
+	var origin := chosen.floor_index
 	var destination := _destination_for(chosen, sources, minute, lobby_tenanted)
-	if destination == chosen.floor_row:
+	if destination == chosen.floor_index:
 		return out
 	if destination == -1:
 		origin = LOBBY
-		destination = chosen.floor_row
+		destination = chosen.floor_index
 
 	out.append(Passenger.new(origin, destination, base_patience_ticks,
-		chosen.kind.base_fare * chosen.fare_multiplier, chosen.floor_row))
+		chosen.kind.base_fare * chosen.fare_multiplier, chosen.floor_index))
 	return out
 
 ## Returns the destination floor, or -1 to mean "this is an inbound trip, so
@@ -91,7 +91,7 @@ func spawn_from_sources(minute: int, sources: Array[TrafficSource],
 ## usable endpoint for this source.
 func _destination_for(chosen: TrafficSource, sources: Array[TrafficSource],
 		minute: int, lobby_tenanted: bool) -> int:
-	var lobby_usable := lobby_tenanted and chosen.floor_row != LOBBY
+	var lobby_usable := lobby_tenanted and chosen.floor_index != LOBBY
 	var roll := rng.randf()
 	if lobby_usable:
 		if roll < chosen.kind.inbound_at(minute):
@@ -100,8 +100,8 @@ func _destination_for(chosen: TrafficSource, sources: Array[TrafficSource],
 			return LOBBY
 	var others: Array[TrafficSource] = []
 	for s in sources:
-		if s.floor_row != chosen.floor_row:
+		if s.floor_index != chosen.floor_index:
 			others.append(s)
 	if others.is_empty():
-		return chosen.floor_row          # caller drops it
-	return others[rng.randi_range(0, others.size() - 1)].floor_row
+		return chosen.floor_index          # caller drops it
+	return others[rng.randi_range(0, others.size() - 1)].floor_index

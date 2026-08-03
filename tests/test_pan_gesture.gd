@@ -24,7 +24,7 @@ func test_a_tap_reports_the_floor_it_landed_on() -> void:
 	var y := coords.band_centre_y(7)
 	gg.press(Vector2(0.0, y), 0)
 	assert_eq(gg.release(), Gesture.Result.TAP)
-	assert_eq(gg.selected_row(), 7, "the floor under the thumb, not the car's")
+	assert_eq(gg.selected_floor(), 7, "the floor under the thumb, not the car's")
 
 func test_a_small_wobble_is_still_a_tap() -> void:
 	# A thumb never lands perfectly still. Below the threshold it is a tap, and
@@ -36,7 +36,7 @@ func test_a_small_wobble_is_still_a_tap() -> void:
 	gg.press(Vector2(0.0, y), 0)
 	gg.move(Vector2(0.0, y + Gesture.DRAG_THRESHOLD - 0.1))
 	assert_eq(gg.release(), Gesture.Result.TAP)
-	assert_eq(gg.selected_row(), 7)
+	assert_eq(gg.selected_floor(), 7)
 
 func test_crossing_the_threshold_becomes_a_pan() -> void:
 	g.press(Vector2(0.0, 300.0), 0)
@@ -105,6 +105,6 @@ func test_release_without_press_is_nothing() -> void:
 	assert_eq(g.release(), Gesture.Result.NONE)
 
 func test_the_threshold_is_small_enough_that_tapping_stays_easy() -> void:
-	# It only has to beat thumb wobble now, not half a row: a tap resolves
+	# It only has to beat thumb wobble now, not half a floor: a tap resolves
 	# against the press point, so the threshold no longer gates precision.
 	assert_lt(Gesture.DRAG_THRESHOLD, H * 0.5)

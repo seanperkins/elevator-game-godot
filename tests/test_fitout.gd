@@ -6,12 +6,12 @@ func before_each() -> void:
 	f = Fitout.new(6)
 
 func test_every_floor_starts_at_tier_one() -> void:
-	for row in range(6):
-		assert_eq(f.tier_at(row), 1)
+	for floor_index in range(6):
+		assert_eq(f.tier_at(floor_index), 1)
 
 func test_a_new_row_starts_at_tier_one() -> void:
-	f.add_row()
-	assert_eq(f.rows(), 7)
+	f.add_floor()
+	assert_eq(f.floors(), 7)
 	assert_eq(f.tier_at(6), 1)
 
 func test_setting_a_tier_moves_the_revision() -> void:

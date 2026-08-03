@@ -1,8 +1,8 @@
 class_name Passenger
 extends RefCounted
 
-var origin_row: int
-var destination_row: int
+var origin_floor: int
+var destination_floor: int
 var patience_ticks: int
 var fare: float
 var boarded: bool = false
@@ -12,18 +12,18 @@ var boarded: bool = false
 ## while the traffic belongs to F. Both the fare (kind.base_fare x the
 ## floor's class multiplier) and satisfaction credit follow this, not the
 ## endpoints -- see spec §5.1.
-var source_row: int
+var source_floor: int
 
 var _initial_patience: int
 
 func _init(origin: int, destination: int, patience: int, p_fare: float,
-		p_source_row: int) -> void:
-	origin_row = origin
-	destination_row = destination
+		p_source_floor: int) -> void:
+	origin_floor = origin
+	destination_floor = destination
 	patience_ticks = patience
 	_initial_patience = maxi(patience, 1)
 	fare = p_fare
-	source_row = p_source_row
+	source_floor = p_source_floor
 
 func decay(n: int) -> void:
 	patience_ticks -= n
@@ -47,4 +47,4 @@ func waited_ticks() -> int:
 	return maxi(_initial_patience - patience_ticks, 0)
 
 func direction() -> int:
-	return signi(destination_row - origin_row)
+	return signi(destination_floor - origin_floor)

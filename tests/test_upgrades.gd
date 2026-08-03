@@ -59,10 +59,10 @@ func test_door_ticks_never_reach_zero() -> void:
 	assert_gt(b.cars[0].door_ticks, 0, "doors must always take some time")
 
 func test_speed_upgrade_increases_travel_rate() -> void:
-	var before := b.cars[0].rows_per_tick
+	var before := b.cars[0].floors_per_tick
 	econ.accrue(1e9)
 	up.purchase("speed", econ, b)
-	assert_gt(b.cars[0].rows_per_tick, before)
+	assert_gt(b.cars[0].floors_per_tick, before)
 
 func test_capacity_upgrade_adds_seats() -> void:
 	var before := b.cars[0].capacity
@@ -84,29 +84,29 @@ func test_shaft_purchases_stop_at_the_board_cap() -> void:
 
 func test_row_upgrade_adds_a_row() -> void:
 	econ.accrue(1e9)
-	up.purchase("row", econ, b)
-	assert_eq(b.row_count, 7)
+	up.purchase("floor", econ, b)
+	assert_eq(b.floor_count, 7)
 
 func test_row_purchases_stop_at_the_purchasable_cap() -> void:
-	# The PURCHASABLE ceiling (row.max_level) and the STRUCTURAL one
-	# (Building.MAX_ROWS) are deliberately different numbers -- see the
+	# The PURCHASABLE ceiling (floor.max_level) and the STRUCTURAL one
+	# (Building.MAX_FLOORS) are deliberately different numbers -- see the
 	# building-cost-curve spec. A run tops out at 20 floors, while the board can
 	# still hold 40 and the spawner's saturation guard is sized against that 40.
 	# This used to assert the two were equal, which is the assumption the spec
 	# changes; what still has to hold is that purchases never exceed the board.
 	econ.accrue(1e15)
 	for i in range(60):
-		up.purchase("row", econ, b)
-	assert_true(up.is_maxed("row"), "purchases stop at row.max_level")
-	assert_eq(b.row_count, 20, "which tops the building at 20 floors")
-	assert_lt(b.row_count, Building.MAX_ROWS, "and never past the board cap")
+		up.purchase("floor", econ, b)
+	assert_true(up.is_maxed("floor"), "purchases stop at floor.max_level")
+	assert_eq(b.floor_count, 20, "which tops the building at 20 floors")
+	assert_lt(b.floor_count, Building.MAX_FLOORS, "and never past the board cap")
 
 func test_a_maxed_upgrade_cannot_be_bought() -> void:
 	econ.accrue(1e15)
 	for i in range(60):
-		up.purchase("row", econ, b)
+		up.purchase("floor", econ, b)
 	var cash_before := econ.cash
-	assert_false(up.purchase("row", econ, b))
+	assert_false(up.purchase("floor", econ, b))
 	assert_almost_eq(econ.cash, cash_before, 1e-6, "and must not charge")
 
 func test_unknown_id_is_refused() -> void:
@@ -117,7 +117,7 @@ func test_new_shafts_inherit_current_upgrade_levels() -> void:
 	econ.accrue(1e9)
 	up.purchase("speed", econ, b)
 	up.purchase("shaft", econ, b)
-	assert_almost_eq(b.cars[1].rows_per_tick, b.cars[0].rows_per_tick, 1e-9,
+	assert_almost_eq(b.cars[1].floors_per_tick, b.cars[0].floors_per_tick, 1e-9,
 		"a newly bought car must not be slower than the one you have")
 
 func test_effect_value_matches_what_the_car_gets() -> void:
@@ -160,7 +160,7 @@ func test_speed_and_capacity_never_saturate() -> void:
 
 func test_structural_upgrades_have_no_effect_value() -> void:
 	assert_false(up.has_effect("shaft"))
-	assert_false(up.has_effect("row"))
+	assert_false(up.has_effect("floor"))
 	assert_false(up.is_zero_delta("shaft"), "never blocks a structural purchase")
 
 func test_a_fresh_car_matches_the_curve_at_level_zero() -> void:
@@ -169,6 +169,6 @@ func test_a_fresh_car_matches_the_curve_at_level_zero() -> void:
 	# They did only by coincidence, which is the kind of thing that silently
 	# drifts the first time somebody tunes one of them.
 	var fresh := ElevatorCar.new(0)
-	assert_almost_eq(fresh.rows_per_tick, up.effect_value("speed", 0), 1e-9, "speed")
+	assert_almost_eq(fresh.floors_per_tick, up.effect_value("speed", 0), 1e-9, "speed")
 	assert_eq(fresh.door_ticks, int(up.effect_value("doors", 0)), "doors")
 	assert_eq(fresh.capacity, int(up.effect_value("capacity", 0)), "capacity")

@@ -11,7 +11,7 @@ extends Control
 ##
 ## There is no tenant status TEXT. The 4-unit bar carries all three states --
 ## satisfaction, a draining move-out countdown, and vacancy. Text in the gutter
-## overlapped the floor number at the capped 29.6-unit row; text in the strip
+## overlapped the floor number at the capped 29.6-unit floor; text in the strip
 ## overlapped the sprites, and vacant floors still spawn passengers, so the two
 ## co-occur. In the dense tier it would sit on the crowd bar, whose LENGTH is
 ## the encoding.
@@ -47,7 +47,7 @@ const GREEN := Color("4ade80")
 const RED := Color("ef4444")
 const GREY := Color("3f3f46")
 
-var row_index: int = 0
+var floor_index: int = 0
 
 var _label: Label
 var _count: Label
@@ -56,7 +56,7 @@ var _bar_fill: ColorRect
 var _sprites: Array[PassengerSprite] = []
 
 func _ready() -> void:
-	# A hairline at the top of the band: without it 40 rows read as one field.
+	# A hairline at the top of the band: without it 40 floors read as one field.
 	var rule := ColorRect.new()
 	rule.color = Color("232c38")
 	rule.size = Vector2(size.x, 1)
@@ -86,7 +86,7 @@ func _ready() -> void:
 	_label = Label.new()
 	# Capped by the gutter budget, not by taste: the UI spec's coordinate table
 	# gives the floor number x 38-64, i.e. 26 units, and the people strip starts
-	# at SPRITE_X. Two digits (floors run to Building.MAX_ROWS) at 22 come to
+	# at SPRITE_X. Two digits (floors run to Building.MAX_FLOORS) at 22 come to
 	# ~24 units. Going further needs the gutter widened first -- an earlier
 	# draft overlapped this label by ~12 units and it was a real bug.
 	_label.add_theme_font_size_override("font_size", 22)
@@ -94,12 +94,12 @@ func _ready() -> void:
 	_label.position = Vector2(LABEL_X, 3)
 	add_child(_label)
 
-func set_row(index: int) -> void:
-	row_index = index
+func set_floor(index: int) -> void:
+	floor_index = index
 	_label.text = str(index)
 
 ## Everyone waiting, drawn as squares. There used to be a second tier -- below a
-## 40-unit row the sprites collapsed into a single crowd bar -- because rows
+## 40-unit floor the sprites collapsed into a single crowd bar -- because floors
 ## shrank as the building grew and eventually could not hold a chip. Rows are a
 ## fixed 88 units now, so that tier could never fire again, and a representation
 ## that never appears is worse than no representation. The count beside them is
@@ -139,7 +139,7 @@ func set_waiting(passengers: Array, show_direction: bool) -> void:
 ##   moving out -- red, the fill DRAINING over the countdown, so the bar is the
 ##                 countdown rather than labelling one
 ##   vacant     -- solid grey; the lease picker now lives in the FloorPanel,
-##                 so the strip keeps the full sprite cap on every row
+##                 so the strip keeps the full sprite cap on every floor
 func set_tenant(satisfaction: float, vacant: bool, moving_out: bool,
 		ticks_left: int) -> void:
 	var full := size.y - 1.0

@@ -7,7 +7,7 @@ extends RefCounted
 
 const DOOR_TICKS_BASE := 20
 const DOOR_TICKS_MIN := 4
-const SPEED_BASE := 0.04      # must match ElevatorCar.rows_per_tick
+const SPEED_BASE := 0.04      # must match ElevatorCar.floors_per_tick
 const CAPACITY_BASE := 4
 const SPRING_BASE := 4.0        # a launched car travels four times as fast
 
@@ -102,8 +102,8 @@ func _apply(id: String, building: Building) -> bool:
 				return false
 			_sync_car(building.cars[building.cars.size() - 1])
 			return true
-		"row":
-			return building.add_row()
+		"floor":
+			return building.add_floor()
 		"auto":
 			return true          # licences a shaft; nothing on a car changes
 		"hall_buttons", "car_buttons", "load_sensor", "lobby_parking", \
@@ -169,5 +169,5 @@ func is_zero_delta(id: String) -> bool:
 func _sync_car(car: ElevatorCar) -> void:
 	car.spring_multiplier = effect_value("spring", level_of("spring"))
 	car.door_ticks = int(effect_value("doors", level_of("doors")))
-	car.rows_per_tick = effect_value("speed", level_of("speed"))
+	car.floors_per_tick = effect_value("speed", level_of("speed"))
 	car.capacity = int(effect_value("capacity", level_of("capacity")))

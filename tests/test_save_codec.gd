@@ -7,7 +7,7 @@ extends GutTest
 func played_state() -> GameState:
 	var gs := GameState.new(6, 1, 4242)
 	gs.economy.accrue(50000.0)
-	gs.buy("row")
+	gs.buy("floor")
 	gs.buy("shaft")
 	gs.buy("doors")
 	gs.buy("capacity")
@@ -26,7 +26,7 @@ func test_a_fresh_save_round_trips() -> void:
 func test_the_building_you_built_survives() -> void:
 	var before := played_state()
 	var after := SaveCodec.decode(SaveCodec.encode(before))
-	assert_eq(after.building.row_count, before.building.row_count, "floors")
+	assert_eq(after.building.floor_count, before.building.floor_count, "floors")
 	assert_eq(after.building.cars.size(), before.building.cars.size(), "shafts")
 
 func test_the_money_survives() -> void:
@@ -44,11 +44,11 @@ func test_the_upgrades_survive() -> void:
 		assert_eq(after.upgrades.level_of(id), before.upgrades.level_of(id), id)
 
 func test_restoring_levels_does_not_build_the_building_twice() -> void:
-	# The trap: replaying a "row" or "shaft" level as a PURCHASE would apply its
+	# The trap: replaying a "floor" or "shaft" level as a PURCHASE would apply its
 	# structural effect again, so a saved 7-floor building would load as 13.
 	var before := played_state()
 	var after := SaveCodec.decode(SaveCodec.encode(before))
-	assert_eq(after.building.row_count, 7, "six plus the one that was bought")
+	assert_eq(after.building.floor_count, 7, "six plus the one that was bought")
 	assert_eq(after.building.cars.size(), 2)
 
 func test_the_cars_keep_what_the_upgrades_gave_them() -> void:
@@ -120,14 +120,14 @@ func test_a_save_from_another_version_is_refused() -> void:
 	assert_null(SaveCodec.decode(data))
 
 func test_a_save_missing_a_required_field_is_refused() -> void:
-	for key in ["seed", "ticks", "cash", "row_count", "cars"]:
+	for key in ["seed", "ticks", "cash", "floor_count", "cars"]:
 		var data := SaveCodec.encode(GameState.new(6, 1, 1))
 		data.erase(key)
 		assert_null(SaveCodec.decode(data), "missing %s" % key)
 
 func test_a_nonsense_row_count_is_refused() -> void:
 	var data := SaveCodec.encode(GameState.new(6, 1, 1))
-	data["row_count"] = 0
+	data["floor_count"] = 0
 	assert_null(SaveCodec.decode(data))
 
 func test_a_corrupt_cars_field_is_refused() -> void:
@@ -149,14 +149,14 @@ func test_loading_does_not_invent_offline_earnings() -> void:
 	assert_eq(after.clock.ticks_executed, before.clock.ticks_executed,
 		"and no ticks were run to catch up")
 
-# --- v2: a kind and a class per row ------------------------------------------
+# --- v2: a kind and a class per floor ------------------------------------------
 
-## A version-1 dictionary: rows carry no kind or class, exactly what the old
+## A version-1 dictionary: floors carry no kind or class, exactly what the old
 ## formatter wrote.
 func _v1_save() -> Dictionary:
 	var data := SaveCodec.encode(GameState.new(6, 1, 7))
 	data["version"] = 1
-	for r in data["rows"]:
+	for r in data["floors"]:
 		r.erase("kind")
 		r.erase("class")
 	return data
@@ -165,7 +165,7 @@ func test_a_vacant_row_round_trips_as_a_null_kind() -> void:
 	# The state a newly purchased floor is in, so this is the common case.
 	var gs := GameState.new(6, 1, 7)
 	gs.economy.accrue(1e9)
-	gs.buy("row")
+	gs.buy("floor")
 	var back := SaveCodec.decode(SaveCodec.encode(gs))
 	assert_not_null(back)
 	assert_true(back.tenancy.is_vacant(6))
@@ -188,7 +188,7 @@ func test_a_v1_save_migrates() -> void:
 
 func test_a_vacant_v1_row_migrates_with_no_kind() -> void:
 	var data := _v1_save()
-	(data["rows"] as Array)[2]["vacant"] = true
+	(data["floors"] as Array)[2]["vacant"] = true
 	var back := SaveCodec.decode(data)
 	assert_true(back.tenancy.is_vacant(2))
 	assert_eq(back.tenancy.kind_at(2), "", "a vacant floor has no tenant")
@@ -198,8 +198,8 @@ func test_a_kind_the_restored_class_cannot_lease_falls_back() -> void:
 	# unknown-id fallback and the class clamp never looks at the kind.
 	var gs := GameState.new(6, 1, 7)
 	var data := SaveCodec.encode(gs)
-	(data["rows"] as Array)[3]["kind"] = "law_firm"
-	(data["rows"] as Array)[3]["class"] = 1
+	(data["floors"] as Array)[3]["kind"] = "law_firm"
+	(data["floors"] as Array)[3]["class"] = 1
 	var back := SaveCodec.decode(data)
 	assert_eq(back.tenancy.kind_at(3), "apartments",
 		"falls back to the cheapest eligible kind")
@@ -207,12 +207,73 @@ func test_a_kind_the_restored_class_cannot_lease_falls_back() -> void:
 func test_a_short_v2_rows_array_is_refused() -> void:
 	var gs := GameState.new(6, 1, 7)
 	var data := SaveCodec.encode(gs)
-	(data["rows"] as Array).resize(3)
+	(data["floors"] as Array).resize(3)
 	assert_null(SaveCodec.decode(data))
 
 func test_an_out_of_range_class_bounds_to_the_top_tier() -> void:
 	var gs := GameState.new(6, 1, 7)
 	var data := SaveCodec.encode(gs)
-	(data["rows"] as Array)[1]["class"] = 99
+	(data["floors"] as Array)[1]["class"] = 99
 	var back := SaveCodec.decode(data)
 	assert_eq(back.fitout.tier_at(1), 3, "bounded, not prevented")
+
+# --- v3: "row" became "floor" -----------------------------------------------
+
+## The fixture is a REAL v2 save, pulled off the device before the rename. A
+## hand-written one would only prove the migration matches my idea of v2.
+func _real_v2_save() -> Dictionary:
+	return {
+		"version": 2, "seed": 20260802, "ticks": 29838,
+		"cash": 51.73, "lifetime": 355.73, "combo": 1.16, "streak": 8,
+		"riders_served": 46, "policies": [0],
+		"row_count": 7,
+		"cars": [{
+			"capacity": 4, "door_ticks": 20, "position_row": 0.0,
+			"rows_per_tick": 0.06, "spring_multiplier": 1.0, "target_row": 0,
+		}],
+		"levels": {
+			"auto": 0, "capacity": 0, "car_buttons": 0, "doors": 0,
+			"hall_buttons": 0, "load_sensor": 0, "lobby_parking": 0,
+			"row": 1, "shaft": 0, "speed": 2, "spring": 0,
+		},
+		"rows": [
+			{"class": 1, "kind": "apartments", "move_out_left": 0,
+			 "satisfaction": 0.99, "vacant": false},
+		],
+	}
+
+func test_a_v2_save_still_loads_after_the_floor_rename() -> void:
+	var data := _real_v2_save()
+	(data["rows"] as Array).resize(7)
+	for i in range(1, 7):
+		data["rows"][i] = {"class": 1, "kind": "apartments",
+			"move_out_left": 0, "satisfaction": 0.9, "vacant": false}
+	var back := SaveCodec.decode(data)
+	assert_not_null(back, "a v2 save must survive the rename, not reset the run")
+	assert_eq(back.building.floor_count, 7, "row_count became floor_count")
+	assert_eq(back.economy.riders_served, 46)
+	assert_almost_eq(back.building.cars[0].floors_per_tick, 0.06, 1e-9,
+		"rows_per_tick became floors_per_tick")
+
+func test_the_v2_row_upgrade_level_becomes_the_floor_level() -> void:
+	var data := _real_v2_save()
+	(data["rows"] as Array).resize(7)
+	for i in range(1, 7):
+		data["rows"][i] = {"class": 1, "kind": "apartments",
+			"move_out_left": 0, "satisfaction": 0.9, "vacant": false}
+	var back := SaveCodec.decode(data)
+	assert_eq(back.upgrades.level_of("floor"), 1,
+		"levels.row carried across to levels.floor")
+	assert_eq(back.upgrades.level_of("speed"), 2, "untouched ids still load")
+
+func test_migrating_does_not_mutate_the_callers_dictionary() -> void:
+	# decode() takes p_data and duplicates; a caller that reloads twice must not
+	# find its own dictionary rewritten under it.
+	var data := _real_v2_save()
+	(data["rows"] as Array).resize(7)
+	for i in range(1, 7):
+		data["rows"][i] = {"class": 1, "kind": "apartments",
+			"move_out_left": 0, "satisfaction": 0.9, "vacant": false}
+	SaveCodec.decode(data)
+	assert_true(data.has("row_count"), "the original still spells it row_count")
+	assert_false(data.has("floor_count"))

@@ -53,8 +53,8 @@ func test_a_tenanted_lobby_generates_only_interfloor_trips() -> void:
 	]
 	for tick in range(20000):
 		for p in s.spawn_from_sources(9, sources, true):
-			if p.source_row == 0:
-				assert_ne(p.origin_row, p.destination_row, "a trip must go somewhere")
+			if p.source_floor == 0:
+				assert_ne(p.origin_floor, p.destination_floor, "a trip must go somewhere")
 
 func test_the_fare_comes_from_the_kind_and_the_floors_class() -> void:
 	var cat := TenantCatalog.new()
@@ -83,7 +83,7 @@ func test_a_trip_must_go_somewhere() -> void:
 	]
 	for tick in range(20000):
 		for p in s.spawn_from_sources(12, sources, true):
-			assert_ne(p.origin_row, p.destination_row)
+			assert_ne(p.origin_floor, p.destination_floor)
 
 func test_the_spawn_threshold_is_one_bucket_not_one_real_minute() -> void:
 	# Two apartment sources at bucket 6 sum to 2 x 0.5 = 1.0 trips/bucket, so

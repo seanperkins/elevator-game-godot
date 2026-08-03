@@ -3,7 +3,7 @@ extends Control
 
 ## The hall region's touch target: TAP opens that floor's panel, DRAG pans the
 ## board. One input path rather than _gui_input on every FloorRow, so a drag
-## crossing a row boundary cannot become ambiguous.
+## crossing a floor boundary cannot become ambiguous.
 ##
 ## What it takes over from is NOT FloorRow -- FloorRow itself is
 ## MOUSE_FILTER_IGNORE. It is BuildingView._gui_input, the relet tap path.
@@ -35,7 +35,7 @@ func _gui_input(event: InputEvent) -> void:
 			# top_floor for any y above the building, so a tap in the sky
 			# would otherwise select the top floor rather than doing nothing.
 			if event.position.y >= _coords.floor_to_y(_coords.top_floor):
-				floor_selected.emit(_gesture.selected_row())
+				floor_selected.emit(_gesture.selected_floor())
 	elif PointerEvents.is_drag(event):
 		_gesture.move(event.position)
 		if _gesture.is_panning():
