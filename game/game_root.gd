@@ -9,6 +9,14 @@ extends Control
 const START_ROWS := 6
 const START_SHAFTS := 1
 const START_SEED := 20260802
+const DEFAULT_CATALOG := "res://data/tenants.json"
+
+## Test seam: when non-empty, _ready constructs its GameState against this
+## catalog path instead of the shipped one. Lets a test hand in a missing file
+## and assert the boot path does the right thing.
+var catalog_path_override: String = ""
+
+var _error_label: Label = null
 
 const HUD_HEIGHT := 96.0
 const TOUCH_MIN := 88.0          # 48pt at the 0.546 iPhone scale
@@ -48,13 +56,25 @@ func _ready() -> void:
 		shafts = override.y
 	# A debug board is a throwaway: it neither loads a save nor overwrites one,
 	# so taking a screenshot cannot cost somebody their building.
+	var catalog_path := catalog_path_override
+	if catalog_path.is_empty():
+		catalog_path = DEFAULT_CATALOG
 	if override != Vector2i.ZERO:
 		_saving_enabled = false
-		state = GameState.new(rows, shafts, START_SEED)
+		state = GameState.new(rows, shafts, START_SEED, catalog_path)
 	else:
 		state = SaveStore.load_state()
 		if state == null:
-			state = GameState.new(rows, shafts, START_SEED)
+			state = GameState.new(rows, shafts, START_SEED, catalog_path)
+
+	# A malformed shipped tenants.json is a build error a player can hit. A
+	# blank board with a console message they cannot see is indistinguishable
+	# from a hang, so a bad catalog is a named error screen, not a silent freeze.
+	if state == null or not state.is_valid():
+		_show_error_screen(catalog_path)
+		_saving_enabled = false
+		set_physics_process(false)
+		return
 
 	var bg := ColorRect.new()
 	bg.color = Color("101418")
@@ -94,6 +114,8 @@ func _ready() -> void:
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(panel)
 	panel.bind(state)
+	panel.lease_requested.connect(_on_lease_requested)
+	panel.upgrade_requested.connect(_on_upgrade_requested)
 
 	# Paging the shaft strip is a tap, never a swipe: the dispatch drag is
 	# vertical and arcs sideways by more than half a column (§2.1), so any
@@ -160,6 +182,38 @@ func _on_buy_shaft() -> void:
 
 func _on_hall_floor_selected(floor_index: int) -> void:
 	last_selected_floor = floor_index
+	panel.show_floor(state, floor_index)
+
+func _on_lease_requested(row: int, kind_id: String) -> void:
+	if state.lease(row, kind_id):
+		panel.show_floor(state, row)   # reflect the new tenant and close the picker
+
+func _on_upgrade_requested(row: int) -> void:
+	if state.upgrade_class(row):
+		panel.show_floor(state, row)   # reflect the new class and its newly freed kinds
+
+## A named refusal to start: the file is the offence, so it is on the screen.
+func _show_error_screen(catalog_path: String) -> void:
+	var bg := ColorRect.new()
+	bg.color = Color("101418")
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(bg)
+
+	_error_label = Label.new()
+	_error_label.text = "No valid tenant catalog\n\n%s\n\nCannot start." % catalog_path
+	_error_label.add_theme_font_size_override("font_size", 20)
+	_error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_error_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_error_label.set_anchors_preset(Control.PRESET_CENTER)
+	_error_label.size = Vector2(size.x, 200)
+	add_child(_error_label)
+
+func error_screen_visible() -> bool:
+	return _error_label != null and _error_label.visible
+
+func sim_running() -> bool:
+	return is_physics_processing()
 
 func _on_toggle_view() -> void:
 	var showing_board := _management.visible

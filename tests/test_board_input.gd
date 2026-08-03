@@ -591,6 +591,21 @@ func test_the_building_survives_a_restart() -> void:
 	assert_eq(reloaded.building.cars.size(), shafts)
 	assert_almost_eq(reloaded.economy.cash, cash, 1e-6)
 
+func test_an_invalid_state_shows_an_error_screen_and_does_not_start_the_sim() -> void:
+	# A malformed shipped tenants.json must be a named error, not a blank board
+	# with a console message a player cannot see -- which reads as a hang.
+	var layer := CanvasLayer.new()
+	add_child_autofree(layer)
+	var bad := ROOT.instantiate()
+	bad.catalog_path_override = "res://data/does_not_exist.json"
+	bad.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	bad.position = Vector2.ZERO
+	bad.size = BOARD_SIZE
+	layer.add_child(bad)
+	await wait_physics_frames(2)
+	assert_true(bad.error_screen_visible(), "the boot path names the offence")
+	assert_false(bad.sim_running(), "and refuses to run the sim against it")
+
 func test_a_debug_board_never_writes_over_a_save() -> void:
 	# --board is for screenshots. Letting it save would mean taking one costs
 	# somebody their building.
