@@ -133,6 +133,8 @@ func _rebuild_picker(vacant: bool) -> void:
 	for k in _state.available_kinds(_floor):
 		var b := Button.new()
 		b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.add_theme_constant_override("h_separation", 12)
 		b.add_theme_font_size_override("font_size", 20)
 		var cost := _state.lease_cost(_floor, k.id)
 		var locked := is_locked(k.id)

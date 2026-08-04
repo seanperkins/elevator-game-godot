@@ -160,6 +160,8 @@ func _action(text: String, on_press: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.add_theme_constant_override("h_separation", 12)
 	b.add_theme_font_size_override("font_size", 27)
 	b.pressed.connect(on_press)
 	_box.add_child(b)
@@ -168,6 +170,8 @@ func _action(text: String, on_press: Callable) -> Button:
 func _node_row(id: String) -> Control:
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.add_theme_constant_override("h_separation", 12)
 	b.add_theme_font_size_override("font_size", 24)
 	var captured := id
 	b.pressed.connect(func() -> void: node_purchase_requested.emit(captured))

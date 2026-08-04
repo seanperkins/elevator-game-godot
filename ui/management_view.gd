@@ -142,6 +142,8 @@ func _stat(parent: Control, caption: String) -> Label:
 func _build_upgrade_row(id: String) -> Control:
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.add_theme_constant_override("h_separation", 12)
 	b.add_theme_font_size_override("font_size", 24)
 	var captured := id
 	b.pressed.connect(func() -> void: _state.buy(captured))
@@ -192,6 +194,8 @@ func _refresh_dispatch() -> void:
 		var index := _shaft_buttons.size()
 		var b := Button.new()
 		b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.add_theme_constant_override("h_separation", 12)
 		b.add_theme_font_size_override("font_size", 24)
 		# `index` is captured by value, which is the one place that helps.
 		b.pressed.connect(func() -> void: _cycle_policy(index))

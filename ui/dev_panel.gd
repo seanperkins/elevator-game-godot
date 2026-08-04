@@ -186,6 +186,8 @@ func _action(text: String, on_press: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.add_theme_constant_override("h_separation", 12)
 	b.add_theme_font_size_override("font_size", 24)
 	b.pressed.connect(on_press)
 	_box.add_child(b)
