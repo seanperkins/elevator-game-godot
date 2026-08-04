@@ -9,12 +9,24 @@ extends Control
 ## decision is made on, so it cannot shift with the shaft count, and it cannot
 ## sit unlabelled beside the floor number where the two read as one value.
 ##
-## There is no tenant status TEXT. The 4-unit bar carries all three states --
-## satisfaction, a draining move-out countdown, and vacancy. Text in the gutter
-## overlapped the floor number at the capped 29.6-unit floor; text in the strip
-## overlapped the sprites, and vacant floors still spawn passengers, so the two
-## co-occur. In the dense tier it would sit on the crowd bar, whose LENGTH is
-## the encoding.
+## THE GUTTER TENANT BAR IS GONE. A 4-unit column at x 30-34 spanning every row
+## stacked into one continuous line down the left of the board, and once every
+## floor had a picture behind it that line was the thing you saw instead of the
+## building. Its three states were rehomed rather than dropped:
+##
+##   vacancy      -- the construction-shell scenery. A floor that looks like bare
+##                   concrete does not also need a grey bar saying so.
+##   satisfaction -- the FloorPanel, which already drew it as a ProgressBar. It
+##                   is a number you consult, not one you scan for.
+##   moving out   -- THE FLOOR NUMBER TURNS VERMILION. This one had to stay on
+##                   the board: the countdown is cancellable (`note_delivery`
+##                   clears it when satisfaction recovers), so it is a call to
+##                   dispatch to that floor within the simulated minute, and an
+##                   alarm you have to open a panel to see is not an alarm.
+##
+## What is lost is the countdown's PROGRESS -- the old bar drained, so it was the
+## clock rather than a label for one. The remaining ticks moved to the panel
+## header; the board keeps the alarm, which is the actionable half.
 
 ## A waiting passenger shows its CALL DIRECTION, not its destination: they
 ## pressed a hall button, which is up or down. The glyphs live in PersonSprite,
@@ -34,8 +46,10 @@ const STRIP_RIGHT := GUTTER_WIDTH + STRIP_WIDTH          # 208
 const GUTTER_WIDTH := 64.0
 const STRIP_WIDTH := 144.0
 const COUNT_WIDTH := 26.0
-const BAR_X := 30.0
-const BAR_W := 4.0
+## x 30-34 used to be the tenant bar. The floor number stays at 38 rather than
+## sliding left into the space: the UI spec's coordinate table gives it 38-64,
+## and moving it buys 8 units of nothing while shifting an element the eye
+## already knows the position of.
 const LABEL_X := 38.0
 const SPRITE_X := GUTTER_WIDTH + 4.0
 
@@ -43,8 +57,6 @@ var floor_index: int = 0
 
 var _label: Label
 var _count: Label
-var _bar_track: ColorRect
-var _bar_fill: ColorRect
 var _sprites: Array[PersonSprite] = []
 var _scenery: TextureRect
 
@@ -72,19 +84,6 @@ func _ready() -> void:
 	_count.size = Vector2(COUNT_WIDTH, 18)
 	_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(_count)
-
-	_bar_track = ColorRect.new()
-	_bar_track.color = Palette.BAR_TRACK
-	_bar_track.position = Vector2(BAR_X, 1)
-	_bar_track.size = Vector2(BAR_W, size.y - 1)
-	_bar_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_bar_track)
-
-	_bar_fill = ColorRect.new()
-	_bar_fill.position = Vector2(BAR_X, 1)
-	_bar_fill.size = Vector2(BAR_W, size.y - 1)
-	_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_bar_fill)
 
 	_label = Label.new()
 	# Capped by the gutter budget, not by taste: the UI spec's coordinate table
@@ -154,27 +153,11 @@ func scenery_id() -> String:
 		return ""
 	return (_scenery.texture as Texture2D).resource_path.get_file().get_basename()
 
-## Three states in one 4-unit bar.
-##   tenanted   -- filled proportional to satisfaction, red->green
-##   moving out -- red, the fill DRAINING over the countdown, so the bar is the
-##                 countdown rather than labelling one
-##   vacant     -- solid grey; the lease picker now lives in the FloorPanel,
-##                 so the strip keeps the full sprite cap on every floor
-func set_tenant(satisfaction: float, vacant: bool, moving_out: bool,
-		ticks_left: int) -> void:
-	var full := size.y - 1.0
-	if vacant:
-		_bar_fill.color = Palette.PATIENCE_IDLE
-		_bar_fill.position = Vector2(BAR_X, 1)
-		_bar_fill.size = Vector2(BAR_W, full)
-		return
-
-	var fraction := clampf(satisfaction, 0.0, 1.0)
-	if moving_out:
-		_bar_fill.color = Palette.PATIENCE_LOW
-		fraction = clampf(float(ticks_left) / float(Tenancy.MOVE_OUT_TICKS), 0.0, 1.0)
-	else:
-		_bar_fill.color = Palette.PATIENCE_LOW.lerp(Palette.PATIENCE_OK, fraction)
-	var height := maxf(full * fraction, 1.0)
-	_bar_fill.size = Vector2(BAR_W, height)
-	_bar_fill.position = Vector2(BAR_X, 1.0 + (full - height))
+## The one tenant state the board still carries: this floor's tenant is leaving.
+##
+## VERMILION, not the patience ramp's PATIENCE_LOW. The ramp is a light rust that
+## was solved for contrast against a bar track, and the floor number sits on the
+## scenery's cream instead -- where PATIENCE_LOW measures under 2:1 and vanishes.
+func set_moving_out(moving_out: bool) -> void:
+	_label.add_theme_color_override("font_color",
+		Palette.ALARM if moving_out else Palette.INK_FLOOR)

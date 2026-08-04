@@ -1243,6 +1243,61 @@ func test_the_doors_stay_above_the_riders_by_tree_order() -> void:
 		assert_lt(kids.find(chip), first_door, "every rider is behind the doors")
 
 
+# --- the move-out alarm -----------------------------------------------------
+#
+# The gutter tenant bar is gone; these pin what replaced it. Deleting the bar
+# without them would have quietly dropped a CANCELLABLE countdown -- delivering
+# to that floor clears it -- leaving the player no reason to dispatch there.
+
+func test_the_floor_number_turns_to_the_alarm_while_its_tenant_is_leaving() -> void:
+	var f := 1
+	root.state.tenancy.lease(f, "apartments")
+	view.refresh()
+	await wait_physics_frames(1)
+	assert_eq(view._floors[f]._label.get_theme_color("font_color"), Palette.INK_FLOOR,
+		"a settled floor is ordinary ink")
+	# restore_floor is the public seam for putting a floor into a given state;
+	# driving satisfaction down to the threshold takes a minute of sim time.
+	root.state.tenancy.restore_floor(f, 0.0, false, Tenancy.MOVE_OUT_TICKS, "apartments")
+	view.refresh()
+	await wait_physics_frames(1)
+	assert_eq(view._floors[f]._label.get_theme_color("font_color"), Palette.ALARM,
+		"a floor whose tenant is leaving is the alarm colour")
+
+func test_the_alarm_clears_when_the_tenant_is_talked_round() -> void:
+	# The whole point of keeping this on the board: it is an alarm you can act on.
+	var f := 1
+	root.state.tenancy.restore_floor(f, 0.0, false, Tenancy.MOVE_OUT_TICKS, "apartments")
+	view.refresh()
+	await wait_physics_frames(1)
+	assert_eq(view._floors[f]._label.get_theme_color("font_color"), Palette.ALARM)
+	# Enough deliveries to climb back over the move-out threshold.
+	for i in 40:
+		root.state.tenancy.note_delivery(f)
+	assert_false(root.state.tenancy.is_moving_out(f), "deliveries cancel the move-out")
+	view.refresh()
+	await wait_physics_frames(1)
+	assert_eq(view._floors[f]._label.get_theme_color("font_color"), Palette.INK_FLOOR,
+		"and the board stops shouting about it")
+
+func test_the_panel_carries_the_countdown_the_board_no_longer_draws() -> void:
+	# The board keeps the alarm; the remaining seconds moved here, because the bar
+	# that used to DRAIN over the countdown is gone.
+	var f := 1
+	root.state.tenancy.restore_floor(f, 0.0, false, Tenancy.MOVE_OUT_TICKS, "apartments")
+	root.panel.show_floor(root.state, f)
+	await wait_physics_frames(1)
+	assert_string_contains(root.panel._header.text, "LEAVING IN",
+		"the panel says the tenant is going")
+	assert_string_contains(root.panel._header.text, "60s",
+		"MOVE_OUT_TICKS is one simulated minute at 20 Hz")
+	root.state.tenancy.restore_floor(f, 1.0, false, 0, "apartments")
+	root.panel.show_floor(root.state, f)
+	await wait_physics_frames(1)
+	assert_false(root.panel._header.text.contains("LEAVING"),
+		"and says nothing about it when nobody is leaving")
+
+
 # --- floor scenery ----------------------------------------------------------
 
 func test_a_tenanted_floor_shows_its_kind_and_a_vacant_one_shows_the_shell() -> void:

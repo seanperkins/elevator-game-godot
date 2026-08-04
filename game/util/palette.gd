@@ -120,6 +120,14 @@ const BAR_TRACK := TAN_DEEP
 const INK := TEAL_INK
 ## The floor number in the gutter.
 const INK_FLOOR := Color("2b5d56")
+## The same floor number when that floor's tenant is leaving -- the board's only
+## remaining tenant-state signal, since the gutter bar that carried three of them
+## became one continuous line down the left once every floor had scenery.
+##
+## VERMILION rather than the patience ramp's PATIENCE_LOW. The ramp was solved
+## for contrast against a bar track; this sits on the scenery's cream, where
+## PATIENCE_LOW is a light rust that all but disappears.
+const ALARM := VERMILION
 ## Secondary notes under a control.
 const INK_MUTED := Color("4d6b61")
 ## Tertiary labels -- row captions, units.
@@ -166,8 +174,6 @@ const CAP_REACHED := RUST
 
 const PATIENCE_OK := Color("9ec46f")
 const PATIENCE_LOW := Color("e07a52")
-## Nobody waiting: present but inert, so it sits just off its own track.
-const PATIENCE_IDLE := Color("ab9670")
 
 # ---------------------------------------------------------------- people --
 
@@ -197,8 +203,10 @@ const BADGE_INK := CREAM_PALE
 
 ## The track under a person's patience bar, and under each pip.
 ##
-## NOT BAR_TRACK, which the gutter's tenant bar uses. The patience ramp measures
-## 1.09:1 against BAR_TRACK at full green -- quieter than PATIENCE_IDLE, the
+## NOT BAR_TRACK, which the FloorPanel's satisfaction ProgressBar uses (and which
+## the deleted gutter tenant bar used before it). The patience ramp measures
+## 1.09:1 against BAR_TRACK at full green -- quieter even than the grey that used
+## to mean "nobody is here", which was
 ## colour that means nobody is here. The tenant bar survives that pairing because
 ## it drains by HEIGHT in a fixed position; a person's bar is 4x22 and its
 ## fill/track boundary IS the encoding. On this track the ramp is 5.63:1 at red

@@ -60,6 +60,22 @@ func test_every_ink_reads_on_the_surface_it_is_drawn_on() -> void:
 	# not so dim it stops being text.
 	assert_gt(_contrast(Palette.INK_FAINT, Palette.PANEL_BG), 3.0, "faint labels on PANEL_BG")
 
+func test_the_move_out_alarm_reads_and_is_not_mistakable_for_an_ordinary_floor() -> void:
+	# The floor number turns ALARM when that floor's tenant is leaving, and it is
+	# the board's ONLY tenant-state signal since the gutter bar went. Two things
+	# have to hold: it is still legible, and it does not read as the normal ink.
+	assert_gt(_contrast(Palette.ALARM, Palette.APP_BG), 3.0,
+		"the alarm floor number must still be text")
+	assert_gt(_hue_gap(Palette.ALARM, Palette.INK_FLOOR), 90.0,
+		"alarm and ordinary floor numbers must not read as the same colour")
+
+func test_the_patience_ramp_would_not_have_worked_as_the_alarm() -> void:
+	# Pins the reason ALARM is VERMILION rather than the ramp's red. PATIENCE_LOW
+	# was solved against a bar track; the floor number sits on the ground, and a
+	# future edit "unifying the two reds" would silently make the alarm vanish.
+	assert_lt(_contrast(Palette.PATIENCE_LOW, Palette.APP_BG), 3.0,
+		"PATIENCE_LOW on the ground is why it is not the alarm")
+
 # -------------------------------------------------------------- surfaces --
 
 func test_the_surface_ladder_is_monotonic_and_separated() -> void:
@@ -114,12 +130,10 @@ func test_the_fill_ink_beats_the_alternative_on_every_fill_it_lands_on() -> void
 
 # -------------------------------------------------------------- patience --
 
-func test_the_idle_bar_is_present_but_inert() -> void:
-	# A vacant floor's bar is not information, it is absence of it. It has to be
-	# visible against its own track and must NOT compete with a live bar.
-	var c := _contrast(Palette.PATIENCE_IDLE, Palette.BAR_TRACK)
-	assert_gt(c, 1.2, "the idle bar must be distinguishable from its track")
-	assert_lt(c, 2.5, "the idle bar must not read as loud as a live one")
+# The idle-bar test lived here. It pinned PATIENCE_IDLE against BAR_TRACK -- the
+# grey a VACANT floor's gutter bar was painted. That bar is gone (the shell
+# scenery says "nothing is here" better than a grey stripe did) and the pigment
+# went with it, so there is nothing left to assert.
 
 # --------------------------------------------------------- affordability --
 
@@ -216,10 +230,10 @@ func test_the_badge_reads_on_both_grounds_and_carries_its_glyph() -> void:
 	assert_gt(_contrast(Palette.BADGE_INK, Palette.BADGE_BG), 4.5, "the glyph")
 
 func test_the_patience_ramp_reads_on_the_person_bar_track_at_every_point() -> void:
-	# The ramp on BAR_TRACK measures 1.09:1 at full green -- quieter than
-	# PATIENCE_IDLE, which is the colour that means nobody is here. The person's
-	# bar is the only patience signal a stranger carries, so it gets its own
-	# dark track and the WHOLE lerp is checked, not just the ends.
+	# The ramp on BAR_TRACK measures 1.09:1 at full green -- quieter than the grey
+	# that used to mean "nobody is here". The person's bar is the only patience
+	# signal a stranger carries, so it gets its own dark track and the WHOLE lerp
+	# is checked, not just the ends.
 	for i in range(21):
 		var t := float(i) / 20.0
 		var fill := Palette.PATIENCE_LOW.lerp(Palette.PATIENCE_OK, t)

@@ -105,6 +105,15 @@ func show_floor(state: GameState, floor_index: int) -> void:
 	var tenant := "" if kind == null else (" ·  " + kind.display_name)
 	_header.text = "Floor %d%s   Class %d" % [floor_index, "" if vacant else tenant, tier]
 
+	# The move-out countdown's numeric half. The board carries the alarm -- the
+	# floor number turns Palette.ALARM -- but the remaining time only lives here,
+	# since the gutter bar that used to DRAIN over it is gone. Seconds, not ticks:
+	# the sim runs at 20 Hz and nobody counts in twentieths.
+	if _state.tenancy.is_moving_out(floor_index):
+		_header.text += "   LEAVING IN %ds" % int(ceil(
+			float(_state.tenancy.move_out_ticks_left(floor_index))
+			* SimClock.TICK_SECONDS))
+
 	_bar.value = _sat_fraction(vacant) * 100.0
 	_sparkline.show_kind(kind)
 	_sparkline.set_now(_state.clock.hour_of_day())

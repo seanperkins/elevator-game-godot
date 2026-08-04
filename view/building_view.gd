@@ -357,10 +357,7 @@ func refresh() -> void:
 		var waiting := _state.building.waiting_at(i)
 		var vacant := _state.tenancy.is_vacant(i)
 		_floors[i].set_scenery(FloorScenery.VACANT if vacant else _state.tenancy.kind_at(i))
-		_floors[i].set_tenant(
-			_state.tenancy.satisfaction_at(i), vacant,
-			_state.tenancy.is_moving_out(i),
-			_state.tenancy.move_out_ticks_left(i))
+		_floors[i].set_moving_out(_state.tenancy.is_moving_out(i))
 		_floors[i].set_waiting(waiting,
 			_state.upgrades.is_installed("call_direction"))
 	if _ghost_label != null:
