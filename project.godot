@@ -1,11 +1,11 @@
 ; Engine configuration file.
-; Elevator Incremental
+; Shafted
 
 config_version=5
 
 [application]
 
-config/name="Elevator Incremental"
+config/name="Shafted"
 run/main_scene="res://game/game_root.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"

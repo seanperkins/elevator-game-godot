@@ -1,4 +1,4 @@
-# Elevator Incremental
+# Shafted
 
 A Godot 4.7 incremental game about elevators. You tap to send cars up and down
 a building, deliver passengers before their patience runs out, then buy your
