@@ -33,35 +33,36 @@ Overrides: `catalog_path_override`, `blueprints_path_override`.
 
 ## BuildingView (`building_view.gd`) — the board
 Signals: `floor_purchase_requested`, `shaft_purchase_requested`, `hall_floor_selected(floor_index)`, **`prestige_requested`**.
-Constants: `SHAFT_AREA_X = FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH` (=240), `SHAFT_WIDTH=160`, **`FLOOR_HEIGHT=88`**.
+Constants: `SHAFT_AREA_X = FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH` (=208), `SHAFT_WIDTH=230`, **`FLOOR_HEIGHT=120`**. The numbers are derived against the DEVICE board (688 wide on a phone, 720 headless); `tests/test_board_geometry.gd` pins two columns on both.
 Owns `BoardCoords`; scrolls board and shaft strip independently. `bind(state)`, `rebuild()`, `refresh()`, `scroll_board_by`, `pan_board_by`, `scroll_shafts_by`, `visible_shafts()`, `slot_count()`, `max_scroll()`, ghost floor + purchase bands.
 `refresh()` passes `upgrades.is_installed("call_direction")` into every `FloorRow.set_waiting`.
 **The ghost band at the cap**: line ~100 gates CONSTRUCTION on the STRUCTURAL cap
 and must not change — `_on_ghost_input` is also the pan handler, so deleting the
-band would kill the 88-unit pan strip on the tallest buildings. Only the label
+band would kill the pan strip on the tallest buildings. Only the label
 (`CAP REACHED — REBUILD`, 21 chars to stay inside `FloorRow.STRIP_RIGHT`) and the
 tap's destination change. NB `rebuild()` moves the shaft viewport last, so after
 any rebuild the ghost only wins input on the hall side of `SHAFT_AREA_X`.
 
 ## FloorRow (`floor_row.gd`) — one floor band
-Constants: `GUTTER_WIDTH=64`, `STRIP_WIDTH=176`, `COUNT_WIDTH=26`, `LABEL_X=38`, `SPRITE_X=68`, `MAX_INDIVIDUALS=12`, `CALL_UP="▲"`, `CALL_DOWN="▼"`, **`CALL_UNKNOWN=""`**.
+Constants: `GUTTER_WIDTH=64`, `STRIP_WIDTH=144`, `COUNT_WIDTH=26`, `LABEL_X=38`, `SPRITE_X=68`, `MAX_INDIVIDUALS=12`, `CALL_UP/CALL_DOWN` point at `PersonSprite.ARROW_UP/DOWN`, **`CALL_UNKNOWN=""`**.
 Fonts: floor number **22**, waiting count 18. The floor number is capped by the UI spec's 26-unit gutter budget (x 38–64) — bigger needs the gutter widened first.
-`set_floor(index)`, `set_waiting(passengers, show_direction: bool)` (**required arg**, so a caller cannot silently opt out of the upgrade gate), `set_tenant(satisfaction, vacant, moving_out, ticks_left)`.
+`set_floor(index)`, `set_waiting(passengers, show_direction: bool)` (**required arg**, so a caller cannot silently opt out of the upgrade gate), `set_tenant(satisfaction, vacant, moving_out, ticks_left)`. The hall strip packs `PersonSprite.HALL_CELL` (20×40) via `ChipGrid` — six across, two deep, all twelve.
 
 ## ShaftColumn (`shaft_column.gd`) — one elevator shaft
 Signals: `dispatch_requested(shaft, floor_index)`, `surge_requested(shaft)`, `pan_requested(delta)`.
-`SEAT_SIZE=(ChipGrid.SIZE, ChipGrid.SIZE)`, `SEAT_FONT=PassengerSprite.FONT`.
-Draws the car, sliding doors, rider seats (pool sized to capacity), header. `setup(...)`, `set_car_position`, `set_riders(riders, capacity)`, `set_doors(open_fraction)`. `_gui_input` → Gesture → tap dispatch / pan.
+`CAR_FONT=24`. Riders stand in ranks laid out by `CarRack`; a pip strip across the car top (one rect per seat, lit/hollow) is the occupancy gauge, drawn in every band via `_car_rect.draw` → `_draw_pips`. `setup(...)`, `set_car_position`, `set_riders(riders, capacity)`, `set_doors(open_fraction)`, `seats_taken()`/`free_slots_shown()` (count pips), `rider_destinations()`. `_gui_input` → Gesture → tap dispatch / pan.
 
 ## HallColumn (`hall_column.gd`)
 The hall-call strip beside the shafts.
 
-## PassengerSprite (`passenger_sprite.gd`, `extends ColorRect`)
-Recycled chip, `ChipGrid.SIZE` square, **`FONT=24`**. Body colour ramps RED→GREEN with patience; the Label carries the glyph. `set_chip(size, font)`, `show_as(fraction, text)`, `label_text()`, `recycle()`.
-It renders whatever string it is handed — which is why the call-direction gate needed no change here.
+## PersonSprite (`person_sprite.gd`, `extends Control`) — one person
+Recycled. Three parts drawn in `_draw()`: badge (call arrow while waiting, DESTINATION once aboard), decorative figure (shirt/skin from `Palette`, keyed by `key_for(origin, destination, source)`), patience bar (waiter only). Hall cell 20×40; car cells per capacity via `set_cell`. `parts()` and `redraw_count()` are the testable seams. `show_waiting(fraction, glyph, tint_key)`, `show_riding(glyph, tint_key)`, `label_text()`, `recycle()`. Setters early-out on unchanged args. Replaces the deleted `passenger_sprite.gd`.
 
-## ChipGrid (`chip_grid.gd`, RefCounted) — crowd layout math
-`SIZE=30`, `GAP=4`. Pure packing: `shape(n, cols, rows)`, `columns_for(w)`, `rows_for(h)`, `fits(grid)`, `position_of(i, n, grid, area)`.
+## CarRack (`car_rack.gd`, RefCounted) — car geometry, pure
+No scene tree. `GAP=4`, `CELL_MAX=40`, `CELL_MIN=30`, `PIP_MIN=6`, `PIP_H=8`, `INSET=2`, `BADGE_H=30`, `FIGURE_H=22`, `BAND=52`, `ONE_RANK_MIN=62`, `TWO_RANK_MIN=114`, `ONE_RANK_CAP=5`. `ranks_for(capacity, car_h)` (0/1/2 bands), `front_count`, `cell_width` (offset-aware), `slots(capacity, w, h)` (front rank first, then half-pitch-offset back), `pips(capacity, w)` (empty below `PIP_MIN`). Unit-tested headlessly.
+
+## ChipGrid (`chip_grid.gd`, RefCounted) — hall packing math
+`GAP=4`. Pure packing for the HALL only (the car uses `CarRack`): `shape(n, cols, rows)`, `columns_for(w, cell_w)`, `rows_for(h, cell_h)`, `fits(grid)`, `position_of(i, n, grid, area, cell)`. Takes a cell `Vector2`, never a pitch.
 **Its `rows` are rows of chips inside one floor's strip — genuine layout rows, deliberately not renamed to floors.**
 
 ## DaySparkline (`day_sparkline.gd`)

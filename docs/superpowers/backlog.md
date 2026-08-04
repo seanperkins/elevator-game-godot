@@ -20,8 +20,9 @@ different dispatch problem.
 - `Passenger` gains a size (car units) and possibly a weight.
 - `ElevatorCar.board()` stops counting heads and starts summing units; capacity
   becomes units, not people.
-- `ChipGrid` draws one square per passenger — freight needs to occupy more than
-  one square, or the seat rack stops telling the truth.
+- `ChipGrid` draws one cell per passenger in the hall; a car lays its riders out
+  by rank via `CarRack` — freight needs to occupy more than one cell, or the pips
+  stop telling the truth.
 - The load sensor gets a real job: refuse a hall call when the *remaining units*
   cannot take the smallest waiting load.
 
@@ -369,13 +370,15 @@ saves a preset id today, so a custom policy needs its blocks saved instead).
 **Idea.** The lobby kiosk that reveals where waiting passengers are going before
 they board.
 
-**Where it fits.** Waiting passengers currently show a call arrow (up/down)
+**Where it fits.** Waiting passengers currently show a drawn call arrow (up/down)
 because that is all a hall button knows. This is the hardware that changes what
-the player can plan, and it is already anticipated in `passenger_sprite.gd`.
+the player can plan, and `PersonSprite` renders it today as a triangle drawn in
+`_draw()` rather than a font glyph.
 
-**Note.** It also changes the *hall* rendering, not just the policy: chips would
-need to show a floor rather than an arrow, which is a width change the strip has
-to absorb.
+**Note.** It also changes the *hall* rendering, not just the policy: the waiting
+badge would need to show a floor rather than an arrow, which is a width change
+the strip has to absorb. (The *riding* badge already carries two digits — that
+was the point of the car resize.)
 
 ---
 
@@ -572,8 +575,8 @@ they prove the kind system carries real variety before anything harder is built.
 
 Both of these need a passenger to take up **more than one seat**, which is
 exactly the primitive the freight entry above already requires (`Passenger`
-gains a size, `ElevatorCar.board()` sums units instead of counting heads,
-`ChipGrid` draws more than one square). Build it once and all three land.
+gains a size, `ElevatorCar.board()` sums units instead of counting heads, a car
+draws more than one figure per slot). Build it once and all three land.
 
 - **Hospital.** A gurney takes 2 slots plus 2 first responders = **4 slots**,
   i.e. the entire base car (`Upgrades.CAPACITY_BASE` is 4). One gurney is a

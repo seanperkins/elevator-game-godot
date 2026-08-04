@@ -85,9 +85,10 @@ _sprites[i].show_as(p.patience_fraction(),
 **`view/building_view.gd:346`** — pass
 `_state.upgrades.is_installed("call_direction")`.
 
-**`view/passenger_sprite.gd`** — unchanged. `show_as(fraction, text)` already
-renders whatever string it is handed, which is why this feature needs no new
-sprite state.
+**`view/person_sprite.gd`** (replaces the deleted `passenger_sprite.gd`) —
+`show_waiting(fraction, glyph, tint_key)` draws whatever glyph it is handed,
+which is why this feature needs no new sprite state. The hall arrow is drawn as
+a triangle; the *waiting* badge never typesets.
 
 **The management panel** — unchanged. No file in `ui/` mentions `hall_buttons`,
 so the upgrade list is generated from the catalog and this appears on its own.

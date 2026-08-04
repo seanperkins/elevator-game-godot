@@ -596,8 +596,8 @@ res://
   data/    eras, upgrades, tenants, traffic curves
   game/    game_root (owns sim, pumps ticks), save_manager, save_codec
            (export/import), lifecycle (visibility/focus), util/number_format
-  view/    building_view, shaft_column, elevator_car, passenger_sprite,
-           floor_row, floor_selector
+  view/    building_view, shaft_column, elevator_car, person_sprite,
+           car_rack, floor_row, floor_selector
   ui/      hud, management_view, relet_confirm, prestige_panel, event_toast,
            a2hs_prompt
   tests/   GUT specs against sim/, game/save_codec, game/save_manager,
@@ -672,39 +672,41 @@ passes a `meta_clicked` payload to `OS.shell_open()`.
 
 ### 8.5 Designed-around risks
 
-**Node count.** Sprites come from a pool. A row renders at most 12 individuals,
-and **collapses into a crowd bar when the row is 40 units or shorter — not when
-the crowd exceeds 12.** The trigger is row height, so the two representations are
-**mutually exclusive**: a row draws sprites or a bar, never both. That caps the
-sprite tier at 28 floors (1184/29 = 40.83 units, sprites; 1184/30 = 39.47, bar),
-which is where the passenger term peaks. Counting *nodes* rather than passengers,
-since §2 gives each passenger a body, a destination bubble, and a patience meter:
+**Node count.** Sprites come from a pool. A row renders at most 12 individuals.
+~~An earlier trigger collapsed the strip into a crowd bar when the row was 40
+units or shorter — not when the crowd exceeded 12 — making the two
+representations mutually exclusive, and the sprite tier capped at 28 floors.~~ The
+crowd bar is deleted (2026-08-04): rows are a fixed 120 units, so the 40-unit
+trigger could never fire, and a person is drawn individually at every row height.
+Counting *nodes* rather than passengers, since §2 gives each passenger a body
+and a destination label:
 
 | component | nodes |
 | --- | --- |
-| passengers (28 rows x 12 x 3, the sprite tier's ceiling) | 1,008 |
-| crowd bars — excluded at the peak, since the tiers are exclusive | 0 |
-| tenant widgets (28 x 3) | 84 |
+| passengers (rows x 12 x 2, a person is a Control + Label) | 40 rows x 24 = 960 |
+| tenant widgets (rows x 3) | 120 |
 | cars (8 shafts x 2 cars x 2) | 32 |
-| **subtotal at the peak, N = 28** | **~1,124** |
+| **subtotal at the 40-floor cap** | **~1,112** |
 
-An earlier draft counted 1,440 passenger nodes *and* 80 crowd bars as coexisting
-across 40 rows, for ~1,672. Under the exclusive tiers the peak is **~1,124, a 33%
-drop** — not the ~5% that subtracting 80 bars would suggest. Past 28 floors the
-sprite term vanishes entirely and 40 crowd bars replace 1,008 sprite nodes, so the
-40-floor board is far cheaper than the 28-floor one. The "measured on the target
-iPhone" figure below was baselined against the old table and needs re-measuring
-against this one.
+A person is a `Control` + `Label` (it was a `ColorRect` + `Label`), so the per-row
+term is flat; the seats it replaced are gone, so the car term *fell*. An earlier
+draft counted 1,440 passenger nodes *and* 80 crowd bars as coexisting across 40
+rows, for ~1,672, and the §3.5 revision brought the exclusive-tier peak to
+~1,124 at N = 28. With the tier deleted the passenger term is `40 × 24 = 960`,
+and the 40-floor board is the expensive one rather than the cheap one — there is
+no point where the passenger term vanishes. The "measured on the target iPhone"
+figure below was baselined against the old table and needs re-measuring against
+this one.
 
 Add the `floor_row` and `shaft_column` containers, the HUD, and passengers
-rendered inside cars, and the real ceiling is **~1,250 at N = 28** — down from the
-~1,850 the old table implied. That is still thousands rather than hundreds, and
-still past the threshold where Control-node layout cost on GL Compatibility in
-mobile Safari stops being free, so nothing about the mitigation changes: the
-per-row cap stays a **tunable constant with a global node ceiling above it**, and
-the ceiling is measured on the target iPhone before Milestone 3. Both the 40-unit
-tier threshold and the 12-sprite cap are the tuning knobs. The car term is bounded because
-§3 caps both shafts and cars per shaft.
+rendered inside cars, and the real ceiling is **~1,300 at the 40-floor cap** — a
+fourth of what the pre-§3.5 table implied. That is still thousands rather than
+hundreds, and still past the threshold where Control-node layout cost on GL
+Compatibility in mobile Safari stops being free, so nothing about the mitigation
+changes: the per-row cap stays a **tunable constant with a global node ceiling
+above it**, and the ceiling is measured on the target iPhone before Milestone 3.
+The 12-sprite cap is the tuning knob (the 40-unit tier threshold is gone). The
+car term is bounded because §3 caps both shafts and cars per shaft.
 
 **Big numbers.** GDScript floats reach ~1e308, ample *provided nothing compounds
 without a cap* — hence §6's combo cap and §13's per-era peak-magnitude estimates.

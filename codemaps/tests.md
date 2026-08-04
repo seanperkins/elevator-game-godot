@@ -1,6 +1,6 @@
 > Generated: 2026-08-03 | Token-lean format for LLM context
 
-# tests/ — GUT suite (headless, run in CI and locally). 578 tests, 29 scripts.
+# tests/ — GUT suite (headless, run in CI and locally). 662 tests, 32 scripts.
 
 Every file `extends GutTest`, broadly 1:1 with `sim/`.
 
@@ -36,8 +36,11 @@ CI (`deploy.yml`) runs the whole suite before building. Local GUT must pass befo
 | test_metrics.gd | rolling buckets, average_wait sentinel |
 | test_coords.gd / test_coords_scroll.gd | floor↔y round-trip, scrolling/grounding |
 | test_gesture.gd / test_pan_gesture.gd | tap vs pan |
-| test_board_input.gd | real scene + synthetic input; scroll, ghost floor, **call-direction arrow gate**, cap-reached band, scene-level demolish (view counts, sibling order, induced save failure) |
-| test_chip_grid.gd | crowd packing (its `rows` are layout rows) |
+| test_board_input.gd | real scene + synthetic input; scroll, ghost floor, **call-direction arrow gate**, cap-reached band, scene-level demolish (view counts, sibling order, induced save failure), pip occupancy, two-digit rider badges |
+| test_board_geometry.gd | **the device-vs-canvas check**: two shaft columns at 688 AND 720 must agree — the test that would have caught the one-column-board CRITICAL |
+| test_chip_grid.gd | hall packing (its `rows` are layout rows); the cell is a Vector2, and the hall's 6×20+5×4 == 140 equality is pinned |
+| test_car_rack.gd | the car's geometry headless: rank bands, cell per the §4.2 table at every capacity 4–12, half-pitch offset, pips, bounds |
+| test_person_sprite.gd | a person drawn: `parts()` fit the cell, tint-key spread across the spawner's trip shapes, redraw suppression, no badge on CALL_UNKNOWN |
 | test_day_sparkline.gd | bar heights and directional segment shares |
 | test_number_format.gd | compact formatting |
 | test_safe_area.gd | insets |
@@ -49,9 +52,12 @@ CI (`deploy.yml`) runs the whole suite before building. Local GUT must pass befo
   moving one without the other nets exactly zero change.
 * `MAX_FLOORS x largest_bucket` must stay under `TICKS_PER_SIM_MINUTE`.
 * Purchasable floor cap (20) is **below** the structural cap (40), deliberately.
-* A waiting chip shows no direction until `call_direction` is fitted — the
+* A waiting figure shows no badge until `call_direction` is fitted — the
   default-state test is the one guarding the feature; the three arrow tests
   would still pass if the gate were deleted.
+* Every geometric claim is derived against the DEVICE board (688 × ~1050), not
+  the 720 × 1184 canvas — `SafeArea.insets` floors both side insets at
+  `CORNER_MARGIN`. This is the class of bug that broke three review rounds.
 * `Meta.MAX_BLUEPRINTS == Prestige.MAX_YIELD`, and `Meta.BASE_STARTING_SHAFTS ==
   GameState.BASE_SHAFTS` — cross-module numbers that cannot be derived.
 * `yield_for(NAN) == 0` pins `maxf`'s argument order against a tidy-up.

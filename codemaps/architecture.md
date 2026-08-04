@@ -103,12 +103,19 @@ patience when the doors open pays and extends the combo.
 ## Status
 
 Milestones 1–3, the board/management UI, the cost-curve work, Spec A (tenant
-kinds + floor class) and **S5 (prestige)** are built and tested. 578 GUT tests.
+kinds + floor class), **S5 (prestige)** and the **people-and-car** pass are built
+and tested. 662 GUT tests.
 
 S5: a run caps at **10 floors** and ladders to 20 via the `height` node.
 `sim/meta.gd` owns the persistent tree, `sim/prestige.gd` the demolish (which
 BUILDS a fresh GameState against a CLONED Meta rather than wiping the live one).
 Save format v4. `data/blueprints.json` is fatal-if-malformed.
+
+People-and-car: a passenger is a drawn figure (`view/person_sprite.gd`) with a
+badge and a patience bar, the hall packs a 20×40 cell via `ChipGrid`, and riders
+stand in ranks on the car floor laid out by `view/car_rack.gd`, with a pip strip
+as the occupancy gauge. The board constants moved to `FLOOR_HEIGHT=120`,
+`SHAFT_WIDTH=230` (`FloorRow.STRIP_WIDTH=144`), derived against the DEVICE board.
 
 Measured, and load-bearing for any balance work: run 1 yields **13 BP**, because
 `combo` multiplies `lifetime_earnings` — the field the conversion consumes — by
