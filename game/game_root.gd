@@ -136,38 +136,7 @@ func _ready() -> void:
 	_clock_label.position = Vector2(16 + _safe.x, 72 + _safe.y)
 	add_child(_clock_label)
 
-	_view = BuildingView.new()
-	_view.position = Vector2(_safe.x, HUD_HEIGHT + _safe.y)
-	_view.size = Vector2(size.x - _safe.x - _safe.z,
-		size.y - HUD_HEIGHT - _safe.y - _safe.w)
-	add_child(_view)
-	_view.bind(state)
-	_view.floor_purchase_requested.connect(func() -> void: state.buy("floor"))
-	_view.shaft_purchase_requested.connect(_on_buy_shaft)
-	_view.hall_floor_selected.connect(_on_hall_floor_selected)
-	_view.prestige_requested.connect(_on_prestige_requested)
-
-	_management = ManagementView.new()
-	_management.position = Vector2(_safe.x, HUD_HEIGHT + _safe.y)
-	_management.size = Vector2(size.x - _safe.x - _safe.z,
-		size.y - HUD_HEIGHT - _safe.y - _safe.w)
-	_management.visible = false
-	add_child(_management)
-	_management.bind(state)
-	_management.prestige_requested.connect(_on_prestige_requested)
-
-	panel = FloorPanel.new()
-	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(panel)
-	panel.bind(state)
-	panel.lease_requested.connect(_on_lease_requested)
-	panel.upgrade_requested.connect(_on_upgrade_requested)
-
-	_prestige = PrestigePanel.new()
-	_prestige.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(_prestige)
-	_prestige.bind(state)
-	_prestige.node_purchase_requested.connect(_on_node_purchase)
+	_rebuild_views()
 
 	# Paging the shaft strip is a tap, never a swipe: the dispatch drag is
 	# vertical and arcs sideways by more than half a column (§2.1), so any
@@ -240,8 +209,107 @@ func _on_lease_requested(floor_index: int, kind_id: String) -> void:
 	if state.lease(floor_index, kind_id):
 		panel.show_floor(state, floor_index)   # reflect the new tenant and close the picker
 
+## Builds the four views that hold a GameState, replacing any that exist.
+##
+## They have to be REPLACED rather than rebound: BuildingView.bind(),
+## ManagementView.bind() and FloorPanel.bind() all add_child unconditionally --
+## they are constructors wearing an accessor's name -- so calling any of them a
+## second time stacks a whole UI on top of the old one. Only
+## BuildingView.rebuild() frees first, and it never re-reads _state.
+##
+## It covers exactly those four. It must NOT include the pager buttons or
+## _view_button, which also add_child unconditionally and would duplicate on
+## every rebuild: the very trap this function is about.
+func _rebuild_views() -> void:
+	for old in [_view, _management, panel, _prestige]:
+		if old == null:
+			continue
+		# queue_free() is DEFERRED to end of frame, so without this the freed
+		# views remain children while the new ones are added, and input in that
+		# window reaches both trees.
+		old.hide()
+		remove_child(old)
+		old.queue_free()
+
+	_view = BuildingView.new()
+	_view.position = Vector2(_safe.x, HUD_HEIGHT + _safe.y)
+	_view.size = Vector2(size.x - _safe.x - _safe.z,
+		size.y - HUD_HEIGHT - _safe.y - _safe.w)
+	add_child(_view)
+	_view.bind(state)
+	# Resolved through `self` at call time, so it follows a state swap rather
+	# than capturing the dead sim.
+	_view.floor_purchase_requested.connect(func() -> void: state.buy("floor"))
+	_view.shaft_purchase_requested.connect(_on_buy_shaft)
+	_view.hall_floor_selected.connect(_on_hall_floor_selected)
+	_view.prestige_requested.connect(_on_prestige_requested)
+
+	_management = ManagementView.new()
+	_management.position = Vector2(_safe.x, HUD_HEIGHT + _safe.y)
+	_management.size = Vector2(size.x - _safe.x - _safe.z,
+		size.y - HUD_HEIGHT - _safe.y - _safe.w)
+	_management.visible = false
+	add_child(_management)
+	_management.bind(state)
+	_management.prestige_requested.connect(_on_prestige_requested)
+
+	panel = FloorPanel.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(panel)
+	panel.bind(state)
+	panel.lease_requested.connect(_on_lease_requested)
+	panel.upgrade_requested.connect(_on_upgrade_requested)
+
+	_prestige = PrestigePanel.new()
+	_prestige.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_prestige)
+	_prestige.bind(state)
+	_prestige.node_purchase_requested.connect(_on_node_purchase)
+	_prestige.demolish_requested.connect(_on_demolish)
+
+	# Sibling order decides input. _ready builds the views BEFORE the pager and
+	# _view_button, so those are later siblings and win against the panels'
+	# full-rect MOUSE_FILTER_STOP scrims. A remove_child + add_child rebuild
+	# appends the views LAST, which would put the scrims above MANAGE for the
+	# rest of the session.
+	for later in [_prev_shaft, _next_shaft, _pager_label, _view_button]:
+		if later != null:
+			move_child(later, get_child_count() - 1)
+
 func _on_prestige_requested() -> void:
 	_prestige.open(state)
+
+## Replaces the run. The WRITE COMES FIRST and its result is checked: swapping
+## state and then saving would show the player the new run while the durable
+## file still held the old, still-demolish-eligible one -- reload and the same
+## earnings pay a second time, and the ten-second autosave would retry against
+## the same broken condition. Fixing SaveStore's atomicity does not fix this; it
+## is an ordering bug, not a file-replacement bug.
+func _on_demolish() -> void:
+	var next := Prestige.demolish(state)
+	if next == null:
+		return                       # the gate refused; NOTHING has changed
+	if not save_now(next):
+		_show_save_failed()          # old run and Meta intact, on disk and in memory
+		return
+	state = next
+	last_selected_floor = -1         # a stale index into a building that just shrank
+	_rebuild_views()
+	# It lives outside the rebuilt range, so it would otherwise still read
+	# "BOARD" while the board is showing.
+	_view_button.text = "MANAGE"
+	_last_shape = Vector2i(state.building.floor_count, state.building.cars.size())
+	# Early-returns on `if _management.visible`, so it must run after the new
+	# (hidden) management view exists.
+	_refresh_pager()
+
+## Permits retry rather than latching: the staged-Meta design makes a retry safe
+## because nothing was credited. But it must not silently re-arm the autosave
+## against the OLD state while the player believes the demolish happened, so the
+## old run stays authoritative and the next explicit REBUILD tries again.
+func _show_save_failed() -> void:
+	_prestige.close()
+	_cash_label.text = "SAVE FAILED — try REBUILD again"
 
 ## A node purchase mutates PERSISTENT state, so it is written immediately rather
 ## than waiting for the ten-second autosave. That is why it routes through a
@@ -327,9 +395,17 @@ func _notification(what: int) -> void:
 		NOTIFICATION_WM_GO_BACK_REQUEST, NOTIFICATION_EXIT_TREE:
 			save_now()
 
-func save_now() -> void:
-	if _saving_enabled and state != null:
-		SaveStore.save(state)
+## Takes an OPTIONAL GameState so a demolish can write the NEW run before
+## swapping to it, and returns whether the write succeeded -- the old version
+## discarded SaveStore.save()'s bool, so no branch could observe a failure.
+##
+## The parameter is optional rather than required because two existing tests
+## call save_now() with no argument.
+func save_now(s: GameState = null) -> bool:
+	var target := s if s != null else state
+	if not _saving_enabled or target == null:
+		return false
+	return SaveStore.save(target)
 
 func _physics_process(delta: float) -> void:
 	_since_save += delta

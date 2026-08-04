@@ -741,3 +741,139 @@ func test_the_ghost_band_survives_at_the_cap_so_the_pan_strip_does() -> void:
 	await build_to(10)
 	view.refresh()
 	assert_not_null(view._ghost_floor, "the band is still there")
+
+# --- the demolish, driven through the real scene ----------------------------
+
+## before_each caches `view = root._view`, so any test crossing _rebuild_views()
+## must re-read it or assert against a freed node.
+func demolish_now() -> void:
+	root.state.economy.accrue(Prestige.DEMOLITION_FLOOR + 1600.0)
+	root._prestige.open(root.state)
+	root._prestige._rebuild_button.pressed.emit()
+	root._prestige._confirm_button.pressed.emit()
+	await wait_physics_frames(2)
+	view = root._view
+
+func test_a_tap_on_rebuild_alone_changes_nothing() -> void:
+	# The single assertion the whole Confirm/Cancel argument exists to buy.
+	root.state.economy.accrue(Prestige.DEMOLITION_FLOOR + 1600.0)
+	root._prestige.open(root.state)
+	var floors: int = root.state.building.floor_count
+	var bp: int = root.state.meta.blueprints
+	root._prestige._rebuild_button.pressed.emit()
+	await wait_physics_frames(1)
+	assert_eq(root.state.building.floor_count, floors, "the building is still there")
+	assert_eq(root.state.meta.blueprints, bp, "and nothing was credited")
+	assert_true(root._prestige.is_armed(), "the confirm row is showing")
+	assert_true(root._prestige._confirm_button.visible, "with a labelled control")
+	assert_false(root._prestige._rebuild_button.visible, "in place of REBUILD")
+
+func test_cancel_disarms_without_demolishing() -> void:
+	root.state.economy.accrue(Prestige.DEMOLITION_FLOOR + 1600.0)
+	root._prestige.open(root.state)
+	var floors: int = root.state.building.floor_count
+	root._prestige._rebuild_button.pressed.emit()
+	root._prestige._cancel_button.pressed.emit()
+	await wait_physics_frames(1)
+	assert_false(root._prestige.is_armed(), "disarmed")
+	assert_eq(root.state.building.floor_count, floors, "and the run survived")
+
+func test_a_demolish_replaces_the_run() -> void:
+	await build_to(9)
+	var before: GameState = root.state
+	before.economy.accrue(Prestige.DEMOLITION_FLOOR + 1600.0)
+	# Computed from the state rather than hardcoded: build_to deliberately
+	# inflates both the balance and the earnings to reach nine floors, so a
+	# literal here would be asserting the fixture rather than the conversion.
+	var expected: int = before.meta.blueprints \
+		+ Prestige.yield_for(before.economy.lifetime_earnings)
+	root._prestige.open(root.state)
+	root._prestige._rebuild_button.pressed.emit()
+	root._prestige._confirm_button.pressed.emit()
+	await wait_physics_frames(2)
+	view = root._view
+	assert_ne(root.state, before, "a new state entirely")
+	assert_eq(root.state.building.floor_count, GameState.BASE_FLOORS,
+		"a fresh building, nine floors shorter")
+	assert_eq(root.state.meta.blueprints, expected, "credited exactly the yield")
+	assert_eq(root.state.meta.runs_completed, 1, "and the run was counted")
+
+func test_a_demolish_leaves_exactly_one_of_each_view() -> void:
+	# bind() add_childs unconditionally, so calling it twice stacks a whole UI.
+	await demolish_now()
+	var boards := 0
+	var managements := 0
+	for child in root.get_children():
+		if child is BuildingView:
+			boards += 1
+		if child is ManagementView:
+			managements += 1
+	assert_eq(boards, 1, "one board")
+	assert_eq(managements, 1, "one management view")
+
+func test_a_tap_in_the_ghost_band_after_a_demolish_buys_exactly_one_floor() -> void:
+	# A duplicated BuildingView buys two -- the same class of bug
+	# test_one_thumb_tap_buys_exactly_one_floor already guards. This is also
+	# what exercises the move_child sibling-order restoration.
+	await demolish_now()
+	root.state.economy.accrue(1e9)
+	var before: int = root.state.building.floor_count
+	await thumb_tap(100.0, ghost_centre_y())
+	assert_eq(root.state.building.floor_count, before + 1, "exactly one")
+
+func test_the_board_is_showing_after_a_demolish() -> void:
+	await demolish_now()
+	assert_true(root._view.visible, "the board")
+	assert_false(root._management.visible, "not management")
+	assert_eq(root._view_button.text, "MANAGE",
+		"the button lives outside the rebuilt range and is reset by hand")
+
+func test_the_pager_and_view_button_are_not_duplicated_by_a_demolish() -> void:
+	await demolish_now()
+	var buttons := 0
+	for child in root.get_children():
+		if child is Button:
+			buttons += 1
+	assert_eq(buttons, 3, "two pager buttons and one view button, as _ready built them")
+
+func test_manage_is_still_tappable_after_a_demolish() -> void:
+	# The sibling-order hypothesis, asserted rather than assumed: a rebuild
+	# appends the panels LAST, and their full-rect MOUSE_FILTER_STOP scrims
+	# would then win input against MANAGE for the rest of the session.
+	await demolish_now()
+	assert_gt(root.get_children().find(root._view_button),
+		root.get_children().find(root._prestige),
+		"the button is a later sibling than the panel scrim")
+	# And the consequence, through real hit-testing rather than pressed.emit(),
+	# which bypasses it: with a floor panel OPEN its full-rect scrim is exactly
+	# what would swallow this tap if the order were wrong.
+	root.panel.show_floor(root.state, 1)
+	await wait_physics_frames(1)
+	assert_true(root.panel.visible, "a panel is open over the board")
+	await do_tap(612.0, 48.0)
+	assert_true(root._management.visible, "MANAGE is still reachable through it")
+
+func test_a_demolish_that_cannot_be_saved_changes_nothing() -> void:
+	# The failure is INDUCED, not stubbed: SaveStore.save is static and
+	# game_root calls it by class name, so a GUT double is a different script
+	# and cannot intercept that call site. A DIRECTORY at user://save.json makes
+	# the commit-point rename fail through save()'s own code path.
+	var dir := DirAccess.open("user://")
+	SaveStore.clear()
+	dir.make_dir(SaveStore.PATH)
+	root.state.economy.accrue(Prestige.DEMOLITION_FLOOR + 1600.0)
+	var before: GameState = root.state
+	root._prestige.open(root.state)
+	root._prestige._rebuild_button.pressed.emit()
+	root._prestige._confirm_button.pressed.emit()
+	await wait_physics_frames(2)
+	assert_eq(root.state, before, "the old run is still authoritative")
+	assert_eq(root.state.meta.blueprints, 0, "and nothing was credited")
+	var payload := SaveCodec.encode(root.state)
+	assert_eq((payload["meta"] as Dictionary)["blueprints"], 0,
+		"an autosave would carry the uncredited balance")
+	# The fixture LEAKS: clear() tested file_exists(PATH), which is false for a
+	# directory, so without dir_exists it would survive before_each and become
+	# the fixture for every later test in this file.
+	SaveStore.clear()
+	assert_false(dir.dir_exists(SaveStore.PATH), "cleaned up by clear()")
