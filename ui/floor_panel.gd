@@ -70,7 +70,7 @@ func bind(state: GameState) -> void:
 	sheet.add_child(_box)
 
 	_header = Label.new()
-	_header.add_theme_font_size_override("font_size", 18)
+	_header.add_theme_font_size_override("font_size", 24)
 	_box.add_child(_header)
 
 	_bar = ProgressBar.new()
@@ -84,7 +84,7 @@ func bind(state: GameState) -> void:
 
 	_upgrade = Button.new()
 	_upgrade.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
-	_upgrade.add_theme_font_size_override("font_size", 16)
+	_upgrade.add_theme_font_size_override("font_size", 22)
 	_upgrade.pressed.connect(_on_upgrade)
 	_box.add_child(_upgrade)
 
@@ -133,7 +133,7 @@ func _rebuild_picker(vacant: bool) -> void:
 	for k in _state.available_kinds(_floor):
 		var b := Button.new()
 		b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
-		b.add_theme_font_size_override("font_size", 15)
+		b.add_theme_font_size_override("font_size", 20)
 		var cost := _state.lease_cost(_floor, k.id)
 		var locked := is_locked(k.id)
 		b.text = "%s  $%s%s" % [k.display_name, NumberFormat.compact(cost),

@@ -186,7 +186,7 @@ func _build_ghost_floor() -> void:
 	_ghost_floor.add_child(bg)
 
 	var label := Label.new()
-	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_font_size_override("font_size", 20)
 	label.position = Vector2(FloorRow.LABEL_X, (FLOOR_HEIGHT - 20.0) * 0.5)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ghost_floor.add_child(label)
@@ -239,7 +239,7 @@ func _build_slots() -> void:
 		slot.set_meta("bg", bg)
 
 		var label := Label.new()
-		label.add_theme_font_size_override("font_size", 12)
+		label.add_theme_font_size_override("font_size", 16)
 		label.position = Vector2(6, 8)   # repositioned with the shaft each frame
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(label)

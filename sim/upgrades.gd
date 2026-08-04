@@ -77,6 +77,12 @@ func is_maxed(id: String) -> bool:
 		return true
 	return level_of(id) >= int(_defs[id]["max_level"])
 
+## A yes/no fitting rather than a ladder -- the sensors and the hall buttons.
+## "Lv1" on something that has exactly one level is noise: there is no level 2
+## to distinguish it from, so the view says UNLOCKED and drops the number.
+func is_single_level(id: String) -> bool:
+	return _defs.has(id) and int(_defs[id]["max_level"]) == 1
+
 func cost_of(id: String) -> float:
 	if not _defs.has(id):
 		return INF

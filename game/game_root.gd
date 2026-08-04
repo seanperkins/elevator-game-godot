@@ -138,7 +138,7 @@ func _ready() -> void:
 	add_child(bg)
 
 	_cash_label = Label.new()
-	_cash_label.add_theme_font_size_override("font_size", 28)
+	_cash_label.add_theme_font_size_override("font_size", 38)
 	_cash_label.position = Vector2(16 + _safe.x, 10 + _safe.y)
 	# Label defaults to MOUSE_FILTER_IGNORE, so it receives nothing today. The
 	# minimum size is the touch target, not the text: the glyphs still draw
@@ -156,7 +156,7 @@ func _ready() -> void:
 	add_child(_cash_label)
 
 	_rate_label = Label.new()
-	_rate_label.add_theme_font_size_override("font_size", 16)
+	_rate_label.add_theme_font_size_override("font_size", 22)
 	_rate_label.position = Vector2(16 + _safe.x, 48 + _safe.y)
 	add_child(_rate_label)
 
@@ -165,7 +165,7 @@ func _ready() -> void:
 	# make room. Dimmed to the pager's grey: the hour is context, not a number
 	# the player acts on.
 	_clock_label = Label.new()
-	_clock_label.add_theme_font_size_override("font_size", 16)
+	_clock_label.add_theme_font_size_override("font_size", 22)
 	_clock_label.add_theme_color_override("font_color", Palette.INK_MUTED)
 	_clock_label.position = Vector2(16 + _safe.x, 72 + _safe.y)
 	add_child(_clock_label)
@@ -184,7 +184,7 @@ func _ready() -> void:
 	# off the right edge, and a drag affordance you have not discovered yet
 	# cannot tell you that.
 	_pager_label = Label.new()
-	_pager_label.add_theme_font_size_override("font_size", 14)
+	_pager_label.add_theme_font_size_override("font_size", 19)
 	_pager_label.add_theme_color_override("font_color", Palette.INK_MUTED)
 	_pager_label.position = Vector2(328 + _safe.x, 38 + _safe.y)
 	_pager_label.size = Vector2(88, 20)
@@ -196,7 +196,7 @@ func _ready() -> void:
 	# shafts that is a dispatch target.
 	_view_button = Button.new()
 	_view_button.text = "MANAGE"
-	_view_button.add_theme_font_size_override("font_size", 20)
+	_view_button.add_theme_font_size_override("font_size", 27)
 	_view_button.size = Vector2(200, TOUCH_MIN)
 	_view_button.position = Vector2(size.x - 208 - _safe.z, 4 + _safe.y)
 	_view_button.pressed.connect(_on_toggle_view)
@@ -206,7 +206,7 @@ func _ready() -> void:
 	# cash readout reveal it, and then hidden again only by a save reset.
 	_dev_button = Button.new()
 	_dev_button.text = "DEV"
-	_dev_button.add_theme_font_size_override("font_size", 16)
+	_dev_button.add_theme_font_size_override("font_size", 22)
 	_dev_button.size = Vector2(TOUCH_MIN, TOUCH_MIN)
 	_dev_button.position = Vector2(_view_button.position.x - TOUCH_MIN - 8.0,
 		4 + _safe.y)
@@ -534,7 +534,7 @@ func _show_error_screen(what: String, path: String) -> void:
 
 	_error_label = Label.new()
 	_error_label.text = "No valid %s\n\n%s\n\nCannot start." % [what, path]
-	_error_label.add_theme_font_size_override("font_size", 20)
+	_error_label.add_theme_font_size_override("font_size", 27)
 	_error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_error_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_error_label.set_anchors_preset(Control.PRESET_CENTER)

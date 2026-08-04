@@ -724,10 +724,29 @@ func test_a_sideways_pan_does_not_dispatch() -> void:
 
 # --- the way into the tree, and the balance ---------------------------------
 
-func test_management_shows_the_blueprint_balance() -> void:
+func test_the_prestige_panel_shows_the_blueprint_balance() -> void:
+	# It used to sit in the management readout, beside three service numbers
+	# measured over a rolling 60-second window -- so a lifetime currency read as
+	# a fourth one on the same clock. It belongs where it is spent.
 	root.state.meta.blueprints = 7
-	root._management.refresh()
-	assert_eq(root._management._blueprints.text, "7", "the balance is on screen")
+	root._prestige.refresh()
+	assert_string_contains(root._prestige._balance_label.text, "7",
+		"the balance is on the screen that spends it")
+
+func test_the_balance_shows_even_before_this_run_is_worth_anything() -> void:
+	root.state.meta.blueprints = 3
+	root.state.economy.lifetime_earnings = 0.0
+	root._prestige.refresh()
+	assert_string_contains(root._prestige._balance_label.text, "3",
+		"what you can spend does not depend on what this run has earned")
+
+func test_the_readout_states_the_window_its_numbers_cover() -> void:
+	# "13 riders/min" with no timescale could as easily have been the whole run.
+	var found := false
+	for n in root._management.find_children("*", "Label", true, false):
+		if (n as Label).text.contains("60 seconds"):
+			found = true
+	assert_true(found, "the rolling window is stated on screen")
 
 func test_management_opens_the_prestige_panel() -> void:
 	assert_false(root._prestige.visible, "closed to begin with")

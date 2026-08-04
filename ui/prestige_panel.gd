@@ -32,6 +32,7 @@ var _box: VBoxContainer
 var _scroll: ScrollContainer
 var _close_button: Button
 var _yield_label: Label
+var _balance_label: Label
 var _rows: Dictionary = {}          # node id -> Button
 var _rebuild_button: Button
 var _confirm_button: Button
@@ -74,8 +75,15 @@ func bind(state: GameState) -> void:
 	# The projection IS the confirmation: the number being decided on is on
 	# screen before the button is reachable. With a $1,000 gate this line does
 	# real work for the first half-hour of a new game.
+	# The balance belongs HERE, not in the management readout. That readout is
+	# three service numbers over a rolling 60-second window; a lifetime currency
+	# sat in it looking like a fourth one, measured over the same window.
+	_balance_label = Label.new()
+	_balance_label.add_theme_font_size_override("font_size", 24)
+	_box.add_child(_balance_label)
+
 	_yield_label = Label.new()
-	_yield_label.add_theme_font_size_override("font_size", 18)
+	_yield_label.add_theme_font_size_override("font_size", 24)
 	_yield_label.custom_minimum_size = Vector2(0, 24)
 	_box.add_child(_yield_label)
 
@@ -93,7 +101,7 @@ func bind(state: GameState) -> void:
 	# unexplained no-op reads as a bug.
 	var note := Label.new()
 	note.text = "Mechanical nodes apply from the next rebuild."
-	note.add_theme_font_size_override("font_size", 13)
+	note.add_theme_font_size_override("font_size", 18)
 	note.add_theme_color_override("font_color", Palette.INK_MUTED)
 	_box.add_child(note)
 
@@ -143,7 +151,7 @@ func is_armed() -> bool:
 func _heading(text: String) -> Control:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 11)
+	l.add_theme_font_size_override("font_size", 15)
 	l.add_theme_color_override("font_color", Palette.INK_FAINT)
 	l.custom_minimum_size = Vector2(0, 28)
 	return l
@@ -152,7 +160,7 @@ func _action(text: String, on_press: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
-	b.add_theme_font_size_override("font_size", 20)
+	b.add_theme_font_size_override("font_size", 27)
 	b.pressed.connect(on_press)
 	_box.add_child(b)
 	return b
@@ -160,7 +168,7 @@ func _action(text: String, on_press: Callable) -> Button:
 func _node_row(id: String) -> Control:
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
-	b.add_theme_font_size_override("font_size", 18)
+	b.add_theme_font_size_override("font_size", 24)
 	var captured := id
 	b.pressed.connect(func() -> void: node_purchase_requested.emit(captured))
 	_rows[id] = b
@@ -174,6 +182,11 @@ func refresh() -> void:
 	var meta := _state.meta
 	var earned := _state.economy.lifetime_earnings
 	var bp := Prestige.yield_for(earned)
+	# Always, not only when this run has earned one: the balance is what you can
+	# SPEND on the tree below, and it is most worth reading when the current
+	# building is worth nothing yet.
+	_balance_label.text = "You have %d Blueprint%s" % [
+		meta.blueprints, "" if meta.blueprints == 1 else "s"]
 	if bp >= 1:
 		_yield_label.text = "This building is worth %d Blueprint%s" % [
 			bp, "" if bp == 1 else "s"]

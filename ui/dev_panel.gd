@@ -76,7 +76,7 @@ func bind(state: GameState) -> void:
 	# Gives the grants visible feedback. +5 Blueprints otherwise produces no
 	# on-screen change at all, so you cannot tell it worked.
 	_readout = Label.new()
-	_readout.add_theme_font_size_override("font_size", 16)
+	_readout.add_theme_font_size_override("font_size", 22)
 	_readout.add_theme_color_override("font_color", Color("7c8899"))
 	_readout.custom_minimum_size = Vector2(0, 24)
 	_box.add_child(_readout)
@@ -102,7 +102,7 @@ func bind(state: GameState) -> void:
 	_box.add_child(_heading("UPGRADES"))
 	var note := Label.new()
 	note.text = "Fits mechanicals and hardware. Floors and shafts are bought on the board."
-	note.add_theme_font_size_override("font_size", 13)
+	note.add_theme_font_size_override("font_size", 18)
 	note.add_theme_color_override("font_color", Palette.INK_MUTED)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_box.add_child(note)
@@ -114,7 +114,7 @@ func bind(state: GameState) -> void:
 	_box.add_child(_heading("DANGER"))
 	var danger := Label.new()
 	danger.text = "Reset also deletes the backup and the tech tree — Blueprints, nodes and run count."
-	danger.add_theme_font_size_override("font_size", 13)
+	danger.add_theme_font_size_override("font_size", 18)
 	danger.add_theme_color_override("font_color", Color("7c8899"))
 	danger.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_box.add_child(danger)
@@ -177,7 +177,7 @@ func refresh() -> void:
 func _heading(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 11)
+	l.add_theme_font_size_override("font_size", 15)
 	l.add_theme_color_override("font_color", Palette.INK_FAINT)
 	l.custom_minimum_size = Vector2(0, 28)
 	return l
@@ -186,7 +186,7 @@ func _action(text: String, on_press: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
-	b.add_theme_font_size_override("font_size", 18)
+	b.add_theme_font_size_override("font_size", 24)
 	b.pressed.connect(on_press)
 	_box.add_child(b)
 	return b

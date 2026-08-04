@@ -21,7 +21,6 @@ var _floors: Dictionary = {}        # id -> Button
 var _riders: Label
 var _wait: Label
 var _gaveup: Label
-var _blueprints: Label
 var _dispatch_box: VBoxContainer
 var _dispatch_note: Label
 var _shaft_buttons: Array[Button] = []
@@ -58,7 +57,7 @@ func bind(state: GameState) -> void:
 	# that puts it here.
 	box.add_child(_heading("DISPATCH"))
 	_dispatch_note = Label.new()
-	_dispatch_note.add_theme_font_size_override("font_size", 13)
+	_dispatch_note.add_theme_font_size_override("font_size", 18)
 	_dispatch_note.add_theme_color_override("font_color", Palette.INK_MUTED)
 	box.add_child(_dispatch_note)
 	_dispatch_box = VBoxContainer.new()
@@ -71,7 +70,7 @@ func bind(state: GameState) -> void:
 	var rebuild := Button.new()
 	rebuild.text = "Demolish and start again"
 	rebuild.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
-	rebuild.add_theme_font_size_override("font_size", 18)
+	rebuild.add_theme_font_size_override("font_size", 24)
 	rebuild.pressed.connect(func() -> void: prestige_requested.emit())
 	box.add_child(rebuild)
 	refresh()
@@ -79,7 +78,7 @@ func bind(state: GameState) -> void:
 func _heading(text: String) -> Control:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 11)
+	l.add_theme_font_size_override("font_size", 15)
 	l.add_theme_color_override("font_color", Palette.INK_FAINT)
 	l.custom_minimum_size = Vector2(0, 28)
 	return l
@@ -89,26 +88,53 @@ func _heading(text: String) -> Control:
 ## collapses it improves while "gave up" climbs.
 func _build_readout() -> Control:
 	var panel := PanelContainer.new()
-	var floor_index := HBoxContainer.new()
-	floor_index.add_theme_constant_override("separation", 20)
-	panel.add_child(floor_index)
+	# A margin, or the leftmost caption is clipped by the panel's own edge --
+	# which is what "riders / min" was doing, losing its first two characters.
+	var pad := MarginContainer.new()
+	for side in ["margin_left", "margin_right"]:
+		pad.add_theme_constant_override(side, 14)
+	for side in ["margin_top", "margin_bottom"]:
+		pad.add_theme_constant_override(side, 8)
+	panel.add_child(pad)
 
-	_riders = _stat(floor_index, "riders / min")
-	_wait = _stat(floor_index, "avg wait")
-	_gaveup = _stat(floor_index, "gave up")
-	# It fits: four captions plus separations come to ~253 of ~720 units.
-	_blueprints = _stat(floor_index, "blueprints")
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 2)
+	pad.add_child(rows)
+
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 12)
+	rows.add_child(cols)
+
+	_riders = _stat(cols, "riders / min")
+	_wait = _stat(cols, "avg wait")
+	_gaveup = _stat(cols, "gave up")
+
+	# The window was documented only in metrics.gd, so on screen these three
+	# numbers had no timescale at all -- "13 riders/min" could as easily have
+	# been the whole run. It is a rolling 60 SIMULATED seconds (Metrics.BUCKETS).
+	var window := Label.new()
+	window.text = "over the last 60 seconds"
+	window.add_theme_font_size_override("font_size", 15)
+	window.add_theme_color_override("font_color", Palette.INK_FAINT)
+	rows.add_child(window)
 	return panel
+
+## One column of the readout. Equal minimum widths, so the three columns line up
+## on a grid instead of each being as wide as its own caption -- which is what
+## made the row read as ragged.
+const STAT_WIDTH := 150.0
 
 func _stat(parent: Control, caption: String) -> Label:
 	var col := VBoxContainer.new()
+	col.custom_minimum_size = Vector2(STAT_WIDTH, 0)
+	col.add_theme_constant_override("separation", 0)
 	parent.add_child(col)
 	var value := Label.new()
-	value.add_theme_font_size_override("font_size", 22)
+	value.add_theme_font_size_override("font_size", 30)
 	col.add_child(value)
 	var cap := Label.new()
 	cap.text = caption
-	cap.add_theme_font_size_override("font_size", 10)
+	cap.add_theme_font_size_override("font_size", 14)
 	cap.add_theme_color_override("font_color", Palette.INK_FAINT)
 	col.add_child(cap)
 	return value
@@ -116,7 +142,7 @@ func _stat(parent: Control, caption: String) -> Label:
 func _build_upgrade_row(id: String) -> Control:
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
-	b.add_theme_font_size_override("font_size", 18)
+	b.add_theme_font_size_override("font_size", 24)
 	var captured := id
 	b.pressed.connect(func() -> void: _state.buy(captured))
 	_floors[id] = b
@@ -132,7 +158,6 @@ func refresh() -> void:
 	_riders.text = Metrics.format_rate(m.deliveries())
 	_wait.text = Metrics.format_wait(m.average_wait_seconds())
 	_gaveup.text = Metrics.format_rate(m.expiries())
-	_blueprints.text = str(_state.meta.blueprints)
 
 	_refresh_dispatch()
 
@@ -140,8 +165,12 @@ func refresh() -> void:
 		var b: Button = _floors[id]
 		var label_name := _state.upgrades.name_of(id)
 		var lvl := _state.upgrades.level_of(id)
+		# A one-level fitting has no ladder to place you on, so it never shows a
+		# number: "Lv1" reads as the first of several when there is no second.
+		var single := _state.upgrades.is_single_level(id)
 		if _state.upgrades.is_maxed(id):
-			b.text = "%s  MAX (Lv%d)" % [label_name, lvl]
+			b.text = ("%s  UNLOCKED" % label_name) if single \
+				else ("%s  MAX (Lv%d)" % [label_name, lvl])
 			b.disabled = true
 			continue
 		if _state.upgrades.is_zero_delta(id):
@@ -150,9 +179,9 @@ func refresh() -> void:
 			b.disabled = true
 			continue
 		var cost := _state.upgrades.cost_of(id)
-		b.text = "%s  Lv%d      $%s\n%s" % [
-			label_name, lvl, NumberFormat.compact(cost),
-			_effect_text(id, lvl, lvl + 1)]
+		var head := ("%s      $%s" % [label_name, NumberFormat.compact(cost)]) if single \
+			else ("%s  Lv%d      $%s" % [label_name, lvl, NumberFormat.compact(cost)])
+		b.text = "%s\n%s" % [head, _effect_text(id, lvl, lvl + 1)]
 		b.disabled = not _state.economy.can_afford(cost)
 
 ## One toggle per shaft, plus how many licences are left. Buttons are built as
@@ -163,7 +192,7 @@ func _refresh_dispatch() -> void:
 		var index := _shaft_buttons.size()
 		var b := Button.new()
 		b.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
-		b.add_theme_font_size_override("font_size", 18)
+		b.add_theme_font_size_override("font_size", 24)
 		# `index` is captured by value, which is the one place that helps.
 		b.pressed.connect(func() -> void: _cycle_policy(index))
 		_dispatch_box.add_child(b)
