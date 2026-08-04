@@ -176,7 +176,7 @@ func _build_ghost_floor() -> void:
 	add_child(_ghost_floor)
 
 	var bg := ColorRect.new()
-	bg.color = Color("141a21")
+	bg.color = Palette.GHOST_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ghost_floor.add_child(bg)
@@ -226,7 +226,7 @@ func _build_slots() -> void:
 		_shaft_viewport.add_child(slot)
 
 		var bg := ColorRect.new()
-		bg.color = Color("151b23")
+		bg.color = Palette.SHAFT_BG
 		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(bg)
 		slot.set_meta("bg", bg)
@@ -258,8 +258,8 @@ func _position_slots(owned: int) -> void:
 			label.text = "+ SHAFT\n$%s" % NumberFormat.compact(
 				_state.upgrades.cost_of("shaft"))
 			label.add_theme_color_override("font_color",
-				Color("4ade80") if _state.economy.can_afford(
-					_state.upgrades.cost_of("shaft")) else Color("4a5563"))
+				Palette.AFFORD if _state.economy.can_afford(
+					_state.upgrades.cost_of("shaft")) else Palette.AFFORD_OFF)
 			if not slot.gui_input.is_connected(_on_slot_input):
 				slot.gui_input.connect(_on_slot_input)
 		else:
@@ -361,11 +361,11 @@ func refresh() -> void:
 			# just inside FloorRow.STRIP_RIGHT (240). A 37-character string
 			# would overrun into the shaft slot's own label.
 			_ghost_label.text = "CAP REACHED — REBUILD"
-			_ghost_label.add_theme_color_override("font_color", Color("f0b429"))
+			_ghost_label.add_theme_color_override("font_color", Palette.CAP_REACHED)
 		else:
 			var floor_cost := _state.upgrades.cost_of("floor")
 			_ghost_label.text = "+ BUILD FLOOR  $%s" % NumberFormat.compact(floor_cost)
 			_ghost_label.add_theme_color_override("font_color",
-				Color("4ade80") if _state.economy.can_afford(floor_cost) \
-				else Color("4a5563"))
+				Palette.AFFORD if _state.economy.can_afford(floor_cost) \
+				else Palette.AFFORD_OFF)
 	_position_slots(_state.building.cars.size())

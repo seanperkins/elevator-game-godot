@@ -51,7 +51,7 @@ func bind(state: GameState) -> void:
 	# the job the scrim only appeared to.
 
 	var bg := ColorRect.new()
-	bg.color = Color("101418")
+	bg.color = Palette.PANEL_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(bg)
@@ -94,7 +94,7 @@ func bind(state: GameState) -> void:
 	var note := Label.new()
 	note.text = "Mechanical nodes apply from the next rebuild."
 	note.add_theme_font_size_override("font_size", 13)
-	note.add_theme_color_override("font_color", Color("7c8899"))
+	note.add_theme_color_override("font_color", Palette.INK_MUTED)
 	_box.add_child(note)
 
 	# A Confirm/Cancel PAIR, never a second tap on an armed button. The UI spec
@@ -144,7 +144,7 @@ func _heading(text: String) -> Control:
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_size_override("font_size", 11)
-	l.add_theme_color_override("font_color", Color("5b6675"))
+	l.add_theme_color_override("font_color", Palette.INK_FAINT)
 	l.custom_minimum_size = Vector2(0, 28)
 	return l
 

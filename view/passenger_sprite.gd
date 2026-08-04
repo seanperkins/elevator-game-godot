@@ -15,9 +15,6 @@ extends ColorRect
 ## lobby and reveals floors before boarding, which is a real change in what the
 ## player can plan -- see set_call/set_destination's two callers.
 
-const GREEN := Color("4ade80")
-const RED := Color("ef4444")
-
 ## A square, the same everywhere. ChipGrid owns the size so the hall and the car
 ## cannot drift apart.
 const WIDTH := ChipGrid.SIZE
@@ -34,9 +31,10 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	# Dark ink: the body ranges over green through red, and both are light
-	# enough that white text on them is the unreadable case.
+	# enough that white text on them is the unreadable case. Palette pins the
+	# ramp's worst point at 4.03:1 against INK_ON_LIGHT.
 	_label = Label.new()
-	_label.add_theme_color_override("font_color", Color("0b0f14"))
+	_label.add_theme_color_override("font_color", Palette.INK_ON_LIGHT)
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -57,7 +55,7 @@ func _apply_size(chip_size: Vector2, font_size: int) -> void:
 
 func show_as(fraction: float, text: String) -> void:
 	visible = true
-	color = RED.lerp(GREEN, clampf(fraction, 0.0, 1.0))
+	color = Palette.PATIENCE_LOW.lerp(Palette.PATIENCE_OK, clampf(fraction, 0.0, 1.0))
 	_label.text = text
 
 func label_text() -> String:

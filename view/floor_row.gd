@@ -43,10 +43,6 @@ const BAR_W := 4.0
 const LABEL_X := 38.0
 const SPRITE_X := GUTTER_WIDTH + 4.0
 
-const GREEN := Color("4ade80")
-const RED := Color("ef4444")
-const GREY := Color("3f3f46")
-
 var floor_index: int = 0
 
 var _label: Label
@@ -58,7 +54,7 @@ var _sprites: Array[PassengerSprite] = []
 func _ready() -> void:
 	# A hairline at the top of the band: without it 40 floors read as one field.
 	var rule := ColorRect.new()
-	rule.color = Color("232c38")
+	rule.color = Palette.RULE
 	rule.size = Vector2(size.x, 1)
 	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(rule)
@@ -71,7 +67,7 @@ func _ready() -> void:
 	add_child(_count)
 
 	_bar_track = ColorRect.new()
-	_bar_track.color = Color("1b2430")
+	_bar_track.color = Palette.BAR_TRACK
 	_bar_track.position = Vector2(BAR_X, 1)
 	_bar_track.size = Vector2(BAR_W, size.y - 1)
 	_bar_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -90,7 +86,7 @@ func _ready() -> void:
 	# ~24 units. Going further needs the gutter widened first -- an earlier
 	# draft overlapped this label by ~12 units and it was a real bug.
 	_label.add_theme_font_size_override("font_size", 22)
-	_label.add_theme_color_override("font_color", Color("8b98aa"))
+	_label.add_theme_color_override("font_color", Palette.INK_FLOOR)
 	_label.position = Vector2(LABEL_X, 3)
 	add_child(_label)
 
@@ -144,17 +140,17 @@ func set_tenant(satisfaction: float, vacant: bool, moving_out: bool,
 		ticks_left: int) -> void:
 	var full := size.y - 1.0
 	if vacant:
-		_bar_fill.color = GREY
+		_bar_fill.color = Palette.PATIENCE_IDLE
 		_bar_fill.position = Vector2(BAR_X, 1)
 		_bar_fill.size = Vector2(BAR_W, full)
 		return
 
 	var fraction := clampf(satisfaction, 0.0, 1.0)
 	if moving_out:
-		_bar_fill.color = RED
+		_bar_fill.color = Palette.PATIENCE_LOW
 		fraction = clampf(float(ticks_left) / float(Tenancy.MOVE_OUT_TICKS), 0.0, 1.0)
 	else:
-		_bar_fill.color = RED.lerp(GREEN, fraction)
+		_bar_fill.color = Palette.PATIENCE_LOW.lerp(Palette.PATIENCE_OK, fraction)
 	var height := maxf(full * fraction, 1.0)
 	_bar_fill.size = Vector2(BAR_W, height)
 	_bar_fill.position = Vector2(BAR_X, 1.0 + (full - height))

@@ -31,7 +31,7 @@ func bind(state: GameState) -> void:
 	_state = state
 
 	var bg := ColorRect.new()
-	bg.color = Color("101418")
+	bg.color = Palette.PANEL_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(bg)
@@ -59,7 +59,7 @@ func bind(state: GameState) -> void:
 	box.add_child(_heading("DISPATCH"))
 	_dispatch_note = Label.new()
 	_dispatch_note.add_theme_font_size_override("font_size", 13)
-	_dispatch_note.add_theme_color_override("font_color", Color("7c8899"))
+	_dispatch_note.add_theme_color_override("font_color", Palette.INK_MUTED)
 	box.add_child(_dispatch_note)
 	_dispatch_box = VBoxContainer.new()
 	_dispatch_box.add_theme_constant_override("separation", 6)
@@ -80,7 +80,7 @@ func _heading(text: String) -> Control:
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_size_override("font_size", 11)
-	l.add_theme_color_override("font_color", Color("5b6675"))
+	l.add_theme_color_override("font_color", Palette.INK_FAINT)
 	l.custom_minimum_size = Vector2(0, 28)
 	return l
 
@@ -109,7 +109,7 @@ func _stat(parent: Control, caption: String) -> Label:
 	var cap := Label.new()
 	cap.text = caption
 	cap.add_theme_font_size_override("font_size", 10)
-	cap.add_theme_color_override("font_color", Color("5b6675"))
+	cap.add_theme_color_override("font_color", Palette.INK_FAINT)
 	col.add_child(cap)
 	return value
 

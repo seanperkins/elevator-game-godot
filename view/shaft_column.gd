@@ -29,7 +29,7 @@ const HEADER_FONT := 16
 ## Characters that fit across the car at HEADER_FONT, in the no-room fallback.
 const HEADER_BUDGET := 16
 
-const SEAT_FREE := Color("1b6d92")
+const SEAT_FREE := Palette.SEAT_FREE
 
 ## The doors, as the player sees them: two panels that part over the car.
 ##
@@ -44,7 +44,7 @@ const SEAT_FREE := Color("1b6d92")
 ## They are translucent on purpose. Opaque panels would hide the seat rack for
 ## the ~95% of the time a car is shut, which is most of when the player needs to
 ## read who is aboard and where they are going.
-const DOOR_COLOUR := Color("0b2a3a", 0.55)
+const DOOR_COLOUR := Palette.DOOR
 
 ## 0.0 shut, 1.0 wide open. Pure, so the shape is testable without a car.
 static func aperture_for(elapsed: int, total: int, opening: int, closing: int) -> float:
@@ -82,20 +82,24 @@ func setup(index: int, coords: BoardCoords, car_floor_provider: Callable) -> voi
 	# is DRAWN is only the building: a shaft that runs up through the sky above
 	# the roof reads as scaffolding rather than a lift.
 	_shaft_bg = ColorRect.new()
-	_shaft_bg.color = Color("1b2430")
+	_shaft_bg.color = Palette.SHAFT_BG
 	_shaft_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_shaft_bg)
 
 	_car_rect = ColorRect.new()
-	_car_rect.color = Color("4cc2ff")
+	_car_rect.color = Palette.CAR
 	_car_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_car_rect)
 
 	# Anchored at the TOP of the car and read against the light body. Centred
 	# vertically it collided with the seats and sat where nothing else does.
+	#
+	# DARK ink, because the body is the light mass: the terracotta car is the
+	# one warm block on a teal ground, and cream on it measures 2.14:1 -- a
+	# floor number on a moving car that you cannot read. INK_ON_LIGHT is 6.33:1.
 	_car_label = Label.new()
 	_car_label.add_theme_font_size_override("font_size", HEADER_FONT)
-	_car_label.add_theme_color_override("font_color", Color("06202e"))
+	_car_label.add_theme_color_override("font_color", Palette.INK_ON_LIGHT)
 	_car_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_car_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_car_label.mouse_filter = Control.MOUSE_FILTER_IGNORE

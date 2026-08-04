@@ -40,7 +40,7 @@ func bind(state: GameState) -> void:
 	visible = false
 
 	_bg = ColorRect.new()
-	_bg.color = Color("05080c", 0.62)
+	_bg.color = Palette.SCRIM
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(_bg)
@@ -55,7 +55,7 @@ func bind(state: GameState) -> void:
 	add_child(sheet)
 
 	var panel := ColorRect.new()
-	panel.color = Color("161c24")
+	panel.color = Palette.CARD_BG
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	sheet.add_child(panel)

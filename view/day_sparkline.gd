@@ -18,12 +18,14 @@ const BAR_COUNT := 24
 var _kind: TenantKind
 var _now: int = -1
 
-const COLOUR_INBOUND := Color("4cc2ff")     # incoming visitors, up
-const COLOUR_OUTBOUND := Color("f59e0b")    # leavers, down
-const COLOUR_INTERFLOOR := Color("8b98aa")  # neither, blunt
-## Translucent white: it has to sit over three saturated colours and read on all
+## The three series separate by HUE, not lightness -- they are thin strokes and
+## they overlap, so a lightness-only split collapses when two run together.
+const COLOUR_INBOUND := Palette.TRAFFIC_IN        # incoming visitors, up
+const COLOUR_OUTBOUND := Palette.TRAFFIC_OUT      # leavers, down
+const COLOUR_INTERFLOOR := Palette.TRAFFIC_INTER  # neither, blunt
+## Translucent cream: it has to sit over three saturated colours and read on all
 ## of them without hiding the mix underneath.
-const COLOUR_NOW := Color(1, 1, 1, 0.18)
+const COLOUR_NOW := Palette.TRAFFIC_NOW
 
 func show_kind(kind: TenantKind) -> void:
 	_kind = kind

@@ -68,6 +68,14 @@ var _speed: int = 1
 var _last_shape := Vector2i.ZERO
 
 func _ready() -> void:
+	# FIRST, and on the root, so every Label and Button in the game inherits the
+	# palette's ink rather than Godot's stock white; nodes needing something
+	# else override themselves and win. Ahead of the catalog checks on purpose:
+	# the error screens below are built and RETURNED from inside this function,
+	# so anything set after them leaves exactly the screen a player sees when
+	# something is broken as the one screen that never got themed.
+	theme = Palette.build_theme()
+
 	_safe = SafeArea.current(size)
 	var floors := START_FLOORS
 	var shafts := START_SHAFTS
@@ -124,7 +132,7 @@ func _ready() -> void:
 		return
 
 	var bg := ColorRect.new()
-	bg.color = Color("1f3a3d")
+	bg.color = Palette.APP_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
@@ -158,7 +166,7 @@ func _ready() -> void:
 	# the player acts on.
 	_clock_label = Label.new()
 	_clock_label.add_theme_font_size_override("font_size", 16)
-	_clock_label.add_theme_color_override("font_color", Color("e5d9b5"))
+	_clock_label.add_theme_color_override("font_color", Palette.INK)
 	_clock_label.position = Vector2(16 + _safe.x, 72 + _safe.y)
 	add_child(_clock_label)
 
@@ -177,7 +185,7 @@ func _ready() -> void:
 	# cannot tell you that.
 	_pager_label = Label.new()
 	_pager_label.add_theme_font_size_override("font_size", 14)
-	_pager_label.add_theme_color_override("font_color", Color("e5d9b5"))
+	_pager_label.add_theme_color_override("font_color", Palette.INK)
 	_pager_label.position = Vector2(328 + _safe.x, 38 + _safe.y)
 	_pager_label.size = Vector2(88, 20)
 	_pager_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -519,7 +527,7 @@ func _on_upgrade_requested(floor_index: int) -> void:
 ## catalog" would announce every one of them under the wrong name.
 func _show_error_screen(what: String, path: String) -> void:
 	var bg := ColorRect.new()
-	bg.color = Color("1f3a3d")
+	bg.color = Palette.APP_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
