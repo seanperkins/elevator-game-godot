@@ -5,16 +5,38 @@
 Read sim state, emit signals, never mutate logic. Bound to sim by `game/game_root.gd`.
 
 ## game/game_root.gd (entry Control)
-`START_FLOORS=6, START_SHAFTS=1, START_SEED=20260802, DEFAULT_CATALOG="res://data/tenants.json", HUD_HEIGHT=96, TOUCH_MIN=88, AUTOSAVE_SECONDS=10`.
-* `_ready()` binds `GameState` → BuildingView + ManagementView + FloorPanel; reads safe-area insets; builds the HUD (cash, rate, view toggle, pager).
+`START_FLOORS/START_SHAFTS/START_SEED` are refs to `GameState.BASE_*`.
+`DEFAULT_CATALOG`, `DEFAULT_BLUEPRINTS`, `HUD_HEIGHT=96`, `TOUCH_MIN=88`, `AUTOSAVE_SECONDS=10`.
+Overrides: `catalog_path_override`, `blueprints_path_override`.
+* `_ready()` reads safe-area insets, calls `_rebuild_views()`, then builds the
+  HUD (cash, rate, clock, view toggle, pager) — the HUD is built AFTER, so those
+  nodes are later siblings than the panels' scrims.
+* Cold boot uses **`SaveStore.load_all()`** (one source selection). A refused run
+  still salvages its Meta; a null Meta draws the error screen and stops.
+* `_rebuild_views()` replaces `_view`/`_management`/`panel`/`_prestige` —
+  `bind()` add_childs unconditionally, so it frees SYNCHRONOUSLY (queue_free is
+  deferred) and then `move_child`s the pager + view button back on top.
+  **Confirmed by measurement**: without that, `_view_button` lands at index 7
+  against the panel's 11 and a real tap on MANAGE is swallowed by the scrim.
+* `_on_demolish()` — **writes before swapping** and checks the bool. Swapping
+  first shows the new run while the durable file still holds the old,
+  still-demolish-eligible one. `save_now(s: GameState = null) -> bool`.
 * `_physics_process(delta)` pumps the sim; autosaves on a 10 s timer and on `NOTIFICATION_APPLICATION_PAUSED`.
+* `_show_error_screen(what, path)` + `error_screen_text()` — parameterised, so
+  the blueprint catalog is not announced as "No valid tenant catalog".
 * `_debug_board_override()` — `--board=40x8`, dev only, never a shipped default.
 
 ## BuildingView (`building_view.gd`) — the board
-Signals: `floor_purchase_requested`, `shaft_purchase_requested`, `floor_selected(floor_index)`.
+Signals: `floor_purchase_requested`, `shaft_purchase_requested`, `hall_floor_selected(floor_index)`, **`prestige_requested`**.
 Constants: `SHAFT_AREA_X = FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH` (=240), `SHAFT_WIDTH=160`, **`FLOOR_HEIGHT=88`**.
 Owns `BoardCoords`; scrolls board and shaft strip independently. `bind(state)`, `rebuild()`, `refresh()`, `scroll_board_by`, `pan_board_by`, `scroll_shafts_by`, `visible_shafts()`, `slot_count()`, `max_scroll()`, ghost floor + purchase bands.
 `refresh()` passes `upgrades.is_installed("call_direction")` into every `FloorRow.set_waiting`.
+**The ghost band at the cap**: line ~100 gates CONSTRUCTION on the STRUCTURAL cap
+and must not change — `_on_ghost_input` is also the pan handler, so deleting the
+band would kill the 88-unit pan strip on the tallest buildings. Only the label
+(`CAP REACHED — REBUILD`, 21 chars to stay inside `FloorRow.STRIP_RIGHT`) and the
+tap's destination change. NB `rebuild()` moves the shaft viewport last, so after
+any rebuild the ghost only wins input on the hall side of `SHAFT_AREA_X`.
 
 ## FloorRow (`floor_row.gd`) — one floor band
 Constants: `GUTTER_WIDTH=64`, `STRIP_WIDTH=176`, `COUNT_WIDTH=26`, `LABEL_X=38`, `SPRITE_X=68`, `MAX_INDIVIDUALS=12`, `CALL_UP="▲"`, `CALL_DOWN="▼"`, **`CALL_UNKNOWN=""`**.
@@ -45,8 +67,24 @@ Input classification (incl. `EMULATED_DEVICE=-1`) and safe-area inset math (`COR
 
 ## ui/management_view.gd — upgrades + dispatch panel
 `bind(state)`, `refresh()`, `_cycle_policy(shaft)`. `BUTTON_HEIGHT=88`, `MARGIN=12`.
-Builds the readout (riders served, avg wait, gave-ups), one row per upgrade (name, level, effect, cost, Buy — greyed on max / unaffordable / zero-delta), and the per-shaft dispatch toggle cycling `PRESET_ORDER`.
+Signal: `prestige_requested`. Builds the readout (riders/min, avg wait, gave-up,
+**blueprints**), a REBUILD heading at the bottom, one row per upgrade (name, level, effect, cost, Buy — greyed on max / unaffordable / zero-delta), and the per-shaft dispatch toggle cycling `PRESET_ORDER`.
 The upgrade list is **generated from the catalog**, so a new id in `upgrades.json` appears with no UI change.
+
+## ui/prestige_panel.gd — the tech tree and the demolish
+Signals: `node_purchase_requested(id)`, `demolish_requested`. `BUTTON_HEIGHT=88`.
+`bind/open/close/refresh/is_armed`.
+Shaped like ManagementView (full-height overlay + ScrollContainer), NOT
+FloorPanel: the tree needs ~708 units idle / ~796 armed against FloorPanel's
+589-unit sheet, and VBoxContainer honours `custom_minimum_size`, so the overflow
+would draw outside the sheet and over the board.
+Shows the yield projection (or the shortfall in dollars), STRUCTURE and
+MECHANICAL node rows (disabled when maxed / unaffordable / zero-delta), a note
+that Mechanical nodes apply from the next rebuild, and REBUILD.
+**Confirm/Cancel PAIR, never an armed double-tap** — touch emulation delivers one
+physical tap twice, so arming on tap 1 and committing on tap 2 lets a stray
+double-tap destroy a run. It EMITS rather than mutates: a node purchase changes
+persistent state and is written immediately.
 
 ## ui/floor_panel.gd — the per-floor sheet
 Replaced `relet_confirm.gd`. Opens on a floor tap: lease a kind, upgrade the floor class, and compare kinds via `DaySparkline`.

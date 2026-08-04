@@ -52,9 +52,42 @@ average, ~6.1 at the bucket-7 peak.
 
 The id is `floor`, not `row` (v3). A v2 save's `levels.row` migrates in `SaveCodec`.
 
-**Arc**: a complete run is 20 floors / 4 cars in ~6.5 h. `floor.max_level` is
-deliberately below `MAX_FLOORS` (40) — the gap is the room reserved for prestige.
-See `docs/superpowers/specs/2026-08-03-building-cost-curve-design.md`.
+**Arc**: `floor.max_level` is deliberately below `MAX_FLOORS` (40) — that gap is
+where the prestige ladder lives, and **this file is not edited by it**: with the
+ladder topping out at 20, `floor.max_level = 14` IS the top rung. The LIVE cap is
+per-run, set by `Upgrades.set_max_level` from `Meta.height_cap()`, and starts at
+**10 floors**. See the building-cost-curve and prestige specs.
+
+## blueprints.json → Meta  **(the persistent tech tree; fatal if malformed)**
+`cost = base * (level + 1)`; effects applied by id in `meta.gd`. No expression
+strings, same rule as `upgrades.json` and for the same reason.
+
+| id | name | branch | base | max | each level |
+|---|---|---|---|---|---|
+| height | Taller Foundations | structure | 6 | 2 | +5 to the floor cap (10→15→20) |
+| shafts | Sunk Shafts | structure | 15 | 3 | +1 starting shaft (1→4) |
+| motor | Standard Motor | mechanical | 6 | 4 | +1 starting `speed` level |
+| gearing | Standard Gearing | mechanical | 6 | 4 | +1 starting `doors` level |
+| cabin | Standard Cabin | mechanical | 9 | 3 | +1 starting `capacity` level |
+
+Totals: 18 / 90 / 60 / 60 / 54 = **282 BP**, ~21 runs at ~13 BP a run.
+
+**The bases are 3x the design spec's original**, and the reason matters before
+you retune anything: the ladder simulation excludes `combo`, but
+`Economy.credit_delivery` applies combo to `lifetime_earnings` — the exact field
+`Prestige.yield_for` consumes. Measured on the real sim, run 1 yields **13 BP**
+(7.61x multiplier at 100% served), not the ~4 the simulation reports. The tree is
+denominated in realised Blueprints.
+
+**`DEMOLITION_FLOOR` cannot be used to retune this.** The offset subtracts
+*before* the square root, so it amplifies skill variance near the gate: at 900 a
+strong player earns 13 BP and a distracted one 7; at the ~19,000 needed to bring
+the strong player to 4, the weak one earns **0** and prestige is unreachable.
+
+`load_defs` refuses: non-Array/empty/>64 `nodes`; a missing `id`/`name`/`branch`/
+`base`/`max_level`; a duplicate id; a branch other than `structure`/`mechanical`;
+`base` outside [1, 1e6] (a negative CREDITS on purchase, and 1e18 x 65 wraps
+int64 negative into the same mint); `max_level` outside [1, 64].
 
 ## traffic_walkup.json → TrafficSpawner  **(mostly vestigial)**
 Only **`base_patience_ticks` (900 = 45 real s)** is read. The `buckets` array and

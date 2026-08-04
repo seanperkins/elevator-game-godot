@@ -1277,11 +1277,19 @@ static func salvage_meta(p_data: Dictionary,
 cold-boot branch (`game_root.gd:67-69`) becomes:
 
 ```gdscript
-state = SaveStore.load_state()
+# [r7] AS BUILT. r6 wrote `SaveStore.load_state()` then
+# `SaveStore.load_meta(...)`, which is two independent _select() calls and
+# therefore exactly the disagreement §11 forbids -- the run could come from
+# PATH and the tree from BACKUP. load_all() makes the shared selection real in
+# the one place it has to be true: the production boot path.
+var loaded := SaveStore.load_all(catalog_path, blueprints_path)
+state = loaded["state"]
 if state == null:
-    var salvaged := SaveStore.load_meta(blueprints_path)
-    if salvaged == null:                 # [r6] defs failed to load -- SS8 is fatal
-        _show_error_screen(blueprints_path)   # :74-78 is BELOW us; call it directly
+    var salvaged: Meta = loaded["meta"]
+    if salvaged == null:                 # defs failed to load -- §8 is fatal
+        # :74-78 is BELOW us, so a bare `return` would skip it just as surely
+        # as an abort would. Draw the screen here.
+        _show_error_screen("blueprint catalog", blueprints_path)
         _saving_enabled = false
         set_physics_process(false)
         return
@@ -1289,6 +1297,11 @@ if state == null:
             GameState.BASE_SEED + salvaged.runs_completed,
             catalog_path, salvaged, blueprints_path)
 ```
+
+`load_state()` and `load_meta()` remain as thin wrappers over `load_all()`, so
+the 28 existing one-argument call sites in `tests/` stay source-compatible —
+but nothing in production calls them, which is what makes the single-selection
+invariant hold rather than merely being documented.
 
 Every existing `assert_null` test stays green, both docstrings stay true, and
 `decode`'s contract is untouched.
@@ -1765,18 +1778,22 @@ Two further facts worth stating:
   before `queue_free()` on each old view. Two lines, and it closes the race
   rather than documenting it.
 - **Sibling order must be restored, or the panel scrim swallows the HUD.
-  [r3, HYPOTHESIS — verify in the scene]** `_ready` builds `_view` (106),
+  [r3; CONFIRMED IN THE SCENE, r7]** `_ready` builds `_view` (106),
   `_management` (116), `panel` (124), then the pager (134-143) and `_view_button`
   (148), so the buttons are *later* siblings and win input against the panel's
   full-rect `MOUSE_FILTER_STOP` scrim (`ui/floor_panel.gd:42-45`). A
   `remove_child` + `add_child` rebuild appends the three views **last**, putting
   `panel` above `_view_button` and the pager for the rest of the session — MANAGE
   stops being tappable while a floor panel is open. `_rebuild_views()` must
-  `move_child()` each rebuilt node back to its original index. Marked HYPOTHESIS
-  because it follows from Godot's documented child-order input semantics but was
-  not run; §12's scene test asserts node counts and button text and would not
-  catch it either way, so the test needs an input assertion if the hypothesis
-  holds.
+  `move_child()` each rebuilt node back to its original index.
+  **[r7] No longer a hypothesis — measured by deleting the fix and re-running.**
+  Without it `_view_button` lands at child index **7** against the prestige
+  panel's **11**, and a real synthetic tap on MANAGE with a floor panel open is
+  swallowed by that panel's scrim. r3 was right to warn that node-count and
+  button-text assertions would miss this: they do. The scene test therefore
+  asserts both the ordering *and* the tap, through real hit-testing rather than
+  `pressed.emit()`, which bypasses it — and both assertions go red with the
+  `move_child` block removed, so neither is vacuous.
 - **Nothing dangles into the discarded state.** No view and no `game_root`
   handler connects a `GameState` signal, so the old state, its cars and its
   riders are dropped by refcount. The lambda at `game_root.gd:112` resolves
@@ -2281,11 +2298,16 @@ all, and would pass with the entire §10 change deleted.
    that ships first, re-run the simulation and **re-derive** the offset rather
    than scaling it — §2.1 shows the exit point is not a simple function of the
    constant.
-4. **S4's sequencing rule is unaddressed.** The backlog is explicit: *"S4's
+4. **DECIDED [r7]: S5 shipped first, overriding the rule explicitly.** The
+   reason the backlog puts the coordinate work first is that it is *cheaper on a
+   short building* — and this ladder tops out at **20 floors, which the game
+   already delivered before S5**. S5 therefore does not make the building taller
+   than S4 would have had to handle anyway, so the premise of the rule does not
+   apply to what actually shipped. The rest of the entry stands and is still
+   live for whoever does S4: *"S4's
    signed-coordinate change is cheaper at six floors than at forty, and S5 makes
    the building taller. If both are wanted, the coordinate work comes first."*
-   Keeping the building at today's 20 floors weakens the conflict but does not
-   retire it — and decision 9 ("one budget, split") makes `Meta.height_cap()` the
+   Decision 9 ("one budget, split") makes `Meta.height_cap()` the
    exact number the down axis will later have to split. Either do the coordinate
    work first or override the rule explicitly.
 5. **The Automation branch has an orphan.** §4 drops it on the grounds that
@@ -2293,10 +2315,15 @@ all, and would pass with the entire §10 change deleted.
    policies, **offline cap, offline rate**" — the latter two are not per-run
    purchases and have no other home. When offline earnings ship, the branch
    returns and "two branches, not four" stops being true.
-6. **Does a demolish keep the player's dispatch policies?** This spec resets them
-   to MANUAL with the licences. Keeping the *preference* and reapplying it as
-   licences are re-bought would remove a chore without granting power. Small
-   enough to belong in the plan rather than here.
+6. **DECIDED [r7]: a demolish resets dispatch policies to MANUAL.** The
+   alternative — keeping the *preference* and reapplying it as licences are
+   re-bought — would need somewhere to keep it, and that somewhere is the Meta,
+   which makes it persistent state whose only effect is to re-apply itself. The
+   licences reset with `upgrades`, so a retained preference is either inert
+   (no licence yet, nothing happens) or a quiet grant of automation the run has
+   not paid for. §3's table already said MANUAL and §12 pins that table row by
+   row; this closes the question rather than leaving both readings live.
+   Revisit only if playtesting says the re-toggle is a real chore.
 7. **Repo defect, found while writing this spec.** `CLAUDE.md`'s single-test
    commands do not work: `-gdir` takes a directory, and `-ginclude` does not exist
    at any GUT version in this checkout. Run as documented it prints

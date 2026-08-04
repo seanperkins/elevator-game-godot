@@ -171,9 +171,10 @@ func _ready() -> void:
 ## edit would ship every new player a forty-floor building.
 ##   godot -- --board=40x8
 ##
-## Known limit: it starts GameState with N shafts while Upgrades.level_of
-## ("shaft") stays 0, so the ghost slot prices the FIRST shaft rather than the
-## next one. Harmless for screenshots, which is all this is for.
+## The old "known limit" here -- a debug board priced the FIRST shaft rather
+## than the next one, because level_of("shaft") stayed 0 -- is fixed:
+## GameState._init now grant_level()s the size it was handed, so a board that
+## starts with N shafts has consumed N-1 rungs of the price ladder.
 func _debug_board_override() -> Vector2i:
 	for arg in OS.get_cmdline_user_args():
 		if not arg.begins_with("--board="):

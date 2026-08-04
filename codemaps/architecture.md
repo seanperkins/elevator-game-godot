@@ -31,15 +31,31 @@ migration map.
       ┌─────────── game/game_root.gd (entry: game/game_root.tscn) ────────────┐
       │  60Hz _physics_process ──▶ GameState.tick (20Hz via SimClock)         │
       │  autosaves every 10s; saves on NOTIFICATION_APPLICATION_PAUSED        │
-      └──────┬──────────────────────────┬──────────────────────┬──────────────┘
-             ▼                          ▼                      ▼
-   ┌────────────────────┐   ┌────────────────────┐   ┌────────────────────┐
-   │ BuildingView       │   │ ManagementView     │   │ FloorPanel         │
-   │  FloorRow + Hall-  │   │  upgrades +        │   │  lease / class /   │
-   │  Column + Shaft-   │   │  dispatch presets  │   │  DaySparkline      │
-   │  Column            │   │                    │   │                    │
-   └────────────────────┘   └────────────────────┘   └────────────────────┘
+      │  _rebuild_views() replaces all four on a demolish                     │
+      └──────┬─────────────┬──────────────────┬──────────────────┬───────────┘
+             ▼             ▼                  ▼                  ▼
+   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐
+   │ BuildingView │ │ Management-  │ │ FloorPanel   │ │ PrestigePanel    │
+   │ FloorRow +   │ │ View         │ │ lease/class/ │ │ tech tree +      │
+   │ Hall/Shaft-  │ │ upgrades +   │ │ DaySparkline │ │ Confirm/Cancel   │
+   │ Column       │ │ dispatch     │ │              │ │ REBUILD          │
+   └──────────────┘ └──────────────┘ └──────────────┘ └──────────────────┘
 ```
+
+## The two halves of the save
+
+```
+  a RUN (discarded on demolish)          the META (persists)
+  cash, lifetime_earnings, combo,        blueprints, runs_completed,
+  floors, cars, upgrades, tenancy,       spent{node -> level}
+  fitout, policies, metrics, clock
+        │                                        │
+        └──────── ONE v4 payload, one write ─────┘
+```
+Both ride in the same file because a demolish must persist the credited
+Blueprints and the discarded building together — a crash between two writes
+either duplicates the yield or destroys it. A refused RUN still surrenders its
+Meta via `SaveCodec.salvage_meta`.
 
 ## Data flow (one sim tick, fixed written order)
 
@@ -71,19 +87,29 @@ patience when the doors open pays and extends the combo.
 |---|---|---|
 | `Building.MAX_FLOORS` | 40 | structural cap; board never scrolls past it |
 | `Building.MAX_SHAFTS` | 8 | hard shaft cap |
-| `upgrades.json` `floor.max_level` | 14 | **purchasable** cap = 20 floors. Deliberately below MAX_FLOORS — see the building-cost-curve spec |
+| `upgrades.json` `floor.max_level` | 14 | the ladder's TOP rung = 20 floors. The LIVE cap is per-run, from `Meta.height_cap()`, and starts at **10** |
+| `Meta.MAX_HEIGHT_CAP` | 20 | this release's ladder top; **not** MAX_FLOORS |
+| `Prestige.DEMOLITION_FLOOR` | 900.0 | flat earnings offset; breaks the square root's scale invariance |
+| `Meta.MAX_BLUEPRINTS` | 1e9 | **== `Prestige.MAX_YIELD`**, pinned by a test |
 | `SimClock.TICK_SECONDS` | 0.05 | sim runs at 20Hz (physics is 60Hz) |
 | `SimClock.TICKS_PER_REAL_MINUTE` | 1200 | elapsed real time |
 | `SimClock.TICKS_PER_SIM_MINUTE` | 600 | one traffic bucket = 30 real s → a day is 12 real minutes |
 | `SimClock.START_MINUTE` | 6 | the day opens at the morning rush |
 | `game_root.gd` START_* | floors 6, shafts 1, seed 20260802 | new-game defaults |
 | `game_root.gd` HUD_HEIGHT / TOUCH_MIN | 96 / 88 | 88pt = 48pt at the 0.546 iPhone scale |
-| `SaveCodec.VERSION` | 3 | v1/v2 migrate on read |
+| `SaveCodec.VERSION` | 4 | v1/v2/v3 migrate on read; v4 adds the `meta` block |
+| `SaveStore` paths | save.json / .tmp / **.bak** | writes are a real replace, not delete-then-rename |
 
 ## Status
 
-Milestones 1–3 and the board/management UI are built, tested, deployed.
-Spec A (tenant kinds + floor class) is **built**: `TenantCatalog`, `TenantKind`,
-`TrafficSource` and `Fitout` are live and `data/tenants.json` drives traffic.
-Prestige (Spec C) does not exist — the 20-vs-40 floor gap is the room reserved
-for it.
+Milestones 1–3, the board/management UI, the cost-curve work, Spec A (tenant
+kinds + floor class) and **S5 (prestige)** are built and tested. 578 GUT tests.
+
+S5: a run caps at **10 floors** and ladders to 20 via the `height` node.
+`sim/meta.gd` owns the persistent tree, `sim/prestige.gd` the demolish (which
+BUILDS a fresh GameState against a CLONED Meta rather than wiping the live one).
+Save format v4. `data/blueprints.json` is fatal-if-malformed.
+
+Measured, and load-bearing for any balance work: run 1 yields **13 BP**, because
+`combo` multiplies `lifetime_earnings` — the field the conversion consumes — by
+~7.6x on a well-played 10-floor run. The tree's costs are denominated in that.

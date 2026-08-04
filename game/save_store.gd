@@ -143,6 +143,10 @@ static func load_all(catalog_path := "res://data/tenants.json",
 
 ## The saved state, or null if there is nothing to load or it cannot be read.
 ## Null always means "start a new game" -- never a partly applied save.
+##
+## Note this is the RUN only. A refused run does not mean the persistent half is
+## gone: load_all() returns both, and load_meta() salvages the tree from the
+## very same parsed dictionary.
 static func load_state(catalog_path := "res://data/tenants.json",
 		blueprints_path := "res://data/blueprints.json") -> GameState:
 	return load_all(catalog_path, blueprints_path)["state"]
