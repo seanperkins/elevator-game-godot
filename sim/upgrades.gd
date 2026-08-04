@@ -38,6 +38,10 @@ func load_defs(path: String) -> bool:
 			"base": float(entry.get("base", 10.0)),
 			"growth": float(entry.get("growth", 1.5)),
 			"max_level": int(entry.get("max_level", 1)),
+			# note_of() (:65) has indexed this key since it was written, so
+			# omitting it here made that accessor a latent crash with no
+			# callers. The prestige panel is its first caller.
+			"note": str(entry.get("note", "")),
 		}
 		_levels[id] = 0
 	return true

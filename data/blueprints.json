@@ -1,0 +1,15 @@
+{
+  "comment": "cost = base * (level + 1). Effects are applied by id in meta.gd. Bases are denominated in REALISED Blueprints -- see the prestige spec's §4 [r7]: the ladder simulation excludes combo, and a measured run yields ~3x what it reports.",
+  "nodes": [
+    { "id": "height",  "name": "Taller Foundations", "branch": "structure",
+      "base": 6, "max_level": 2, "note": "+5 floors you may build" },
+    { "id": "shafts",  "name": "Sunk Shafts",        "branch": "structure",
+      "base": 15, "max_level": 3, "note": "start with one more shaft" },
+    { "id": "motor",   "name": "Standard Motor",     "branch": "mechanical",
+      "base": 6, "max_level": 4, "note": "start with Stronger Motor fitted" },
+    { "id": "gearing", "name": "Standard Gearing",   "branch": "mechanical",
+      "base": 6, "max_level": 4, "note": "start with Faster Doors fitted" },
+    { "id": "cabin",   "name": "Standard Cabin",     "branch": "mechanical",
+      "base": 9, "max_level": 3, "note": "start with a Bigger Car fitted" }
+  ]
+}

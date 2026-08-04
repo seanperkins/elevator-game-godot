@@ -172,3 +172,11 @@ func test_a_fresh_car_matches_the_curve_at_level_zero() -> void:
 	assert_almost_eq(fresh.floors_per_tick, up.effect_value("speed", 0), 1e-9, "speed")
 	assert_eq(fresh.door_ticks, int(up.effect_value("doors", 0)), "doors")
 	assert_eq(fresh.capacity, int(up.effect_value("capacity", 0)), "capacity")
+
+func test_an_upgrade_note_survives_the_load() -> void:
+	# note_of() indexed a key load_defs never set -- a latent crash with no
+	# callers, until the prestige panel gave it one.
+	var u := Upgrades.new()
+	assert_true(u.load_defs("res://data/upgrades.json"), "loads")
+	assert_string_contains(u.note_of("auto"), "shaft", "the note is there")
+	assert_eq(u.note_of("speed"), "", "and an upgrade with no note reads empty")
