@@ -30,6 +30,15 @@ var _armed: bool = false
 
 var _box: VBoxContainer
 var _scroll: ScrollContainer
+var _drag: DragScroll
+
+## Same reason as ManagementView: this panel is a list of buttons, and one of
+## them is the irreversible one.
+func _input(event: InputEvent) -> void:
+	if not visible or _drag == null:
+		return
+	if _drag.handle(event, get_global_rect()):
+		get_viewport().set_input_as_handled()
 var _close_button: Button
 var _yield_label: Label
 var _balance_label: Label
@@ -61,6 +70,7 @@ func bind(state: GameState) -> void:
 	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	add_child(_scroll)
+	_drag = DragScroll.new(_scroll)
 
 	_box = VBoxContainer.new()
 	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL

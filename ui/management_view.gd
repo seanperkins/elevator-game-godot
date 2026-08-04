@@ -25,6 +25,16 @@ var _dispatch_box: VBoxContainer
 var _dispatch_note: Label
 var _shaft_buttons: Array[Button] = []
 var _shafts_shown: int = -1
+var _scroll: ScrollContainer
+var _drag: DragScroll
+
+## Runs BEFORE the buttons get the event, which is the only place a drag can be
+## taken away from them. See DragScroll.
+func _input(event: InputEvent) -> void:
+	if not visible or _drag == null:
+		return
+	if _drag.handle(event, get_global_rect()):
+		get_viewport().set_input_as_handled()
 
 func bind(state: GameState) -> void:
 	_state = state
@@ -35,10 +45,12 @@ func bind(state: GameState) -> void:
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(bg)
 
-	var scroll := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(scroll)
+	_scroll = ScrollContainer.new()
+	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(_scroll)
+	_drag = DragScroll.new(_scroll)
+	var scroll := _scroll
 
 	var box := VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
