@@ -108,12 +108,13 @@ func set_waiting(passengers: Array, show_direction: bool) -> void:
 	_count.text = "" if total <= 0 else str(total)
 
 	var cap := MAX_INDIVIDUALS
+	var cell := Vector2(30, 30)
 	var area := Vector2(STRIP_RIGHT - SPRITE_X, size.y)
 	var grid := ChipGrid.shape(mini(total, cap),
-		ChipGrid.columns_for(area.x), ChipGrid.rows_for(area.y))
+		ChipGrid.columns_for(area.x, cell.x), ChipGrid.rows_for(area.y, cell.y))
 	var shown: int = mini(mini(total, cap), ChipGrid.fits(grid))
-	grid = ChipGrid.shape(shown, ChipGrid.columns_for(area.x),
-		ChipGrid.rows_for(area.y))
+	grid = ChipGrid.shape(shown, ChipGrid.columns_for(area.x, cell.x),
+		ChipGrid.rows_for(area.y, cell.y))
 	while _sprites.size() < shown:
 		var s := PassengerSprite.new()
 		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -123,7 +124,7 @@ func set_waiting(passengers: Array, show_direction: bool) -> void:
 		if i < shown:
 			var p: Passenger = passengers[i]
 			_sprites[i].position = Vector2(SPRITE_X, 0) \
-				+ ChipGrid.position_of(i, shown, grid, area)
+				+ ChipGrid.position_of(i, shown, grid, area, cell)
 			_sprites[i].show_as(p.patience_fraction(),
 				(CALL_DOWN if p.direction() < 0 else CALL_UP) if show_direction
 				else CALL_UNKNOWN)

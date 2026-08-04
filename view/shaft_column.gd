@@ -22,7 +22,7 @@ signal pan_requested(delta: Vector2)
 ## spends the only line of type the car has. The count returns only when the floor
 ## is too short to draw seats at all, which is the one case where the picture is
 ## gone and the number is all there is.
-const SEAT_SIZE := Vector2(ChipGrid.SIZE, ChipGrid.SIZE)
+const SEAT_SIZE := Vector2(30, 30)
 const SEAT_FONT := PassengerSprite.FONT
 const HEADER_HEIGHT := 20.0
 const HEADER_FONT := 16
@@ -183,7 +183,7 @@ func set_car_position(position_floor: float) -> void:
 func set_riders(riders: Array, capacity: int) -> void:
 	var area := _car_rect.size
 	var grid := ChipGrid.shape(capacity,
-		ChipGrid.columns_for(area.x), ChipGrid.rows_for(area.y))
+		ChipGrid.columns_for(area.x, SEAT_SIZE.x), ChipGrid.rows_for(area.y, SEAT_SIZE.y))
 	# Every seat or none: a rack that shows six of eight answers "how many more
 	# fit" with a lie, which is the one question it exists to answer.
 	if ChipGrid.fits(grid) < capacity:
@@ -198,7 +198,7 @@ func set_riders(riders: Array, capacity: int) -> void:
 			_seats[i].visible = false
 			_chips[i].recycle()
 			continue
-		var at := ChipGrid.position_of(i, capacity, grid, area)
+		var at := ChipGrid.position_of(i, capacity, grid, area, SEAT_SIZE)
 		if i < riders.size():
 			_seats[i].visible = false
 			var p: Passenger = riders[i]

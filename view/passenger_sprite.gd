@@ -15,11 +15,12 @@ extends ColorRect
 ## lobby and reveals floors before boarding, which is a real change in what the
 ## player can plan -- see set_call/set_destination's two callers.
 
-## A square, the same everywhere. ChipGrid owns the size so the hall and the car
-## cannot drift apart.
-const WIDTH := ChipGrid.SIZE
-const HEIGHT := ChipGrid.SIZE
-## Bounded by the chip: ChipGrid.SIZE is 30, and a car seat holds TWO digits
+## A square, the same everywhere. The 30-unit chip is frozen here pending this
+## file's deletion in the people work; the hall and the car no longer share a
+## packing rule.
+const WIDTH := 30.0
+const HEIGHT := 30.0
+## Bounded by the chip: 30 units, and a car seat holds TWO digits
 ## (ShaftColumn.SEAT_FONT is this constant), so this is the largest that clears
 ## both without clipping.
 const FONT := 24

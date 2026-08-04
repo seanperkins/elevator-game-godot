@@ -71,23 +71,26 @@ func test_zero_has_no_shape() -> void:
 func test_a_space_that_holds_nothing_reports_nothing() -> void:
 	# Flooring this at one rank is how a 30-unit chip ends up drawn inside a
 	# 25.6-unit car. The caller needs the truth so it can fall back to text.
-	assert_eq(ChipGrid.rows_for(ChipGrid.SIZE - 1.0), 0)
-	assert_eq(ChipGrid.columns_for(ChipGrid.SIZE - 1.0), 0)
+	var square := 30.0
+	assert_eq(ChipGrid.rows_for(square - 1.0, square), 0)
+	assert_eq(ChipGrid.columns_for(square - 1.0, square), 0)
 	assert_eq(ChipGrid.shape(4, 0, ROOMY), Vector2i.ZERO)
 	assert_eq(ChipGrid.shape(4, ROOMY, 0), Vector2i.ZERO)
 
 func test_a_space_that_holds_exactly_one_reports_one() -> void:
-	assert_eq(ChipGrid.rows_for(ChipGrid.SIZE), 1)
-	assert_eq(ChipGrid.columns_for(ChipGrid.SIZE), 1)
+	var square := 30.0
+	assert_eq(ChipGrid.rows_for(square, square), 1)
+	assert_eq(ChipGrid.columns_for(square, square), 1)
 
 func test_ranks_are_centred_so_a_short_last_rank_is_not_ragged() -> void:
 	# Five in a 3x2: the lower rank of two sits centred under the upper three.
 	var s := ChipGrid.shape(5, ROOMY, ROOMY)
 	var area := Vector2(200, 200)
-	var first := ChipGrid.position_of(0, 5, s, area)
-	var third := ChipGrid.position_of(2, 5, s, area)
-	var fourth := ChipGrid.position_of(3, 5, s, area)
-	var fifth := ChipGrid.position_of(4, 5, s, area)
+	var square := 30.0
+	var first := ChipGrid.position_of(0, 5, s, area, Vector2(square, square))
+	var third := ChipGrid.position_of(2, 5, s, area, Vector2(square, square))
+	var fourth := ChipGrid.position_of(3, 5, s, area, Vector2(square, square))
+	var fifth := ChipGrid.position_of(4, 5, s, area, Vector2(square, square))
 	assert_almost_eq((fourth.x + fifth.x) * 0.5, (first.x + third.x) * 0.5, 0.01,
 		"the short rank shares the full rank's centre line")
 	assert_gt(fourth.y, first.y, "and sits below it")
@@ -95,15 +98,42 @@ func test_ranks_are_centred_so_a_short_last_rank_is_not_ragged() -> void:
 func test_a_full_rank_spans_evenly() -> void:
 	var s := ChipGrid.shape(4, ROOMY, ROOMY)
 	var area := Vector2(200, 200)
-	var a := ChipGrid.position_of(0, 4, s, area)
-	var b := ChipGrid.position_of(1, 4, s, area)
-	assert_almost_eq(b.x - a.x, ChipGrid.SIZE + ChipGrid.GAP, 0.01)
+	var square := 30.0
+	var a := ChipGrid.position_of(0, 4, s, area, Vector2(square, square))
+	var b := ChipGrid.position_of(1, 4, s, area, Vector2(square, square))
+	assert_almost_eq(b.x - a.x, square + ChipGrid.GAP, 0.01)
 
 func test_the_block_is_centred_in_its_area() -> void:
 	var s := ChipGrid.shape(2, ROOMY, ROOMY)
 	var area := Vector2(200, 100)
-	var a := ChipGrid.position_of(0, 2, s, area)
-	var b := ChipGrid.position_of(1, 2, s, area)
-	var block_centre := (a.x + b.x + ChipGrid.SIZE) * 0.5
+	var square := 30.0
+	var a := ChipGrid.position_of(0, 2, s, area, Vector2(square, square))
+	var b := ChipGrid.position_of(1, 2, s, area, Vector2(square, square))
+	var block_centre := (a.x + b.x + square) * 0.5
 	assert_almost_eq(block_centre, 100.0, 0.01, "horizontally centred")
-	assert_almost_eq(a.y, (100.0 - ChipGrid.SIZE) * 0.5, 0.01, "vertically centred")
+	assert_almost_eq(a.y, (100.0 - square) * 0.5, 0.01, "vertically centred")
+
+# --- the cell is a Vector2, not a square ------------------------------------
+
+const CELL := Vector2(20, 40)
+
+func test_a_non_square_cell_packs_by_its_own_axes() -> void:
+	# The rule does not change; only what it packs. A 20x40 person cell in the
+	# 140-unit strip on a 120-unit row is what the hall now asks for.
+	assert_eq(ChipGrid.columns_for(140.0, CELL.x), 6)
+	assert_eq(ChipGrid.rows_for(120.0, CELL.y), 2)
+
+func test_the_hall_block_exactly_fills_the_strip() -> void:
+	# 6*20 + 5*4 = 140, and the strip is 140. This is an EQUALITY, not slack:
+	# any increase to the cell or GAP drops the hall to five columns and ten
+	# people, so it fails here rather than on a phone.
+	var cols := ChipGrid.columns_for(140.0, CELL.x)
+	assert_eq(cols * CELL.x + (cols - 1) * ChipGrid.GAP, 140.0,
+		"the rank fills the strip exactly")
+
+func test_position_of_steps_by_the_cell_it_is_given() -> void:
+	var grid := ChipGrid.shape(4, 9, 9)
+	var area := Vector2(200, 200)
+	var a := ChipGrid.position_of(0, 4, grid, area, CELL)
+	var b := ChipGrid.position_of(1, 4, grid, area, CELL)
+	assert_almost_eq(b.x - a.x, CELL.x + ChipGrid.GAP, 0.01)
