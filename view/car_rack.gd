@@ -6,20 +6,24 @@ extends RefCounted
 ## ChipGrid gets, and for the same reason: this is the part that will be wrong
 ## first.
 ##
-## Riders stand in ONE rank on the floor of the car until capacity passes five,
-## then a second rank stands behind and half a pitch across, so a back figure
-## sits between two front badges rather than directly behind one.
+## RIDERS STAND IN ONE RANK on the floor of the car, as many as can be drawn at
+## a legible size. A second rank was built first and then removed: a person is
+## 26 x 41 (see PersonSprite -- at 14 x 22 a whole person was shorter than one
+## digit of their own badge), so a band is 30 + 41 = 71, and two of those need
+## 142 units in the 106 a 116-unit car has after its pip strip. Two ranks are
+## only possible with figures too small to be worth drawing.
 ##
-## THE CELL BUDGET INCLUDES THE OFFSET. An earlier draft derived the cell to
-## fill the car and then added the half-pitch on top; at capacities 10 and 12
-## the back rank left the car by up to 19 units. The offset is paid for here.
+## So the car does what the hall does: draw fewer people, properly, and let the
+## count carry the rest. The PIPS remain exact at every capacity, so nothing
+## about "is there room" depends on how many figures fit.
 
 const GAP := 4.0
 ## The widest a cell gets. Past this a four-rider car spreads into a line of
 ## lonely figures instead of a group.
-const CELL_MAX := 40.0
-## The narrowest cell that can still carry a two-digit badge.
-const CELL_MIN := 30.0
+const CELL_MAX := 52.0
+## The narrowest cell that can still carry a two-digit badge: two digits at
+## font 24 measure ~26.4 units, plus 2 units of padding a side.
+const CELL_MIN := 32.0
 
 const PIP_GAP := 3.0
 ## Below this a pip is a smear rather than a countable thing.
@@ -29,29 +33,23 @@ const PIP_INSET := 8.0
 
 const INSET := 2.0
 const BADGE_H := 30.0
-const FIGURE_H := 22.0
-const BAND := BADGE_H + FIGURE_H                    # 52
-const ONE_RANK_MIN := INSET + PIP_H + BAND          # 62
-const TWO_RANK_MIN := INSET + PIP_H + BAND * 2.0    # 114
-const ONE_RANK_CAP := 5
+const FIGURE_H := 41.0
+const BAND := BADGE_H + FIGURE_H            # 71
+## Below this there is no room for a rank at all and the header line is the
+## whole story -- though the pips still draw.
+const ONE_RANK_MIN := INSET + PIP_H + BAND  # 81
 
-## 0, 1 or 2. Three bands, because one rank and two ranks need different room:
-## below 62 there is space for neither, and the header line carries everything.
+## 0 or 1. There is no two-rank case; see the class docstring.
 static func ranks_for(capacity: int, car_h: float) -> int:
 	if capacity <= 0 or car_h < ONE_RANK_MIN:
 		return 0
-	if car_h < TWO_RANK_MIN:
-		return 1
-	return 1 if capacity <= ONE_RANK_CAP else 2
+	return 1
 
-## How many stand in the front rank. At two ranks the front takes the extra, so
-## an odd capacity leans forward. At one rank in a short car the count is set by
-## WIDTH -- one rank of twelve would be 14.7 units a cell.
+## How many stand in the rank: as many as fit at CELL_MIN, capped by capacity.
+## Riders past this are counted in the header rather than drawn.
 static func front_count(capacity: int, car_w: float, ranks: int) -> int:
 	if ranks <= 0 or capacity <= 0:
 		return 0
-	if ranks == 2:
-		return int(ceil(float(capacity) / 2.0))
 	var n := capacity
 	while n > 1 and (car_w - GAP * float(n - 1)) / float(n) < CELL_MIN:
 		n -= 1
@@ -61,38 +59,24 @@ static func cell_width(capacity: int, car_w: float, ranks: int) -> float:
 	var front := front_count(capacity, car_w, ranks)
 	if front <= 0:
 		return 0.0
-	if ranks == 2:
-		# The +0.5 and the -GAP/2 are the half-pitch offset, budgeted rather
-		# than added afterwards.
-		return minf(CELL_MAX,
-			(car_w - GAP * float(front - 1) - GAP * 0.5) / (float(front) + 0.5))
 	return minf(CELL_MAX, (car_w - GAP * float(front - 1)) / float(front))
 
-## Front rank first, then back. Index order is boarding order, so rider i is
-## slot i.
+## One rect per drawn rider, centred as a block, feet INSET above the car floor.
+## Fewer than `capacity` when the car cannot draw them all legibly.
 static func slots(capacity: int, car_w: float, car_h: float) -> Array[Rect2]:
 	var out: Array[Rect2] = []
 	var ranks := ranks_for(capacity, car_h)
 	if ranks <= 0:
 		return out
 	var front := front_count(capacity, car_w, ranks)
-	var back := 0 if ranks == 1 else capacity - front
 	var cell := cell_width(capacity, car_w, ranks)
-	var pitch := cell + GAP
-	var front_w := float(front) * cell + float(front - 1) * GAP
-	var back_w := (float(back) * cell + float(back - 1) * GAP) if back > 0 else 0.0
-	# Centre the COMPOSITION, not the front rank -- centring the front rank and
-	# then offsetting the back is what pushed it out of the car.
-	var comp := front_w if back <= 0 else maxf(front_w, pitch * 0.5 + back_w)
-	var x0 := (car_w - comp) * 0.5
-	# Feet sit INSET above the car floor; in the short band the rank is pushed
-	# down to clear the pip strip instead.
-	var front_top := maxf(INSET + PIP_H, car_h - INSET - BAND)
-	var back_top := front_top - BAND
+	var block := float(front) * cell + float(front - 1) * GAP
+	var x0 := (car_w - block) * 0.5
+	# Feet sit INSET above the floor; in a short car the rank is pushed down to
+	# clear the pip strip instead.
+	var top := maxf(INSET + PIP_H, car_h - INSET - BAND)
 	for i in front:
-		out.append(Rect2(x0 + float(i) * pitch, front_top, cell, BAND))
-	for i in back:
-		out.append(Rect2(x0 + pitch * 0.5 + float(i) * pitch, back_top, cell, BAND))
+		out.append(Rect2(x0 + float(i) * (cell + GAP), top, cell, BAND))
 	return out
 
 ## One rect per seat, lit or hollow decided by the caller. Empty when a pip

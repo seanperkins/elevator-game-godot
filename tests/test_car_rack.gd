@@ -1,66 +1,66 @@
 extends GutTest
 
-## The car's geometry, headless. Every number here is from the design spec's
-## 4.2 table, which was derived against a 220-unit car -- SHAFT_WIDTH 230 less 4
-## for the column and 6 for the car.
+## The car's geometry, headless.
+##
+## ONE rank. A second was built and then removed: a person is 26 x 41, so a band
+## is 30 + 41 = 71, and two of those need 142 units in the 106 a 116-unit car has
+## after its pip strip. Two ranks only fit figures too small to be worth drawing
+## -- at 14 x 22 a person was 7.6 x 12.0pt, shorter than one digit of their own
+## badge. The car now does what the hall does: fewer people, drawn properly,
+## with the count carrying the rest.
 
 const W := 220.0
 const H := 116.0
 
-func test_one_rank_up_to_five_then_two() -> void:
-	for cap in [4, 5]:
-		assert_eq(CarRack.ranks_for(cap, H), 1, "capacity %d is one rank" % cap)
-	for cap in [6, 8, 12]:
-		assert_eq(CarRack.ranks_for(cap, H), 2, "capacity %d is two ranks" % cap)
+func test_there_is_one_rank_or_none() -> void:
+	for cap in [4, 5, 6, 8, 12]:
+		assert_eq(CarRack.ranks_for(cap, H), 1, "capacity %d draws a rank" % cap)
+	assert_eq(CarRack.ranks_for(12, 80.0), 0, "a car under 81 has no room")
 
-func test_the_front_rank_takes_the_extra_rider() -> void:
-	assert_eq(CarRack.front_count(7, W, 2), 4, "4 front, 3 behind")
-	assert_eq(CarRack.front_count(9, W, 2), 5)
-	assert_eq(CarRack.front_count(11, W, 2), 6)
+func test_the_rank_draws_as_many_as_it_can_at_a_legible_size() -> void:
+	# Six is what a 220-unit car fits at CELL_MIN 32. Past that the riders are
+	# counted, not drawn -- and the PIPS stay exact regardless.
+	assert_eq(CarRack.front_count(4, W, 1), 4)
+	assert_eq(CarRack.front_count(6, W, 1), 6)
+	assert_eq(CarRack.front_count(12, W, 1), 6, "twelve do not fit legibly")
 
-func test_the_cell_matches_the_spec_table_at_every_capacity() -> void:
-	# The budget INCLUDES the half-pitch offset, which is what an earlier draft
-	# left out -- its back rank left the car by 15 units at capacity 10.
-	var want := {4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0,
-		9: 36.73, 10: 36.73, 11: 30.46, 12: 30.46}
+func test_the_cell_never_falls_below_a_two_digit_badge() -> void:
+	for cap in range(4, 13):
+		var cell := CarRack.cell_width(cap, W, 1)
+		assert_gte(cell, CarRack.CELL_MIN,
+			"capacity %d gives a %.2f cell, under CELL_MIN" % [cap, cell])
+
+func test_the_cell_matches_the_derived_table() -> void:
+	var want := {4: 52.0, 5: 40.8, 6: 33.33, 8: 33.33, 12: 33.33}
 	for cap in want:
-		assert_almost_eq(CarRack.cell_width(cap, W, CarRack.ranks_for(cap, H)),
-			want[cap], 0.01, "cell at capacity %d" % cap)
+		assert_almost_eq(CarRack.cell_width(cap, W, 1), want[cap], 0.01,
+			"cell at capacity %d" % cap)
 
 func test_nothing_is_drawn_outside_the_car_at_any_capacity() -> void:
-	# Not a sample of two. Capacity 10 is the case an earlier draft overflowed
-	# while appearing in no test at all.
 	for cap in range(4, 13):
 		for r in CarRack.slots(cap, W, H):
-			assert_gte(r.position.x, -0.01, "capacity %d slot starts left of the car" % cap)
-			assert_lte(r.end.x, W + 0.01, "capacity %d slot ends right of the car" % cap)
-			assert_gte(r.position.y, -0.01, "capacity %d slot above the car" % cap)
-			assert_lte(r.end.y, H + 0.01, "capacity %d slot below the car" % cap)
+			assert_gte(r.position.x, -0.01, "capacity %d starts left of the car" % cap)
+			assert_lte(r.end.x, W + 0.01, "capacity %d ends right of the car" % cap)
+			assert_gte(r.position.y, -0.01, "capacity %d above the car" % cap)
+			assert_lte(r.end.y, H + 0.01, "capacity %d below the car" % cap)
 
-func test_every_rider_gets_a_slot() -> void:
-	for cap in range(4, 13):
-		assert_eq(CarRack.slots(cap, W, H).size(), cap,
-			"capacity %d must have %d slots" % [cap, cap])
+func test_the_block_is_centred() -> void:
+	var s := CarRack.slots(4, W, H)
+	var left: float = s[0].position.x
+	var right: float = W - s[s.size() - 1].end.x
+	assert_almost_eq(left, right, 0.01, "even margins either side")
 
-func test_the_back_rank_is_offset_half_a_pitch() -> void:
-	var s := CarRack.slots(8, W, H)
-	var cell := CarRack.cell_width(8, W, 2)
-	# front is 0..3, back is 4..7
-	assert_almost_eq(s[4].position.x - s[0].position.x,
-		(cell + CarRack.GAP) * 0.5, 0.01, "a back figure sits between two front ones")
-	assert_lt(s[4].position.y, s[0].position.y, "the back rank is higher")
+func test_the_riders_stand_on_the_car_floor() -> void:
+	for r in CarRack.slots(6, W, H):
+		assert_almost_eq(r.end.y, H - CarRack.INSET, 0.01, "feet on the floor")
 
 func test_a_two_digit_badge_fits_the_narrowest_cell() -> void:
-	# Capacity 12 is the tight row: its width-derived font is exactly 24. The
-	# real fallback font renders "19" at font 24 as 27.0 units -- 1.125 em, not
-	# the nominal 1.1 em -- so the 2-unit-per-side padding (31 total) no longer
-	# clears a 30.46-unit cell. The spec's FIRST fallback applies: padding drops
-	# to 1 unit a side (29 total), which clears with 1.46 units spare. The glyph
-	# is centred in the badge, so the slack is 1.73 units a side, not 1.
-	var cell := CarRack.cell_width(12, W, 2)
+	# CELL_MIN exists for this. If a real font disagrees, cut the badge padding
+	# to 1 unit a side before dropping the point size.
 	var font := ThemeDB.fallback_font
 	var w := font.get_string_size("19", HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
-	assert_lte(w + 2.0, cell, "two digits at font 24 must fit a %.2f-unit cell" % cell)
+	assert_lte(w + 4.0, CarRack.CELL_MIN,
+		"two digits at font 24 must fit a %.0f-unit cell" % CarRack.CELL_MIN)
 
 func test_pips_are_one_per_seat_and_sized_to_the_car() -> void:
 	assert_eq(CarRack.pips(4, W).size(), 4)
@@ -74,18 +74,11 @@ func test_pips_have_a_gap_between_them_so_hollows_stay_countable() -> void:
 	var p := CarRack.pips(12, W)
 	assert_almost_eq(p[1].position.x - p[0].end.x, CarRack.PIP_GAP, 0.01)
 
-func test_a_short_car_drops_to_one_rank_then_to_none() -> void:
-	assert_eq(CarRack.ranks_for(12, 113.0), 1, "not enough for two bands")
-	assert_eq(CarRack.ranks_for(12, 61.0), 0, "not enough for one")
-	assert_eq(CarRack.ranks_for(12, 18.0), 0, "the forced-height fixture")
-
-func test_the_one_rank_band_is_sized_by_width_not_capacity() -> void:
-	# One rank of twelve would be 14.7 units a cell -- narrower than the figure.
-	assert_eq(CarRack.front_count(12, W, 1), 6, "as many as fit at CELL_MIN")
-	assert_eq(CarRack.slots(12, W, 100.0).size(), 6, "the rest go to the header")
-
-func test_pips_survive_every_band_including_a_car_too_short_for_figures() -> void:
-	assert_eq(CarRack.pips(4, W).size(), 4, "occupancy stays exact with no picture")
+func test_pips_outlive_the_figures() -> void:
+	# The point of the strip: occupancy stays exact in a car with no room to
+	# draw anybody, which is where the old seat rack gave up entirely.
+	assert_eq(CarRack.slots(12, W, 40.0).size(), 0, "no room for a rank")
+	assert_eq(CarRack.pips(12, W).size(), 12, "but every seat still counted")
 
 func test_the_bounds_cases_produce_no_layout_rather_than_a_bad_one() -> void:
 	assert_eq(CarRack.slots(0, W, H).size(), 0)

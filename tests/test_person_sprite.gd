@@ -23,12 +23,16 @@ func test_the_parts_fit_the_hall_cell_and_do_not_overlap() -> void:
 func test_the_figure_is_centred_in_its_band_not_pinned_to_x_one() -> void:
 	# In the hall the band is 16 wide so centring gives x = 1; in a wide car cell
 	# the same rule centres properly instead of stranding the figure left.
+	# The band is the cell less the patience bar in the hall, the whole cell in
+	# the car -- and the figure is centred in whichever it has.
 	p.show_waiting(1.0, FloorRow.CALL_UP, 0)
-	assert_almost_eq((p.parts()["figure"] as Rect2).position.x, 1.0, 0.01)
-	p.set_cell(Vector2(40, 52), 30.0, 24)
+	var band := PersonSprite.HALL_CELL.x - PersonSprite.BAR_W
+	assert_almost_eq((p.parts()["figure"] as Rect2).position.x,
+		(band - PersonSprite.FIGURE.x) * 0.5, 0.01, "centred in the hall band")
+	p.set_cell(Vector2(52, CarRack.BAND), CarRack.BADGE_H, 24)
 	p.show_riding("12", 0)
 	assert_almost_eq((p.parts()["figure"] as Rect2).position.x,
-		(40.0 - PersonSprite.FIGURE.x) * 0.5, 0.01, "centred in the car cell")
+		(52.0 - PersonSprite.FIGURE.x) * 0.5, 0.01, "centred in the car cell")
 
 func test_a_rider_has_no_patience_bar_and_a_waiter_does() -> void:
 	p.show_riding("7", 0)
@@ -84,7 +88,7 @@ func test_an_unchanged_call_does_not_redraw_but_a_changed_one_does() -> void:
 	p.show_waiting(0.1, FloorRow.CALL_UP, 0)
 	assert_gt(p.redraw_count(), n, "a changed fraction must redraw")
 	var m := p.redraw_count()
-	p.set_cell(Vector2(36, 52), 30.0, 24)
+	p.set_cell(Vector2(36, CarRack.BAND), CarRack.BADGE_H, 24)
 	assert_gt(p.redraw_count(), m, "a changed cell must redraw")
 
 func test_a_direction_that_is_not_bought_yet_draws_no_badge() -> void:

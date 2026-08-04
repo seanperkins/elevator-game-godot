@@ -29,11 +29,36 @@ extends Control
 const ARROW_UP := "▲"
 const ARROW_DOWN := "▼"
 
-const HALL_CELL := Vector2(20, 40)
-const HALL_BADGE := Vector2(16, 14)
-const FIGURE := Vector2(14, 22)
+## A PERSON IS ONE SIZE EVERYWHERE, and that size is 26 x 41.
+##
+## It used to be 14 x 22, which is 7.6 x 12.0pt at the 0.546 iPhone scale --
+## a whole person SHORTER than the single digit on their own badge, and 18% of
+## the height of the floor they stood on. The cause was sizing the figure from
+## the hall's tightest case (20-unit cells, so six columns fit a 140-unit strip)
+## and then making "identical everywhere" a rule, which exported the hall's
+## budget into a car with three times the room.
+##
+## The hall now draws EIGHT people rather than twelve. Nothing is lost: the
+## count beside the strip has always been exact, and the strip has always shown
+## what fits rather than everyone.
+const FIGURE := Vector2(26, 41)
 const BAR_W := 4.0
-const HALL_FIGURE_TOP := 16.0
+## cell = figure + bar wide, badge + gap + figure tall.
+const HALL_BADGE := Vector2(16, 15)
+const HALL_CELL := Vector2(FIGURE.x + BAR_W, HALL_BADGE.y + 2.0 + FIGURE.y)
+const HALL_FIGURE_TOP := HALL_BADGE.y + 2.0
+
+## The figure's parts as fractions of its box, so one size change moves all of
+## them and the proportions survive it.
+const HEAD_D := 0.57      ## of width
+const HEAD_CY := 0.19     ## of height
+const TORSO_X := 0.14
+const TORSO_Y := 0.41
+const TORSO_W := 0.71
+const TORSO_H := 0.41
+const LEG_W := 0.29
+const LEG_H := 0.18
+const LEG_Y := 0.82
 
 ## Deliberate coefficients. For every trip shape the spawner emits, each
 ## freely-varying field's coefficient must be coprime to BOTH palette sizes --
@@ -115,10 +140,13 @@ func redraw_count() -> int:
 ## no badge, and both are reported as a zero-size Rect2 rather than omitted, so
 ## a caller never has to test for a missing key.
 func parts() -> Dictionary:
+	# The band is what the figure may occupy: the whole cell in the car, and the
+	# cell less the patience bar in the hall.
+	var band_w := _cell.x if _riding else _cell.x - BAR_W
 	var badge := Rect2()
 	if _riding or _glyph != "":
-		badge = Rect2(0, 0, _cell.x if _riding else HALL_BADGE.x, _badge_h)
-	var band_w := _cell.x if _riding else HALL_BADGE.x
+		var bw := _cell.x if _riding else HALL_BADGE.x
+		badge = Rect2((band_w - bw) * 0.5, 0, bw, _badge_h)
 	var fig_top := _badge_h if _riding else HALL_FIGURE_TOP
 	var figure := Rect2((band_w - FIGURE.x) * 0.5, fig_top, FIGURE.x, FIGURE.y)
 	var bar := Rect2()
@@ -129,8 +157,11 @@ func parts() -> Dictionary:
 		"badge": badge,
 		"figure": figure,
 		"bar": bar,
-		"head": Rect2(figure.position + Vector2(3, 0), Vector2(8, 8)),
-		"torso": Rect2(figure.position + Vector2(2, 9), Vector2(10, 9)),
+		"head": Rect2(figure.position
+			+ Vector2((1.0 - HEAD_D) * 0.5 * FIGURE.x, 0),
+			Vector2(HEAD_D * FIGURE.x, HEAD_D * FIGURE.x)),
+		"torso": Rect2(figure.position + Vector2(TORSO_X * FIGURE.x, TORSO_Y * FIGURE.y),
+			Vector2(TORSO_W * FIGURE.x, TORSO_H * FIGURE.y)),
 	}
 
 func _dirty() -> void:
@@ -165,15 +196,23 @@ func _draw() -> void:
 	var figure: Rect2 = q["figure"]
 	var skin: Color = Palette.PERSON_SKINS[posmod(_tint_key, Palette.PERSON_SKINS.size())]
 	var shirt: Color = Palette.PERSON_SHIRTS[posmod(_tint_key, Palette.PERSON_SHIRTS.size())]
-	draw_circle((q["head"] as Rect2).get_center(), 4.0, skin)
+	draw_circle((q["head"] as Rect2).get_center(), HEAD_D * FIGURE.x * 0.5, skin)
 	draw_rect(q["torso"], shirt)
-	draw_rect(Rect2(figure.position + Vector2(2, 18), Vector2(4, 4)), Palette.PERSON_LEGS)
-	draw_rect(Rect2(figure.position + Vector2(8, 18), Vector2(4, 4)), Palette.PERSON_LEGS)
+	var lw := LEG_W * FIGURE.x
+	var lh := LEG_H * FIGURE.y
+	var ly := LEG_Y * FIGURE.y
+	draw_rect(Rect2(figure.position + Vector2(TORSO_X * FIGURE.x, ly),
+		Vector2(lw, lh)), Palette.PERSON_LEGS)
+	draw_rect(Rect2(figure.position
+		+ Vector2((TORSO_X + TORSO_W) * FIGURE.x - lw, ly),
+		Vector2(lw, lh)), Palette.PERSON_LEGS)
 
 func _draw_arrow(badge: Rect2) -> void:
 	var c := badge.get_center()
 	var up := _glyph == ARROW_UP
-	var dy := 4.0 if up else -4.0
+	var h := badge.size.y * 0.32
+	var w := badge.size.x * 0.32
+	var dy := h if up else -h
 	draw_colored_polygon(PackedVector2Array([
-		c + Vector2(0, -dy), c + Vector2(-5, dy), c + Vector2(5, dy)]),
+		c + Vector2(0, -dy), c + Vector2(-w, dy), c + Vector2(w, dy)]),
 		Palette.BADGE_INK)
