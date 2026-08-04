@@ -35,6 +35,18 @@ xcodebuild -project build/ios/elevator.xcodeproj -target elevator \
 xcrun devicectl device install app --device "$DEVICE" \
   build/ios/build/Release-iphoneos/elevator.app
 
-[ "${1:-}" = "--launch" ] && xcrun devicectl device process launch \
-  --device "$DEVICE" com.seanperkins.elevator
+# Read the bundle id from export_presets.cfg rather than hardcoding it. A
+# hardcoded one silently relaunches the PREVIOUS app after a rename: the
+# install goes to the new bundle, the launch goes to the old one, and you sit
+# there screenshotting a build you did not just make.
+BUNDLE=$(sed -n 's/^application\/bundle_identifier="\(.*\)"$/\1/p' export_presets.cfg | head -1)
+[ -z "$BUNDLE" ] && { echo "no bundle_identifier in export_presets.cfg"; exit 1; }
+echo "bundle: $BUNDLE"
+
+if [ "${1:-}" = "--launch" ]; then
+  # A locked phone refuses the launch (FBSOpenApplicationErrorDomain 7) even
+  # though the install succeeded, so say which it was.
+  xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE" \
+    || echo "installed, but could not launch -- is the phone unlocked?"
+fi
 echo "done"
