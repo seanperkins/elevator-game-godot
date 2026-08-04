@@ -19,6 +19,16 @@ exact kind this document criticises elsewhere. All are fixed below and marked
 **[r2]**. Nothing in the balance derivation changed; two reviewers independently
 re-ran the simulation and reproduced §2 and §6.
 
+**Revision 7 (2026-08-03, during implementation).** §14 item 2 — the spec's own
+largest open question — was measured rather than reasoned about, by running the
+real sim headless for a full 2h25 run. Two results. The combo-free earnings came
+in **3.7% from §6's model**, which validates the supply model, the demand fit and
+the fare all at once. And the realised combo multiplier is **7.61×** on a
+perfectly-worked 10-floor run, putting run 1 at **13 BP** against a ladder this
+document had costed at 6. §4's node costs are re-denominated 3× in response;
+`DEMOLITION_FLOOR` stays 900, because the offset provably cannot do that job.
+All changes are marked **[r7]**.
+
 A run ends today by running out of building: twenty floors, roughly 6.5 hours,
 and then nothing. This adds the loop the base design has always assumed (§4, §11
 milestone 5): demolish what you built, convert the run's earnings into
@@ -197,8 +207,10 @@ one-constant change.
 **The gate is 1 Blueprint**, per the base design: *"The demolish action is gated
 on yielding at least 1 Blueprint … Without the gate a new player can wipe a run
 for nothing, which would be a self-inflicted fail state."* That is now **$1,000**
-of earnings, about 70 minutes on a first run. The panel shows the shortfall the
-whole way (§10), so the gate teaches rather than blocks.
+of earnings — the combo-free model puts that at about 70 minutes, and the
+measured run in §6 crosses it at **about 35**, because combo is already near 4×
+by then. The panel shows the shortfall the whole way (§10), so the gate teaches
+rather than blocks.
 
 ### 2.3 `E` is per-run, and this is the load-bearing half
 
@@ -323,19 +335,41 @@ cost(level) = base × (level + 1)          # level is 0-indexed
 
 | id | levels | each level | costs | total |
 | --- | --- | --- | --- | --- |
-| `height` | 2 | +5 to the floor cap (10 → 15 → 20) | 2, 4 | **6** |
-| `shafts` | 3 | +1 starting shaft (1 → 4) | 5, 10, 15 | **30** |
+| `height` | 2 | +5 to the floor cap (10 → 15 → 20) | 6, 12 | **18** |
+| `shafts` | 3 | +1 starting shaft (1 → 4) | 15, 30, 45 | **90** |
 
 **Mechanical**
 
 | id | levels | each level | costs | total |
 | --- | --- | --- | --- | --- |
-| `motor` | 4 | +1 starting `speed` level | 2, 4, 6, 8 | **20** |
-| `gearing` | 4 | +1 starting `doors` level | 2, 4, 6, 8 | **20** |
-| `cabin` | 3 | +1 starting `capacity` level | 3, 6, 9 | **18** |
+| `motor` | 4 | +1 starting `speed` level | 6, 12, 18, 24 | **60** |
+| `gearing` | 4 | +1 starting `doors` level | 6, 12, 18, 24 | **60** |
+| `cabin` | 3 | +1 starting `capacity` level | 9, 18, 27 | **54** |
 
-**94 Blueprints** to finish, against the ~4 BP a run of §6 — about 23 runs of
-long tail, while the cap ladder itself is spent in two.
+**282 Blueprints** to finish, against the ~13 BP a run measured in §6 — about 21
+runs of long tail, while the cap ladder itself is spent in two.
+
+> **These costs are 3× this section's original, and the measurement is why.
+> [r7]** r1–r6 costed the tree against the ~4 BP a run the ladder simulation
+> reports, and that simulation **deliberately excludes combo** — a caveat §6
+> stated and then spent the whole tree's pricing ignoring. Measured on the real
+> sim (§6, 2026-08-03), run 1 yields **13 BP**, because `combo` pegs at its 10.0
+> ceiling and multiplies the exact field the conversion consumes.
+>
+> The fix is a change of *units*, not of design: every cost is re-denominated by
+> the measured yield ratio (13 / 4 ≈ 3.25, taken as **3**), which leaves every
+> ratio this section and §6 argue about exactly where it was. Run 1's 13 BP buys
+> `height` L1 and banks 7; run 2 affords L2. The ladder is still spent in two
+> runs and the tail is still ~21 runs.
+>
+> **`DEMOLITION_FLOOR` is deliberately *not* the lever here**, and the arithmetic
+> is worth stating because raising it is the obvious move: the offset subtracts
+> **before** the square root, so it amplifies skill variance near the gate. At
+> 900 a strong player earns 13 BP and a distracted one 7; at 6,000, 11 and 2; at
+> the ~19,000 needed to bring the strong player back to 4, the distracted player
+> earns **0** and the prestige system is unreachable — the self-inflicted fail
+> state §2.2's gate exists to prevent. No offset brings the top down without
+> zeroing the bottom, so the tree moves instead.
 
 **No starting-floors node.** Both drafts had one; it is cut for four separate
 reasons, any one of which would be worth a re-price and which together are worth
@@ -440,23 +474,54 @@ permitting: whatever most cheaply restores supply when supply is short, and a
 floor plus its lease otherwise. **Combo is excluded**, so every earnings figure
 is a floor, not a forecast.
 
-**How big a floor, stated rather than waved at. [r2]** `Economy.credit_delivery`
+**How big a floor — MEASURED, 2026-08-03. [r7]** `Economy.credit_delivery`
 applies `combo` to the very field the conversion consumes
 (`paid = fare * combo; lifetime_earnings += paid`), and `COMBO_MAX = 10.0`
-(`sim/economy.gd:9`). So `E` is understated by a factor in **[1, 10]**, and run
-1's yield is somewhere in **[4, 15]** Blueprints against a `height` ladder that
-costs 6 in total. At the top of that range the whole cap ladder is bought out of
-run one and "the ladder is spent in two runs" becomes one run.
+(`sim/economy.gd:9`). r1–r6 could only bound `E` as understated by a factor in
+`[1, 10]`. It has now been run on the real sim, headless, for the full 2h25 of
+§6's rate-optimal exit, with an attentive manual dispatcher:
 
-Two things bound the worry without removing it. The direction is safe — combo
-accrues with time, so it pushes the rate-optimal exit *later*, reinforcing §2.1
-rather than undermining it. And `note_expiry` resets combo to 1.0
-(`sim/economy.gd:39-43`), so the 92%-served rows cannot sustain the cap. But the
-100%-served rows have no modelled expiry at all, so the realised multiplier is
-**unmeasured**, and it is a bigger lever on `E` than either the 1.8× class
-multiplier or decision 19's fare change — both of which §14 already lists.
-`COMBO_MAX` heads §14 item 2's list, and it must be measured against a real
-run before `DEMOLITION_FLOOR` is treated as settled.
+| cap | floors reached | served | combo-free `E` | realised `E` | multiplier | yield at 900 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 10 | 10 | **100%** | **$2,610** | **$19,866** | **7.61×** | **13 BP** |
+| 20 | 17 | 94% | $3,000 | $7,523 | 2.51× | 8 BP |
+
+**Two things fall out of this, and the first is a validation.** The combo-free
+figure at cap 10 is **$2,610** against this section's modelled **$2,518** — 3.7%
+apart, on an independent implementation. The supply model, the demand fit, the
+fare and the whole §6 derivation are correct.
+
+**The second is that the multiplier is real and skill-dependent.** At cap 10 the
+dispatcher never misses, so there are **zero** expiries, combo reaches 10.0 by
+~100 minutes and stays there. At cap 20 the same player overbuilds past what one
+car can serve, 6% of riders give up, and combo bounces between 1.3 and 2.4 — so
+the taller run earns **less in absolute terms** ($7,523 against $19,866). That
+independently reproduces this section's own finding that the rate-optimal player
+leaves at 12–15 floors, from a completely different direction: going taller is
+not merely lower-rate, it is *worse*.
+
+The consequence for the tree is §4's `[r7]` note: the costs are re-denominated
+3×, and `DEMOLITION_FLOOR` stays 900. The harness was `tools/measure_combo.gd`,
+deleted after the run — it existed to answer one question.
+
+**The caveat that survives.** That dispatcher is an **upper bound**: it is a
+nearest-first policy running every tick and it never gets distracted. A real
+thumb on a real phone scores lower, and the cap-20 row's 2.51× is the better
+model of a player who is not paying full attention. The square root compresses
+the spread — 13 BP against 7 — so the tree tolerates it, but a player's Blueprint
+rate genuinely depends on how well they work the shafts. That is the combo doing
+its stated job (*"active play pays more than idling"*), now visible in the
+persistent currency rather than only in cash.
+
+Both of r2's bounding arguments turned out to be right, and the measurement is
+what makes them checkable. The direction is safe — combo accrues with time, so
+it pushes the rate-optimal exit *later*, reinforcing §2.1 rather than
+undermining it. And `note_expiry` resetting combo to 1.0
+(`sim/economy.gd:39-43`) is exactly why the 94%-served cap-20 row sustains only
+2.51× while the 100%-served cap-10 row pegs at the ceiling. What r2 got wrong
+was the *remedy*: it assumed the answer would be a re-derived
+`DEMOLITION_FLOOR`, and the offset cannot do that job (§4 `[r7]`). The tree's
+denomination can, and does.
 
 ### The rate-optimal player — leaves when Blueprints/hour peaks
 
@@ -518,12 +583,18 @@ the guarantee as stated is "spend < gross earnings", not "spend < spendable cash
    node inside a single run instead of banking across two. That is a choice, not a
    wall, but §14 item 1 is where the underlying problem lives.
 
-**What `base = 2` is calibrated against.** Run 1 yields 2–4 against `height` L1's
-cost of 2; run 2 yields 4–5 against L2's 4. The cost law tracks the yield curve
-because both are quadratic in the same variable — `cost = 2(n+1)` against a yield
-growing as `sqrt(E)` on runs whose `E` grows roughly as the square. That is a
-structural agreement rather than a fitted one, which is why it survived the table
-being rebuilt three times.
+**What `base` is calibrated against.** The cost law tracks the yield curve
+because both are quadratic in the same variable — `cost = base(n+1)` against a
+yield growing as `sqrt(E)` on runs whose `E` grows roughly as the square. That is
+a structural agreement rather than a fitted one, which is why it survived the
+table being rebuilt three times **and why the `[r7]` re-denomination did not
+disturb it**: multiplying every `base` by a constant preserves a structural
+agreement, where re-fitting each node would not have.
+
+In combo-free units (this section's tables) run 1 yields 2–4 against `height`
+L1's cost of 2. In the **realised** units the game actually pays in, run 1
+yields 13 against L1's cost of 6, and run 2 covers L2's 12. Same ratio, read off
+the same law; only the denomination changed.
 
 ### Run one is not a lock
 
@@ -2166,9 +2237,15 @@ all, and would pass with the entire §10 change deleted.
 - **Fares, rates and `data/tenants.json`.** §6 is denominated in today's fare on
   purpose; changing income here and calibrating a ladder against it in the same
   pass would leave neither checkable.
-- **`Economy.COMBO_MAX = 10.0`. [r2]** Untouched — but §6 now states the [1, 10]
-  band it puts on `E`, and §14 item 2 lists it as a thing that forces
-  `DEMOLITION_FLOOR` to be re-derived once measured.
+- **`Economy.COMBO_MAX = 10.0`. [r7]** Still untouched, and now for a measured
+  reason rather than an unexamined one: §6 puts the realised multiplier at
+  **7.61×** on a perfectly-worked 10-floor run and 2.51× on a 94%-served one.
+  That is a real skill gradient in the persistent currency, which is the combo's
+  stated job, and §4's 3× re-denomination is what absorbs it. Lowering
+  `COMBO_MAX` would be the alternative and is **not** taken here, because it
+  changes the in-run cash economy the whole cost curve is calibrated against —
+  the same "changing income and calibrating a ladder against it in one pass"
+  objection as the row above.
 - **Blueprint spending never routes through the cash path** — no `can_afford` on
   cash, no `cash -=`. `Meta.buy()` is the only spender and `Prestige.demolish`
   the only crediter.
@@ -2187,13 +2264,17 @@ all, and would pass with the entire §10 change deleted.
    first from persisting. **This gates extending the ladder past 20 floors**, and
    it should be answered before S5 ships rather than after, because the answer may
    change `height`'s costs.
-2. **Three income-side levers are excluded from the model that sets
-   `DEMOLITION_FLOOR`, and one of them is unmeasured. [r2]** In descending order
-   of size: **`COMBO_MAX = 10.0`**, applied to the exact field the conversion
-   consumes (§6) — run 1's yield is somewhere in [4, 15] BP against a 6-BP ladder,
-   and the realised value has never been measured on a real run; the **1.8× class
-   multiplier**; and **decision 19**. Measure combo first — it is the largest and
-   the cheapest to check.
+2. **CLOSED. [r7]** *Three income-side levers are excluded from the model that
+   sets `DEMOLITION_FLOOR`, and one of them is unmeasured.* The largest,
+   **`COMBO_MAX = 10.0`**, was measured on 2026-08-03: **7.61×** on a
+   perfectly-worked 10-floor run, **2.51×** at 94% served, putting run 1 at
+   **13 BP**. The remedy is §4's 3× re-denomination of the tree, not a re-derived
+   offset — the offset subtracts before the square root and cannot bring the top
+   down without zeroing the bottom. The combo-free figure came in 3.7% from §6's
+   model, which validates the derivation rather than replacing it.
+   **Still open, and now the largest remaining:** the **1.8× class multiplier**
+   and **decision 19**, both of which move `E` and neither of which is in the
+   ladder simulation.
 3. **Decision 19 invalidates §2 and §6 if it lands first.** "Target 8 trips/min at
    the starting building, fare ~$0.77 (4× riders, ¼ fare)" changes every earnings
    figure here, and `DEMOLITION_FLOOR = 900` is denominated in today's fare. If

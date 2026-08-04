@@ -453,6 +453,60 @@ This wants a target trips/minute chosen first, then the fare derived from it.
 
 ---
 
+## The fare is what the rider thought of the trip (2026-08-03)
+
+**Idea (yours).** A delivered fare scales with **that rider's remaining
+patience** at the moment the doors open, not with a global multiplier. Red pays
+$0, yellow $1, green $3 — the same colour ramp `Passenger.patience_fraction()`
+already drives on the chip.
+
+**Why it is more than a tuning knob.** Today service quality reaches income by
+two blunt routes: `Economy.note_expiry` charges a penalty for the people you
+*lost*, and `combo` multiplies everything for as long as you lose nobody. Both
+are all-or-nothing at the boundary — a rider delivered with 1% patience left
+pays exactly what one delivered instantly pays. This makes the *margin* pay,
+which is the thing the player is actually steering: it rewards shortening waits
+rather than merely avoiding expiries, and it gives a partial credit for the
+near-miss that currently reads as a full success.
+
+**It is also a candidate answer to the prestige-variance problem.** Measured
+while building S5, `combo` multiplies `lifetime_earnings` — the exact field the
+Blueprint conversion consumes — by between **2.5× and 7.6×** depending on how
+well the shafts are worked, and the square root only partly compresses that.
+A per-rider fare puts service quality into the fare itself, which is a smoother
+and more legible signal than a global streak multiplier that resets to 1.0 on a
+single expiry. If it ships, ask whether `COMBO_MAX` should come down with it —
+two multipliers for one behaviour is how a number stops being readable.
+
+**What it touches.**
+- `Economy.credit_delivery(fare)` gains the rider's patience fraction, or takes
+  the `Passenger`. `GameState._deliver()` (`sim/game_state.gd:307`) is the one
+  call site.
+- `Passenger.patience_fraction()` already exists and already colours the chip,
+  so the player can *see* the input before this pays them for it — which is the
+  condition decision 20 imposes on any retroactive-feeling penalty.
+- **Every balance figure denominated in today's flat $3.09/trip**, which is all
+  of the prestige spec's §2 and §6 and the whole building cost curve. Expected
+  income per trip falls to somewhere in [$0, $3] with a mean set by how well the
+  building is run, so `DEMOLITION_FLOOR` and the Blueprint tree's costs both
+  need re-deriving from the ladder simulation rather than scaling.
+
+**Sequencing.** This is decision 19's neighbour and carries the same warning:
+it invalidates the prestige balance if it lands after it. Either it goes in
+before S5's numbers are trusted, or S5 ships first and this re-runs
+`2026-08-03-prestige-ladder-sim.py` and re-derives the offset. **Do not scale
+the constants by hand** — §2.1 shows the rate-optimal exit is not a simple
+function of them.
+
+**Open question.** Three bands or a continuous ramp? Bands are legible and
+teach the colour ramp; a continuous `fare × patience_fraction` is simpler code
+and has no cliff for a rider to fall off one tick early. The cliff is the
+argument for continuous: this game's tick order was deliberately built so a
+passenger at exactly 0.0 patience still pays, and a band boundary re-creates
+exactly the knife-edge that ordering exists to remove.
+
+---
+
 ## Show the time of day
 
 **Idea.** Put the hour on screen. Right now traffic swings hard between the

@@ -251,6 +251,26 @@ verification step in the prestige work runs through these."
 
 ## Task 2: Measure the realised combo multiplier, and settle `DEMOLITION_FLOOR`
 
+> **DONE, 2026-08-03. Outcome, so nobody re-opens it:**
+>
+> | cap | floors | served | combo-free `E` | realised `E` | multiplier | yield at 900 |
+> | --- | --- | --- | --- | --- | --- | --- |
+> | 10 | 10 | 100% | **$2,610** | **$19,866** | **7.61×** | **13 BP** |
+> | 20 | 17 | 94% | $3,000 | $7,523 | 2.51× | 8 BP |
+>
+> The combo-free figure lands **3.7% from §6's modelled $2,518**, which validates
+> the ladder simulation rather than replacing it.
+>
+> **`DEMOLITION_FLOOR` stays 900** and the plan's original decision rule ("raise
+> the offset") is **withdrawn as unworkable**: the offset subtracts *before* the
+> square root, so it amplifies variance near the gate — at 900 a strong player
+> earns 13 BP and a distracted one 7; at the ~19,000 needed to bring the strong
+> player to 4, the weak one earns **0** and the gate is unreachable.
+>
+> **The tree is re-denominated 3× instead** (Task 5's JSON, and spec §4 `[r7]`),
+> which is a change of units that leaves every ratio §4 and §6 argue about intact.
+> Run 1's 13 BP buys `height` L1 and banks 7; run 2 affords L2.
+
 **Why:** spec §6 and §14 item 2 call this the single biggest open question.
 `Economy.credit_delivery` applies `combo` to `lifetime_earnings` — the exact
 field `yield_for` consumes — and `COMBO_MAX = 10.0`. The §6 model **excludes
@@ -911,18 +931,40 @@ through int64 overflow.
   "comment": "cost = base * (level + 1). Effects are applied by id in meta.gd.",
   "nodes": [
     { "id": "height",  "name": "Taller Foundations", "branch": "structure",
-      "base": 2, "max_level": 2, "note": "+5 floors you may build" },
+      "base": 6, "max_level": 2, "note": "+5 floors you may build" },
     { "id": "shafts",  "name": "Sunk Shafts",        "branch": "structure",
-      "base": 5, "max_level": 3, "note": "start with one more shaft" },
+      "base": 15, "max_level": 3, "note": "start with one more shaft" },
     { "id": "motor",   "name": "Standard Motor",     "branch": "mechanical",
-      "base": 2, "max_level": 4, "note": "start with Stronger Motor fitted" },
+      "base": 6, "max_level": 4, "note": "start with Stronger Motor fitted" },
     { "id": "gearing", "name": "Standard Gearing",   "branch": "mechanical",
-      "base": 2, "max_level": 4, "note": "start with Faster Doors fitted" },
+      "base": 6, "max_level": 4, "note": "start with Faster Doors fitted" },
     { "id": "cabin",   "name": "Standard Cabin",     "branch": "mechanical",
-      "base": 3, "max_level": 3, "note": "start with a Bigger Car fitted" }
+      "base": 9, "max_level": 3, "note": "start with a Bigger Car fitted" }
   ]
 }
 ```
+
+**These bases are 3× the spec's, and Task 2 is why.** The spec costed the tree
+against a *combo-free* yield of ~4 BP a run, because the ladder simulation
+deliberately excludes combo. Measured on the real sim, run 1 yields **13 BP** —
+combo pegs at its 10.0 ceiling and multiplies the exact field the conversion
+consumes. Re-denominating the tree by the measured yield ratio (13 / 4 ≈ 3.25,
+taken as 3) restores every ratio §4 and §6 designed against:
+
+| node | levels cost | total |
+| --- | --- | --- |
+| `height` | 6, 12 | **18** |
+| `shafts` | 15, 30, 45 | **90** |
+| `motor` | 6, 12, 18, 24 | **60** |
+| `gearing` | 6, 12, 18, 24 | **60** |
+| `cabin` | 9, 18, 27 | **54** |
+| | | **282** |
+
+Run 1's 13 BP buys `height` L1 and banks 7; run 2 affords L2 — the ladder is
+spent in **two runs**, as §6 intends. 282 BP against ~13 a run is ~21 runs of
+long tail, against §6's ~23. `DEMOLITION_FLOOR` stays **900**: raising it cannot
+work, because the offset subtracts *before* the square root, so any value that
+brings a strong player down to 4 BP zeroes a weaker one and locks the gate.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -1252,21 +1294,21 @@ func upgrades() -> Upgrades:
 
 func test_cost_follows_base_times_level_plus_one() -> void:
 	var m := loaded()
-	assert_eq(m.cost_of("height"), 2, "level 0")
+	assert_eq(m.cost_of("height"), 6, "level 0")
 	m.blueprints = 100
 	assert_true(m.buy("height", upgrades()), "buy L1")
-	assert_eq(m.cost_of("height"), 4, "level 1")
+	assert_eq(m.cost_of("height"), 12, "level 1")
 
 func test_a_purchase_at_exactly_the_cost_succeeds() -> void:
 	# The < vs <= boundary.
 	var m := loaded()
-	m.blueprints = 2
+	m.blueprints = 6
 	assert_true(m.buy("height", upgrades()), "exactly affordable")
 	assert_eq(m.blueprints, 0, "and spends it all")
 
 func test_a_purchase_one_short_is_refused() -> void:
 	var m := loaded()
-	m.blueprints = 1
+	m.blueprints = 5
 	assert_false(m.buy("height", upgrades()), "refused")
 	assert_eq(m.level_of("height"), 0, "and nothing changed")
 
@@ -1357,12 +1399,13 @@ func test_to_dict_pins_its_key_names() -> void:
 	# The dict key is `runs` while the field is `runs_completed`. A rename on
 	# one side would silently zero the count on every load.
 	var m := loaded()
-	m.blueprints = 3
+	m.blueprints = 30
 	m.runs_completed = 5
-	m.buy("height", upgrades())
+	assert_true(m.buy("height", upgrades()), "so `spent` is not vacuously empty")
 	var d := m.to_dict()
 	assert_true(d.has("blueprints") and d.has("runs") and d.has("spent"), "keys")
 	assert_eq(d["runs"], 5, "runs, not runs_completed")
+	assert_eq((d["spent"] as Dictionary)["height"], 1, "and spent carries the level")
 
 func test_to_dict_never_aliases_the_live_tree() -> void:
 	# The staged clone in Prestige.demolish is independent only if the pair
@@ -2376,13 +2419,20 @@ must persist the credited Blueprints and the discarded building in **one** write
 Append to `tests/test_save_codec.gd`:
 
 ```gdscript
+## A state whose Meta carries a balance, a run count AND a spent level, since
+## those are three independent things the codec can drop separately.
+##
+## 20 - cost_of("height") = 20 - 6 = 14 is the balance every test below asserts:
+## buy() SPENDS, so seeding the balance and then buying leaves less than was
+## seeded.
 func meta_state() -> GameState:
 	var m := Meta.new()
 	assert_true(m.load_defs("res://data/blueprints.json"), "defs")
-	m.blueprints = 7
+	m.blueprints = 20
 	m.runs_completed = 3
 	var s := GameState.new(GameState.BASE_FLOORS, 1, 1, "res://data/tenants.json", m)
 	assert_true(m.buy("height", s.upgrades), "a node the save must carry")
+	assert_eq(m.blueprints, 14, "the fixture's balance, after the purchase")
 	return s
 
 func test_a_populated_meta_round_trips_in_memory() -> void:
@@ -2392,7 +2442,7 @@ func test_a_populated_meta_round_trips_in_memory() -> void:
 	var before := meta_state()
 	var after := SaveCodec.decode(SaveCodec.encode(before))
 	assert_not_null(after, "decodes")
-	assert_eq(after.meta.blueprints, 7, "blueprints")
+	assert_eq(after.meta.blueprints, 14, "blueprints")
 	assert_eq(after.meta.runs_completed, 3, "runs")
 	assert_eq(after.meta.level_of("height"), 1, "spent")
 
@@ -2498,7 +2548,7 @@ func test_blueprints_survive_the_demolish_write() -> void:
 	assert_not_null(next, "demolished")
 	var after := SaveCodec.decode(SaveCodec.encode(next))
 	assert_not_null(after, "decodes")
-	assert_eq(after.meta.blueprints, 11, "7 banked plus 4 earned")
+	assert_eq(after.meta.blueprints, 18, "14 banked plus 4 earned")
 	assert_eq(after.meta.runs_completed, 4, "the run was counted")
 	assert_eq(after.building.floor_count, GameState.BASE_FLOORS,
 		"and the smaller building came in the same payload")
@@ -3131,7 +3181,7 @@ func test_the_meta_survives_a_refused_run() -> void:
 	assert_null(SaveCodec.decode(data), "the run is refused")
 	var salvaged := SaveCodec.salvage_meta(data)
 	assert_not_null(salvaged, "the tree is not")
-	assert_eq(salvaged.blueprints, 7, "blueprints")
+	assert_eq(salvaged.blueprints, 14, "blueprints")
 	assert_eq(salvaged.level_of("height"), 1, "spent")
 
 func test_salvage_never_grants() -> void:
