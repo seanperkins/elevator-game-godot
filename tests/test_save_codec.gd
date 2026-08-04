@@ -680,3 +680,48 @@ func test_poisoning_the_meta_never_costs_the_building() -> void:
 			if after != null:
 				assert_eq(after.building.floor_count, 7,
 					"%s = %s keeps the building" % [path, poison])
+
+# --- salvage: a refused RUN must not take the tree down ----------------------
+
+func test_the_meta_survives_a_refused_run() -> void:
+	# decode still returns NULL here -- five existing assert_null tests depend
+	# on that contract, and both docstrings say "null always means start a new
+	# game". Salvage is a separate, explicitly named function.
+	var s := meta_state()
+	var data := SaveCodec.encode(s)
+	(data["floors"] as Array).clear()          # the short-floors refusal
+	assert_null(SaveCodec.decode(data), "the run is refused")
+	var salvaged := SaveCodec.salvage_meta(data)
+	assert_not_null(salvaged, "the tree is not")
+	assert_eq(salvaged.blueprints, 14, "blueprints")
+	assert_eq(salvaged.level_of("height"), 1, "spent")
+
+func test_salvage_never_grants() -> void:
+	# legacy_meta derives free height levels from a floor_count the refusal has
+	# just declared untrustworthy: a hand-written 20-floor v3 save with an empty
+	# floors array would otherwise mint the entire cap ladder from a file that
+	# does not load.
+	var salvaged := SaveCodec.salvage_meta(
+		{"version": 3, "floor_count": 20, "floors": []})
+	assert_not_null(salvaged, "salvages")
+	assert_eq(salvaged.level_of("height"), 0, "an EMPTY meta, not two free levels")
+
+func test_salvage_reads_the_unmigrated_dictionary_without_throwing() -> void:
+	# It must not migrate: _migrate_to_v3's first statement is
+	# int(data.get("version", -1)), the exact abort the preflight guards decode
+	# against -- and salvage runs under a separate call the preflight never
+	# covers. Migration touches only V3_KEYS, V3_CAR_KEYS and `levels`, and
+	# never the "meta" key, so there is nothing to gain by it.
+	var salvaged := SaveCodec.salvage_meta({"version": {}, "cars": null,
+		"meta": {"blueprints": 5}})
+	assert_not_null(salvaged, "no throw, no null")
+	assert_eq(salvaged.blueprints, 5, "and the meta was still read")
+
+func test_salvage_returns_null_when_the_shipped_catalog_is_broken() -> void:
+	assert_null(SaveCodec.salvage_meta({}, "res://data/does_not_exist.json"), "fatal")
+
+func test_salvage_of_a_save_with_no_meta_is_an_empty_usable_meta() -> void:
+	var salvaged := SaveCodec.salvage_meta({})
+	assert_not_null(salvaged, "not null")
+	assert_true(salvaged.is_usable(), "defs loaded, so a run can be built on it")
+	assert_eq(salvaged.blueprints, 0, "and it grants nothing")

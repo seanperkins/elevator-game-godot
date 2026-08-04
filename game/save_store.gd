@@ -129,15 +129,28 @@ static func load_all(catalog_path := "res://data/tenants.json",
 		blueprints_path := "res://data/blueprints.json") -> Dictionary:
 	var parsed: Variant = _select()
 	if typeof(parsed) != TYPE_DICTIONARY:
-		return {"state": null}
-	return {"state": SaveCodec.decode(parsed as Dictionary, catalog_path,
-		blueprints_path)}
+		# No save file is still a DEFS-LOADED Meta, never a bare Meta.new():
+		# GameState checks is_usable() unconditionally, so a bare one would make
+		# a brand-new game invalid.
+		return {"state": null, "meta": SaveCodec.salvage_meta({}, blueprints_path)}
+	var data := parsed as Dictionary
+	return {
+		"state": SaveCodec.decode(data, catalog_path, blueprints_path),
+		# From the SAME parsed dictionary, so a refused run still surrenders its
+		# tree and the two can never come from different files.
+		"meta": SaveCodec.salvage_meta(data, blueprints_path),
+	}
 
 ## The saved state, or null if there is nothing to load or it cannot be read.
 ## Null always means "start a new game" -- never a partly applied save.
 static func load_state(catalog_path := "res://data/tenants.json",
 		blueprints_path := "res://data/blueprints.json") -> GameState:
 	return load_all(catalog_path, blueprints_path)["state"]
+
+## The persistent half, salvaged even when the run is refused. Null ONLY when
+## the shipped blueprint catalog will not load, which is fatal.
+static func load_meta(blueprints_path := "res://data/blueprints.json") -> Meta:
+	return load_all("res://data/tenants.json", blueprints_path)["meta"]
 
 static func clear() -> void:
 	var dir := DirAccess.open("user://")

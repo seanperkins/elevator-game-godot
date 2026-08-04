@@ -76,3 +76,38 @@ func test_a_corrupt_save_beside_a_good_backup_is_recovered() -> void:
 	assert_not_null(SaveStore.load_state(), "the good backup is selected")
 	assert_true(SaveStore.save(fresh()), "and the next save is not blocked")
 	assert_not_null(SaveStore.load_state(), "which still loads")
+
+# --- one source selection, shared by the run and the tree --------------------
+
+func test_the_run_and_the_meta_come_from_the_same_file() -> void:
+	# Two independent selections would let them come from DIFFERENT files, and
+	# the autosave commits that mixture ten seconds later as one valid payload.
+	var m := Meta.new()
+	m.load_defs("res://data/blueprints.json")
+	m.blueprints = 11
+	var s := GameState.new(6, 1, 1, "res://data/tenants.json", m)
+	var data := SaveCodec.encode(s)
+	(data["floors"] as Array).clear()          # PATH parses; decode refuses it
+	write_raw(SaveStore.PATH, JSON.stringify(data))
+
+	var other := Meta.new()
+	other.load_defs("res://data/blueprints.json")
+	other.blueprints = 99
+	write_raw(SaveStore.BACKUP_PATH, JSON.stringify(SaveCodec.encode(
+		GameState.new(6, 1, 1, "res://data/tenants.json", other))))
+
+	var loaded := SaveStore.load_all()
+	assert_null(loaded["state"], "the run is refused")
+	assert_eq((loaded["meta"] as Meta).blueprints, 11,
+		"and the meta came from PATH, not from the backup")
+
+func test_no_save_file_still_yields_a_usable_empty_meta() -> void:
+	var loaded := SaveStore.load_all()
+	assert_null(loaded["state"], "nothing to load")
+	assert_not_null(loaded["meta"], "but a defs-loaded Meta, not a bare Meta.new()")
+	assert_true((loaded["meta"] as Meta).is_usable(), "usable")
+
+func test_a_broken_blueprint_catalog_makes_the_meta_null() -> void:
+	var loaded := SaveStore.load_all("res://data/tenants.json",
+		"res://data/does_not_exist.json")
+	assert_null(loaded["meta"], "so the boot path can show a named error screen")

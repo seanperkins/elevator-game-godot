@@ -74,10 +74,28 @@ func _ready() -> void:
 		state = GameState.new(floors, shafts, START_SEED, catalog_path, null,
 			blueprints_path)
 	else:
-		state = SaveStore.load_state(catalog_path, blueprints_path)
+		# ONE source selection, so the run and the tree can never come from
+		# different files -- the autosave would commit that mixture ten seconds
+		# later as one perfectly valid payload.
+		var loaded := SaveStore.load_all(catalog_path, blueprints_path)
+		state = loaded["state"]
 		if state == null:
-			state = GameState.new(floors, shafts, START_SEED, catalog_path, null,
-				blueprints_path)
+			# A refused run must not take the tech tree down with it.
+			var salvaged: Meta = loaded["meta"]
+			if salvaged == null:
+				# A bare `return` here would skip the guard below just as surely
+				# as an abort would, because that branch sits BELOW this code
+				# inside _ready. So this draws the screen itself.
+				_show_error_screen("blueprint catalog", blueprints_path)
+				_saving_enabled = false
+				set_physics_process(false)
+				return
+			# The Meta's starting size is applied by the callers that BEGIN a
+			# run, and this is one of them: a salvaged `shafts` L3 could never
+			# have been applied by a branch that constructed with START_SHAFTS.
+			state = GameState.new(GameState.BASE_FLOORS, salvaged.starting_shafts(),
+				GameState.BASE_SEED + salvaged.runs_completed,
+				catalog_path, salvaged, blueprints_path)
 
 	# A malformed shipped tenants.json is a build error a player can hit. A
 	# blank board with a console message they cannot see is indistinguishable

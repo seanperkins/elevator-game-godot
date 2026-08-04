@@ -186,6 +186,40 @@ static func _empty_meta(blueprints_path: String) -> Meta:
 		return null
 	return m
 
+## The tech tree is designed to outlive a discarded building, so a run we refuse
+## must not take it down. decode keeps four refusal paths besides the meta block
+## -- the unsupported-version guard, _is_usable's missing-key check, the v2+
+## short-floors rule and the missing kind/class rule -- and under v4 every one of
+## them would otherwise destroy permanent progress along with the run.
+##
+## decode's own contract is UNCHANGED: it still returns null on refusal, which
+## five existing tests and two docstrings depend on. This is a separate,
+## explicitly named function.
+##
+## Three rules, all load-bearing:
+##
+## 1. It NEVER calls _legacy_meta(). That derives free height levels from a
+##    floor_count the refusal has just declared untrustworthy -- a hand-written
+##    {"version": 3, "floor_count": 20, "floors": []} would mint the whole cap
+##    ladder from a save that does not load.
+## 2. It reads the UNMIGRATED dictionary, using data.get exclusively.
+##    _migrate_to_v3's first statement is int(data.get("version", -1)), the exact
+##    abort the preflight guards decode against -- and salvage runs under a
+##    separate call the preflight never covers. Migration is unnecessary here: it
+##    touches only V3_KEYS, V3_CAR_KEYS and `levels`, and never the "meta" key.
+## 3. It deliberately bypasses the version guard for the meta block, so a save
+##    written by a future v5 has its `spent` reinterpreted under v4 semantics.
+##    Meta.restore()'s clamps bound the damage. Written down because the version
+##    guard is otherwise the only thing making "we do not read formats we do not
+##    understand" true.
+static func salvage_meta(p_data: Dictionary,
+		blueprints_path := "res://data/blueprints.json") -> Meta:
+	var m := Meta.new()
+	if not m.load_defs(blueprints_path):
+		return null
+	m.restore(p_data.get("meta"))
+	return m
+
 static func encode(state: GameState) -> Dictionary:
 	var cars := []
 	for car in state.building.cars:
