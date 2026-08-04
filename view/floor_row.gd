@@ -17,22 +17,18 @@ extends Control
 ## the encoding.
 
 ## A waiting passenger shows its CALL DIRECTION, not its destination: they
-## pressed a hall button, which is up or down. One glyph fits the original
-## 14-unit pitch, so the strip still holds twelve. (Two digits would have cost
-## roughly 18 units each and dropped it to eight -- which is what the destination
-## panel upgrade will have to buy, when it lands.)
-const CALL_UP := "\u25b2"
-const CALL_DOWN := "\u25bc"
+## pressed a hall button, which is up or down. The glyphs live in PersonSprite,
+## which draws them as triangles -- FloorRow only names them.
+const CALL_UP := PersonSprite.ARROW_UP
+const CALL_DOWN := PersonSprite.ARROW_DOWN
 ## Waiting, direction withheld -- before the call_direction upgrade is fitted.
-## The empty string rather than a glyph: the chip's colour already carries
-## patience, so a "?" would add no information and reads as an error state
-## rather than as information not yet bought.
+## The empty string rather than a glyph: a "?" would add no information and
+## reads as an error state rather than as information not yet bought.
 const CALL_UNKNOWN := ""
 
 const MAX_INDIVIDUALS := 12
-const SPRITE_PITCH := 14.0
-## People are laid out by ChipGrid -- the same square, the same packing rule as
-## inside a car, so a passenger looks the same before and after boarding.
+## People are laid out by ChipGrid with a 20 x 40 cell -- a person stands rather
+## than sits. The car no longer shares this rule: riders stand in ranks there.
 const STRIP_RIGHT := GUTTER_WIDTH + STRIP_WIDTH          # 208
 
 const GUTTER_WIDTH := 64.0
@@ -49,7 +45,7 @@ var _label: Label
 var _count: Label
 var _bar_track: ColorRect
 var _bar_fill: ColorRect
-var _sprites: Array[PassengerSprite] = []
+var _sprites: Array[PersonSprite] = []
 
 func _ready() -> void:
 	# A hairline at the top of the band: without it 40 floors read as one field.
@@ -94,12 +90,9 @@ func set_floor(index: int) -> void:
 	floor_index = index
 	_label.text = str(index)
 
-## Everyone waiting, drawn as squares. There used to be a second tier -- below a
-## 40-unit floor the sprites collapsed into a single crowd bar -- because floors
-## shrank as the building grew and eventually could not hold a chip. Rows are a
-## fixed 88 units now, so that tier could never fire again, and a representation
-## that never appears is worse than no representation. The count beside them is
-## still exact regardless of how many are drawn.
+## Everyone waiting, drawn as figures. Rows are a fixed 120 units now, so a
+## 20 x 40 cell packs six across and two deep -- all twelve on every floor. The
+## count beside them is still exact regardless of how many are drawn.
 ## `show_direction` is required rather than defaulted to true: a default would
 ## let a future caller silently opt out of the gate, which is the same class of
 ## bug the note_expiry(fare) default caused.
@@ -108,7 +101,7 @@ func set_waiting(passengers: Array, show_direction: bool) -> void:
 	_count.text = "" if total <= 0 else str(total)
 
 	var cap := MAX_INDIVIDUALS
-	var cell := Vector2(30, 30)
+	var cell := PersonSprite.HALL_CELL
 	var area := Vector2(STRIP_RIGHT - SPRITE_X, size.y)
 	var grid := ChipGrid.shape(mini(total, cap),
 		ChipGrid.columns_for(area.x, cell.x), ChipGrid.rows_for(area.y, cell.y))
@@ -116,8 +109,7 @@ func set_waiting(passengers: Array, show_direction: bool) -> void:
 	grid = ChipGrid.shape(shown, ChipGrid.columns_for(area.x, cell.x),
 		ChipGrid.rows_for(area.y, cell.y))
 	while _sprites.size() < shown:
-		var s := PassengerSprite.new()
-		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var s := PersonSprite.new()
 		add_child(s)
 		_sprites.append(s)
 	for i in range(_sprites.size()):
@@ -125,9 +117,10 @@ func set_waiting(passengers: Array, show_direction: bool) -> void:
 			var p: Passenger = passengers[i]
 			_sprites[i].position = Vector2(SPRITE_X, 0) \
 				+ ChipGrid.position_of(i, shown, grid, area, cell)
-			_sprites[i].show_as(p.patience_fraction(),
+			_sprites[i].show_waiting(p.patience_fraction(),
 				(CALL_DOWN if p.direction() < 0 else CALL_UP) if show_direction
-				else CALL_UNKNOWN)
+				else CALL_UNKNOWN,
+				PersonSprite.key_for(p.origin_floor, p.destination_floor, p.source_floor))
 		else:
 			_sprites[i].recycle()
 

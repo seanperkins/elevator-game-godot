@@ -23,7 +23,7 @@ signal pan_requested(delta: Vector2)
 ## is too short to draw seats at all, which is the one case where the picture is
 ## gone and the number is all there is.
 const SEAT_SIZE := Vector2(30, 30)
-const SEAT_FONT := PassengerSprite.FONT
+const SEAT_FONT := 24
 const HEADER_HEIGHT := 20.0
 const HEADER_FONT := 16
 ## Characters that fit across the car at HEADER_FONT, in the no-room fallback.
@@ -74,7 +74,7 @@ var _car_label: Label
 var _door_left: ColorRect
 var _door_right: ColorRect
 var _seats: Array[ColorRect] = []
-var _chips: Array[PassengerSprite] = []
+var _chips: Array[PersonSprite] = []
 var _listed: PackedStringArray = PackedStringArray()
 var _car_floor_provider: Callable
 
@@ -203,7 +203,8 @@ func set_riders(riders: Array, capacity: int) -> void:
 			_seats[i].visible = false
 			var p: Passenger = riders[i]
 			_chips[i].position = at
-			_chips[i].show_as(p.patience_fraction(), str(p.destination_floor))
+			_chips[i].show_riding(str(p.destination_floor),
+				PersonSprite.key_for(p.origin_floor, p.destination_floor, p.source_floor))
 			_listed.append(str(p.destination_floor))
 		else:
 			_chips[i].recycle()
@@ -246,10 +247,10 @@ func _grow_pools(capacity: int) -> void:
 		_car_rect.add_child(seat)
 		_seats.append(seat)
 
-		var chip := PassengerSprite.new()
+		var chip := PersonSprite.new()
 		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_car_rect.add_child(chip)
-		chip.set_chip(SEAT_SIZE, SEAT_FONT)
+		chip.set_cell(SEAT_SIZE, SEAT_SIZE.y, SEAT_FONT)
 		chip.recycle()
 		_chips.append(chip)
 

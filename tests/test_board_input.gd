@@ -382,7 +382,7 @@ func fit(id: String) -> void:
 func test_a_waiting_passenger_hides_its_direction_until_the_upgrade() -> void:
 	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
 	view.refresh()
-	var sprite: PassengerSprite = view._floors[2]._sprites[0]
+	var sprite: PersonSprite = view._floors[2]._sprites[0]
 	assert_true(sprite.visible, "the chip is still drawn -- someone IS waiting")
 	assert_eq(sprite.label_text(), FloorRow.CALL_UNKNOWN,
 		"which way they are going is not readable until it is bought")
@@ -400,7 +400,7 @@ func test_a_waiting_passenger_shows_its_call_direction_not_its_floor() -> void:
 	fit("call_direction")
 	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
 	view.refresh()
-	var sprite: PassengerSprite = view._floors[2]._sprites[0]
+	var sprite: PersonSprite = view._floors[2]._sprites[0]
 	assert_true(sprite.visible, "the passenger is drawn")
 	assert_eq(sprite.label_text(), FloorRow.CALL_UP, "floor 2 to floor 5 is a call up")
 	assert_false(sprite.label_text().contains("5"),
