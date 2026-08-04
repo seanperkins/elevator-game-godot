@@ -43,6 +43,8 @@ const ARROW_DOWN := "▼"
 ## what fits rather than everyone.
 const FIGURE := Vector2(26, 41)
 const BAR_W := 4.0
+## One unit. Enough to separate at 26 x 41; more would read as a sticker border.
+const OUTLINE := 1.0
 ## cell = figure + bar wide, badge + gap + figure tall.
 const HALL_BADGE := Vector2(16, 15)
 const HALL_CELL := Vector2(FIGURE.x + BAR_W, HALL_BADGE.y + 2.0 + FIGURE.y)
@@ -184,6 +186,8 @@ func _draw() -> void:
 	var q := parts()
 	var badge: Rect2 = q["badge"]
 	if badge.size != Vector2.ZERO:
+		# The badge is dark too, so it needs the same help against dark scenery.
+		draw_rect(badge.grow(OUTLINE), Palette.PERSON_OUTLINE)
 		draw_rect(badge, Palette.BADGE_BG)
 		if not _riding:
 			_draw_arrow(badge)
@@ -191,21 +195,33 @@ func _draw() -> void:
 	if bar.size != Vector2.ZERO:
 		var track := Rect2(bar.position.x, (q["figure"] as Rect2).position.y,
 			BAR_W, FIGURE.y)
+		draw_rect(track.grow(OUTLINE), Palette.PERSON_OUTLINE)
 		draw_rect(track, Palette.PERSON_BAR_TRACK)
 		draw_rect(bar, Palette.PATIENCE_LOW.lerp(Palette.PATIENCE_OK, _fraction))
 	var figure: Rect2 = q["figure"]
 	var skin: Color = Palette.PERSON_SKINS[posmod(_tint_key, Palette.PERSON_SKINS.size())]
 	var shirt: Color = Palette.PERSON_SHIRTS[posmod(_tint_key, Palette.PERSON_SHIRTS.size())]
-	draw_circle((q["head"] as Rect2).get_center(), HEAD_D * FIGURE.x * 0.5, skin)
-	draw_rect(q["torso"], shirt)
+	var head_r := HEAD_D * FIGURE.x * 0.5
 	var lw := LEG_W * FIGURE.x
 	var lh := LEG_H * FIGURE.y
 	var ly := LEG_Y * FIGURE.y
-	draw_rect(Rect2(figure.position + Vector2(TORSO_X * FIGURE.x, ly),
-		Vector2(lw, lh)), Palette.PERSON_LEGS)
-	draw_rect(Rect2(figure.position
-		+ Vector2((TORSO_X + TORSO_W) * FIGURE.x - lw, ly),
-		Vector2(lw, lh)), Palette.PERSON_LEGS)
+	var leg_l := Rect2(figure.position + Vector2(TORSO_X * FIGURE.x, ly),
+		Vector2(lw, lh))
+	var leg_r := Rect2(figure.position
+		+ Vector2((TORSO_X + TORSO_W) * FIGURE.x - lw, ly), Vector2(lw, lh))
+
+	# EVERY part is outlined first, then every part filled -- so the result is one
+	# silhouette rather than four outlined stickers with seams between them.
+	# A person has to read against scenery this palette does not control.
+	draw_circle((q["head"] as Rect2).get_center(), head_r + OUTLINE, Palette.PERSON_OUTLINE)
+	draw_rect((q["torso"] as Rect2).grow(OUTLINE), Palette.PERSON_OUTLINE)
+	draw_rect(leg_l.grow(OUTLINE), Palette.PERSON_OUTLINE)
+	draw_rect(leg_r.grow(OUTLINE), Palette.PERSON_OUTLINE)
+
+	draw_circle((q["head"] as Rect2).get_center(), head_r, skin)
+	draw_rect(q["torso"], shirt)
+	draw_rect(leg_l, Palette.PERSON_LEGS)
+	draw_rect(leg_r, Palette.PERSON_LEGS)
 
 func _draw_arrow(badge: Rect2) -> void:
 	var c := badge.get_center()

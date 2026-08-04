@@ -179,6 +179,16 @@ const PERSON_SHIRTS: Array[Color] = [
 	SHIRT_TEAL, SHIRT_PLUM, SHIRT_SLATE, SHIRT_RUST, SHIRT_GOLD]
 const PERSON_SKINS: Array[Color] = [SKIN_DEEP, SKIN_MID, SKIN_PALE]
 const PERSON_LEGS := BROWN_DARK
+## A hairline around every drawn person, so a figure is separated from whatever
+## is behind it WITHOUT the background having to cooperate.
+##
+## Without it the background carries the whole burden, and the box is tiny: of
+## the palette, only teal and tan clear all nine figure colours -- a rust door
+## measured 1.07 against a rust shirt, which is invisible. With it the worst case
+## over EVERY possible background is 1.37. On a pale ground the outline itself
+## disappears and the figure's own contrast carries it (11.35 on cream), so the
+## two cover each other.
+const PERSON_OUTLINE := CREAM_PALE
 
 ## The badge above a person's head. It lands on TWO grounds -- cream in the hall
 ## and mid teal in the car -- so it is measured against both: 9.87:1 and 3.57:1.

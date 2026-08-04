@@ -230,3 +230,23 @@ func test_a_pip_reads_lit_hollow_and_against_the_car() -> void:
 	assert_gt(_contrast(Palette.PIP_LIT, Palette.PERSON_BAR_TRACK), 3.0, "lit vs hollow")
 	assert_gt(_contrast(Palette.PERSON_BAR_TRACK, Palette.CAR), 3.0,
 		"a hollow pip against the car body")
+
+## An outlined figure is separated from ANY background, which is what lets floor
+## scenery use colours this palette does not control. Measured against the
+## generated apartments art, a rust shirt on a rust door was 1.07 -- invisible.
+func test_an_outlined_figure_reads_against_every_possible_background() -> void:
+	var fills: Array[Color] = []
+	fills.append_array(Palette.PERSON_SHIRTS)
+	fills.append_array(Palette.PERSON_SKINS)
+	fills.append(Palette.PERSON_LEGS)
+	fills.append(Palette.BADGE_BG)
+	fills.append(Palette.PERSON_BAR_TRACK)
+	# Sweep every luminance a background could have, not a sample of pigments.
+	for i in range(101):
+		var bg := Color(1, 1, 1).lerp(Color(0, 0, 0), float(i) / 100.0)
+		for fill in fills:
+			# Separated if EITHER the outline clears the ground, or the fill does.
+			var best: float = maxf(_contrast(Palette.PERSON_OUTLINE, bg),
+				_contrast(fill, bg))
+			assert_gt(best, 1.2,
+				"a figure vanishes on a background at step %d" % i)
