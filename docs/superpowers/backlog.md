@@ -796,6 +796,31 @@ floor" without answering "what does this place look like". If that reads well,
 the illustrated version is a swap behind the same seam; if it does not, the
 question was never about fidelity.
 
+**The measured answer to "how big" (2026-08-04).** Everything left of the shafts
+is `x 0 -> FloorRow.STRIP_RIGHT` (208) and a floor is `BuildingView.FLOOR_HEIGHT`
+(120) tall. Both are fixed constants, so an asset never has to scale
+responsively:
+
+| region | canvas units | ratio | @3x px |
+| --- | --- | --- | --- |
+| people strip only | 140 x 120 | 7:6 | 229 x 196 |
+| **gutter + strip** | **208 x 120** | **26:15** | **341 x 196** |
+| full row incl. shafts | 688 x 120 | 86:15 | 1127 x 196 |
+
+Take 208 x 120. The shafts are opaque, so a full-row asset wastes ~70% of every
+file, and the gutter is only 64 units of quiet chrome. Author at **416 x 240**
+(2x canvas units — integer relationship, 22% of headroom over @3x). The scale
+chain: 720 units -> 393 pt is **0.546 pt/unit**, x3 on a modern iPhone, so one
+unit is ~1.64 device pixels.
+
+**And the reason to hesitate before drawing any of it:** raster assets PIN those
+two constants, and both moved twice on 2026-08-04 alone — `FLOOR_HEIGHT` 88 ->
+112 -> 120 and `STRIP_WIDTH` 176 -> 144, each for legibility reasons that only
+appeared on the device. A finished asset set would have been invalidated three
+times in a day. Either keep the outer ~8 units of each edge empty so a constant
+change crops instead of rescaling, or build the primitive-motif version first
+and find out whether the idea reads at 114 x 66 pt before buying the pipeline.
+
 **Open questions.**
 - Does a vacant floor's construction look apply to a floor that has *never* been
   leased, or also to one whose tenant just left? Those are different states and
