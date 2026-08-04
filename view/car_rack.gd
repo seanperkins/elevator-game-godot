@@ -8,9 +8,9 @@ extends RefCounted
 ##
 ## RIDERS STAND IN ONE RANK on the floor of the car, as many as can be drawn at
 ## a legible size. A second rank was built first and then removed: a person is
-## 26 x 41 (see PersonSprite -- at 14 x 22 a whole person was shorter than one
-## digit of their own badge), so a band is 30 + 41 = 71, and two of those need
-## 142 units in the 106 a 116-unit car has after its pip strip. Two ranks are
+## 28 x 44 (see PersonSprite -- at 14 x 22 a whole person was shorter than one
+## digit of their own badge), so a band is 30 + 44 = 74, and two of those need
+## 148 units in the 106 a 116-unit car has after its pip strip. Two ranks are
 ## only possible with figures too small to be worth drawing.
 ##
 ## So the car does what the hall does: draw fewer people, properly, and let the
@@ -33,11 +33,11 @@ const PIP_INSET := 8.0
 
 const INSET := 2.0
 const BADGE_H := 30.0
-const FIGURE_H := 41.0
-const BAND := BADGE_H + FIGURE_H            # 71
+const FIGURE_H := 44.0
+const BAND := BADGE_H + FIGURE_H            # 74
 ## Below this there is no room for a rank at all and the header line is the
 ## whole story -- though the pips still draw.
-const ONE_RANK_MIN := INSET + PIP_H + BAND  # 81
+const ONE_RANK_MIN := INSET + PIP_H + BAND  # 84
 
 ## 0 or 1. There is no two-rank case; see the class docstring.
 static func ranks_for(capacity: int, car_h: float) -> int:

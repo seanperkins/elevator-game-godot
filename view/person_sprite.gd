@@ -29,7 +29,7 @@ extends Control
 const ARROW_UP := "▲"
 const ARROW_DOWN := "▼"
 
-## A PERSON IS ONE SIZE EVERYWHERE, and that size is 26 x 41.
+## A PERSON IS ONE SIZE EVERYWHERE, and that size is 28 x 44.
 ##
 ## It used to be 14 x 22, which is 7.6 x 12.0pt at the 0.546 iPhone scale --
 ## a whole person SHORTER than the single digit on their own badge, and 18% of
@@ -41,12 +41,15 @@ const ARROW_DOWN := "▼"
 ## The hall now draws EIGHT people rather than twelve. Nothing is lost: the
 ## count beside the strip has always been exact, and the strip has always shown
 ## what fits rather than everyone.
-const FIGURE := Vector2(26, 41)
+const FIGURE := Vector2(28, 44)
 const BAR_W := 4.0
 ## One unit. Enough to separate at 26 x 41; more would read as a sticker border.
 const OUTLINE := 1.0
 ## cell = figure + bar wide, badge + gap + figure tall.
-const HALL_BADGE := Vector2(16, 15)
+## 12 tall, not 15. The hall's badge holds a DRAWN triangle rather than a glyph,
+## so it gives up height cheaply -- and those three units are what let the figure
+## grow to 44 while the cell stays 58 and the hall still shows eight.
+const HALL_BADGE := Vector2(16, 12)
 const HALL_CELL := Vector2(FIGURE.x + BAR_W, HALL_BADGE.y + 2.0 + FIGURE.y)
 const HALL_FIGURE_TOP := HALL_BADGE.y + 2.0
 

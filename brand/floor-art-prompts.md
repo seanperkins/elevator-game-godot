@@ -51,6 +51,21 @@ areas over detail, and keep the dark colours to roughly a quarter of the image
 or less — the characters stand along the bottom and the picture should stay calm
 behind them.
 
+SCALE IS THE THING MOST LIKELY TO GO WRONG. A standing adult is about 37% of
+the image height, and everything must be drawn to that. Use these:
+
+  interior door      43% of image height
+  bookcase           39%
+  filing cabinet     29%
+  window sill        24%
+  counter top        22%
+  desk or table top  16%
+  chair seat         10%
+
+Furniture and doors that fill more than about half the frame height are WRONG,
+however good they look alone -- the characters stand in front of them and will
+look like children.
+
 Wide landscape format, aspect ratio 26:15. Edge to edge, full bleed, no border,
 no frame, no vignette.
 
@@ -64,6 +79,13 @@ point. The floor line runs along the bottom edge.
 ```
 
 ---
+
+**Scale was the first real failure.** The first three generations came back
+consistently ~1.4x oversized — apartment doors at 54% of frame height where 43%
+is right, office desks at 24% where 16% is. People looked like children standing
+in a giant's office. The figures were bumped 7% (26x41 -> 28x44, which is the
+most the hall can give without dropping from eight people to three), and the
+rest is the table above. **Check a generation against it before accepting.**
 
 **Two artefacts seen so far, both worth pre-empting.** A small four-pointed
 white sparkle appears near the lower right of every generation — hence the
