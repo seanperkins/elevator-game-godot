@@ -36,6 +36,17 @@ const NODE_TO_UPGRADE := {"motor": "speed", "gearing": "doors", "cabin": "capaci
 var blueprints: int = 0
 var runs_completed: int = 0
 
+## Whether the player has found the developer panel. It rides in the meta block
+## rather than as a new top-level save key, which is why SaveCodec.VERSION stays
+## 4: this dictionary is already validated key by key and already tolerates an
+## absent or malformed shape without throwing, so adding a field inside it is
+## additive within v4 -- no version bump, no migration, and the generative
+## poison sweep covers it by construction.
+##
+## It survives a demolish, because Prestige.demolish clones the Meta through
+## to_dict/restore. Rebuilding is a game action, not a factory reset.
+var dev_unlocked: bool = false
+
 var _spent: Dictionary = {}         # node id -> level
 var _defs: Dictionary = {}          # node id -> {name, branch, base, max_level, note}
 ## A STORED flag, never `not _defs.is_empty()`: every malformed rule below is a
@@ -200,6 +211,7 @@ func to_dict() -> Dictionary:
 		"blueprints": blueprints,
 		"runs": runs_completed,        # the KEY is `runs`; the field is `runs_completed`
 		"spent": _spent.duplicate(true),
+		"dev": dev_unlocked,
 	}
 
 ## ALL meta-block validation lives here. It returns false ONLY when there are no
@@ -213,12 +225,17 @@ func restore(data: Variant) -> bool:
 		return false
 	blueprints = 0
 	runs_completed = 0
+	dev_unlocked = false
 	_spent = {}                        # fresh storage; never aliased from `data`
 	if typeof(data) != TYPE_DICTIONARY:
 		return true
 	var d := data as Dictionary
 	blueprints = _clamped_int(d.get("blueprints"), 0, MAX_BLUEPRINTS)
 	runs_completed = _clamped_int(d.get("runs"), 0, MAX_RUNS)
+	# TYPE_BOOL only. A save written before this field existed has no `dev` key
+	# and must read false, and bool() has no Variant constructor for String,
+	# Dictionary or Array -- so anything else is refused rather than coerced.
+	dev_unlocked = typeof(d.get("dev")) == TYPE_BOOL and bool(d["dev"])
 	var spent: Variant = d.get("spent")
 	if typeof(spent) != TYPE_DICTIONARY:
 		return true

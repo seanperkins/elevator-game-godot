@@ -834,7 +834,7 @@ func test_the_pager_and_view_button_are_not_duplicated_by_a_demolish() -> void:
 	for child in root.get_children():
 		if child is Button:
 			buttons += 1
-	assert_eq(buttons, 3, "two pager buttons and one view button, as _ready built them")
+	assert_eq(buttons, 2, "MANAGE and DEV, as _ready built them")
 
 func test_manage_is_still_tappable_after_a_demolish() -> void:
 	# The sibling-order hypothesis, asserted rather than assumed: a rebuild
@@ -863,10 +863,10 @@ func test_the_prestige_panel_covers_the_hud_it_overlays() -> void:
 	var kids := root.get_children()
 	assert_gt(kids.find(root._prestige), kids.find(root._view_button),
 		"the overlay is above MANAGE")
-	assert_gt(kids.find(root._prestige), kids.find(root._prev_shaft),
-		"and above the shaft pager")
-	assert_eq(kids.find(root._prestige), kids.size() - 1,
-		"in fact above everything, so nothing can draw through it")
+	assert_gt(kids.find(root._prestige), kids.find(root._pager_label),
+		"and above the shaft readout")
+	assert_gt(kids.find(root._prestige), kids.find(root._dev_button),
+		"and above DEV")
 
 func test_the_prestige_panel_insets_itself_from_the_hardware() -> void:
 	# It is the one surface that covers the HUD band, so it cannot rely on the
@@ -904,3 +904,136 @@ func test_a_demolish_that_cannot_be_saved_changes_nothing() -> void:
 	# the fixture for every later test in this file.
 	SaveStore.clear()
 	assert_false(dir.dir_exists(SaveStore.PATH), "cleaned up by clear()")
+
+# --- the developer panel ----------------------------------------------------
+
+func cash_centre() -> Vector2:
+	var r: Rect2 = root._cash_label.get_global_rect()
+	return r.position + r.size * 0.5
+
+func tap_cash(times: int) -> void:
+	var c := cash_centre()
+	for i in range(times):
+		await do_tap(c.x, c.y)
+
+func test_the_dev_button_is_hidden_until_it_is_found() -> void:
+	assert_false(root.state.meta.dev_unlocked, "locked on a fresh save")
+	assert_false(root._dev_button.visible, "and the button is not there")
+
+func test_six_taps_reveal_nothing_and_the_seventh_reveals_dev() -> void:
+	await tap_cash(6)
+	assert_false(root._dev_button.visible, "six is not seven")
+	await tap_cash(1)
+	assert_true(root.state.meta.dev_unlocked, "unlocked")
+	assert_true(root._dev_button.visible, "and DEV is on the HUD")
+
+func test_taps_outside_the_window_do_not_accumulate() -> void:
+	# The flag persists forever once set, so idle taps spread across a session
+	# must not arm it -- there would be no way back but wiping the save.
+	await tap_cash(4)
+	root._dev_last_tap -= root.DEV_TAP_WINDOW + 1.0
+	await tap_cash(4)
+	assert_false(root.state.meta.dev_unlocked, "the count restarted")
+
+func test_the_unlock_survives_a_reload() -> void:
+	await tap_cash(7)
+	assert_true(root.state.meta.dev_unlocked, "unlocked")
+	var after := SaveCodec.decode(SaveCodec.encode(root.state))
+	assert_not_null(after, "decodes")
+	assert_true(after.meta.dev_unlocked, "and it rode along in the meta block")
+
+func test_dev_cash_does_not_touch_the_prestige_yield() -> void:
+	# THE test for this feature. Economy.accrue() raises lifetime_earnings, which
+	# is the field yield_for consumes, so routing dev money through it would mint
+	# Blueprints on every use. This goes red if the two money rows are ever
+	# "simplified" into one.
+	var before := Prestige.yield_for(root.state.economy.lifetime_earnings)
+	root._on_dev_cash(10000.0)
+	assert_almost_eq(root.state.economy.cash, 10000.0, 1.0, "the cash arrived")
+	assert_eq(Prestige.yield_for(root.state.economy.lifetime_earnings), before,
+		"and the yield did not move")
+
+func test_dev_earnings_is_the_one_row_that_moves_the_yield() -> void:
+	root._on_dev_earnings(10000.0)
+	assert_almost_eq(root.state.economy.cash, 10000.0, 1.0, "cash")
+	assert_gt(Prestige.yield_for(root.state.economy.lifetime_earnings), 0,
+		"and this one is the prestige tester")
+
+func test_dev_blueprints_are_clamped_like_the_demolish_clamps() -> void:
+	root.state.meta.blueprints = Meta.MAX_BLUEPRINTS
+	root._on_dev_blueprints(5)
+	assert_eq(root.state.meta.blueprints, Meta.MAX_BLUEPRINTS,
+		"the in-memory and on-disk bounds are one statement")
+
+func test_fitting_upgrades_never_builds_the_building() -> void:
+	# grant_level deliberately never calls _apply, so granting `floor` would
+	# claim floors had been bought while the building still had six -- and the
+	# next autosave makes that desync durable.
+	var floors: int = root.state.building.floor_count
+	var shafts: int = root.state.building.cars.size()
+	root._on_dev_unlock(2)
+	assert_eq(root.state.building.floor_count, floors, "no floors appeared")
+	assert_eq(root.state.building.cars.size(), shafts, "no shafts appeared")
+	assert_eq(root.state.upgrades.level_of("floor"), 0, "and `floor` was skipped")
+	assert_eq(root.state.upgrades.level_of("shaft"), 0, "as was `shaft`")
+	assert_eq(root.state.upgrades.level_of("speed"), 2, "but speed was fitted")
+	assert_almost_eq(root.state.building.cars[0].floors_per_tick,
+		root.state.upgrades.effect_value("speed", 2), 1e-9, "and the cars synced")
+
+func test_fitting_upgrades_costs_nothing() -> void:
+	root.state.economy.cash = 0.0
+	root._on_dev_unlock(1)
+	assert_eq(root.state.economy.cash, 0.0, "granted, never charged")
+
+func test_the_speed_multiplier_runs_more_ticks_for_the_same_delta() -> void:
+	var one: int = root.state.clock.ticks_executed
+	root._physics_process(1.0)
+	var at_1x: int = root.state.clock.ticks_executed - one
+	root._on_dev_speed(4)
+	var two: int = root.state.clock.ticks_executed
+	root._physics_process(1.0)
+	var at_4x: int = root.state.clock.ticks_executed - two
+	assert_eq(at_4x, at_1x * 4, "4x is really 4x, not clipped by the frame cap")
+
+func test_reset_save_starts_over_and_clears_the_file() -> void:
+	await build_to(9)
+	root.save_now()
+	assert_true(SaveStore.has_save(), "there is a save to clear")
+	root._on_dev_reset()
+	await wait_physics_frames(2)
+	view = root._view
+	assert_eq(root.state.building.floor_count, GameState.BASE_FLOORS, "a fresh building")
+	assert_false(SaveStore.has_save(), "and the file is gone")
+
+func test_the_dev_panel_is_the_topmost_child_while_open() -> void:
+	await tap_cash(7)
+	root._dev.open(root.state)
+	await wait_physics_frames(1)
+	assert_true(root._dev.visible, "open")
+	var kids := root.get_children()
+	assert_eq(kids.find(root._dev), kids.size() - 1,
+		"nothing draws through it, HUD included")
+
+func test_the_shaft_pager_buttons_are_gone_but_the_readout_stays() -> void:
+	# Sideways dragging replaced them; test_a_sideways_drag_pans_across_the_shafts
+	# covers that half. This is the half that says they are not still there.
+	for child in root.get_children():
+		if child is Button:
+			assert_ne((child as Button).text, "<", "no back pager")
+			assert_ne((child as Button).text, ">", "no forward pager")
+	assert_not_null(root._pager_label,
+		"the readout stays -- it is the only cue that shafts exist off-screen")
+
+func test_the_overlays_are_stacked_correctly_on_the_very_first_boot() -> void:
+	# Not after a demolish -- on the boot a player actually starts from.
+	# _ready builds the views BEFORE the HUD, so the restack inside
+	# _rebuild_views runs while _view_button is still null and skips it. Without
+	# a second call at the end of _ready, MANAGE draws over the prestige tree
+	# until the first rebuild.
+	var kids := root.get_children()
+	assert_gt(kids.find(root._prestige), kids.find(root._view_button),
+		"the prestige overlay is above MANAGE from the start")
+	assert_gt(kids.find(root._dev), kids.find(root._view_button),
+		"and so is the dev overlay")
+	assert_gt(kids.find(root._view_button), kids.find(root.panel),
+		"while MANAGE stays above the floor SHEET")

@@ -49,9 +49,22 @@ var _cash_label: Label
 var _rate_label: Label
 var _clock_label: Label
 var _view_button: Button
-var _prev_shaft: Button
-var _next_shaft: Button
+var _dev_button: Button
+var _dev: DevPanel
 var _pager_label: Label
+
+## Seven taps on the cash readout reveal the dev panel. The WINDOW matters: the
+## flag persists forever once set, so without it seven idle taps spread across a
+## long session would arm the panel by accident, with no way back but wiping the
+## save.
+const DEV_TAPS := 7
+const DEV_TAP_WINDOW := 2.0
+var _dev_taps: int = 0
+var _dev_last_tap: float = 0.0
+
+## Runs each granted tick n times. Session-only -- a persisted 4x is a bug report
+## waiting to happen.
+var _speed: int = 1
 var _last_shape := Vector2i.ZERO
 
 func _ready() -> void:
@@ -119,6 +132,15 @@ func _ready() -> void:
 	_cash_label = Label.new()
 	_cash_label.add_theme_font_size_override("font_size", 28)
 	_cash_label.position = Vector2(16 + _safe.x, 10 + _safe.y)
+	# Label defaults to MOUSE_FILTER_IGNORE, so it receives nothing today. The
+	# minimum size is the touch target, not the text: the glyphs still draw
+	# top-left so NOTHING moves on screen, but the tappable region becomes 88
+	# tall rather than 39. The rate and clock labels sit inside that rect and
+	# keep IGNORE, so their taps fall through to here rather than being eaten.
+	_cash_label.mouse_filter = Control.MOUSE_FILTER_STOP
+	_cash_label.custom_minimum_size = Vector2(200, 88)
+	_cash_label.size = Vector2(200, 88)
+	_cash_label.gui_input.connect(_on_cash_input)
 	add_child(_cash_label)
 
 	_rate_label = Label.new()
@@ -138,12 +160,17 @@ func _ready() -> void:
 
 	_rebuild_views()
 
-	# Paging the shaft strip is a tap, never a swipe: the dispatch drag is
-	# vertical and arcs sideways by more than half a column (§2.1), so any
-	# horizontal read on the board itself would steal the primary verb.
-	_prev_shaft = _pager_button("<", 236.0 + _safe.x, func() -> void: _view.scroll_by(-1))
-	_next_shaft = _pager_button(">", 420.0 + _safe.x, func() -> void: _view.scroll_by(1))
-
+	# The pager BUTTONS are gone. They existed because "paging the shaft strip is
+	# a tap, never a swipe -- any horizontal read on the board itself would steal
+	# the primary verb", and that stopped being true: BuildingView connects every
+	# shaft column's pan_requested to pan_board_by, and Gesture already separates
+	# a tap (dispatch) from a drag past DRAG_THRESHOLD (pan).
+	# test_a_sideways_drag_pans_across_the_shafts and
+	# test_a_sideways_pan_does_not_dispatch pin both halves.
+	#
+	# The LABEL stays: it is the only thing on screen saying that shafts exist
+	# off the right edge, and a drag affordance you have not discovered yet
+	# cannot tell you that.
 	_pager_label = Label.new()
 	_pager_label.add_theme_font_size_override("font_size", 14)
 	_pager_label.add_theme_color_override("font_color", Color("7c8899"))
@@ -162,6 +189,23 @@ func _ready() -> void:
 	_view_button.position = Vector2(size.x - 208 - _safe.z, 4 + _safe.y)
 	_view_button.pressed.connect(_on_toggle_view)
 	add_child(_view_button)
+
+	# In the space the pager buttons vacated. Hidden until seven taps on the
+	# cash readout reveal it, and then hidden again only by a save reset.
+	_dev_button = Button.new()
+	_dev_button.text = "DEV"
+	_dev_button.add_theme_font_size_override("font_size", 16)
+	_dev_button.size = Vector2(TOUCH_MIN, TOUCH_MIN)
+	_dev_button.position = Vector2(_view_button.position.x - TOUCH_MIN - 8.0,
+		4 + _safe.y)
+	_dev_button.pressed.connect(func() -> void: _dev.open(state))
+	add_child(_dev_button)
+	_refresh_dev_button()
+
+	# AFTER the HUD exists: the call inside _rebuild_views ran before these
+	# controls were built, so without this the overlays sit under them until the
+	# first demolish rebuilds the views.
+	_restack()
 
 	_last_shape = Vector2i(state.building.floor_count, state.building.cars.size())
 	_refresh_pager()
@@ -187,17 +231,6 @@ func _debug_board_override() -> Vector2i:
 			clampi(int(spec[1]), 1, Building.MAX_SHAFTS))
 	return Vector2i.ZERO
 
-func _pager_button(label: String, x: float, on_press: Callable) -> Button:
-	var b := Button.new()
-	b.text = label
-	b.add_theme_font_size_override("font_size", 24)
-	b.size = Vector2(TOUCH_MIN, TOUCH_MIN)
-	b.position = Vector2(x, 4 + _safe.y)
-	b.pressed.connect(on_press)
-	b.pressed.connect(_refresh_pager)
-	add_child(b)
-	return b
-
 func _on_buy_shaft() -> void:
 	if state.buy("shaft"):
 		_view.scroll_to_end()   # show the shaft that was just paid for
@@ -222,7 +255,7 @@ func _on_lease_requested(floor_index: int, kind_id: String) -> void:
 ## _view_button, which also add_child unconditionally and would duplicate on
 ## every rebuild: the very trap this function is about.
 func _rebuild_views() -> void:
-	for old in [_view, _management, panel, _prestige]:
+	for old in [_view, _management, panel, _prestige, _dev]:
 		if old == null:
 			continue
 		# queue_free() is DEFERRED to end of frame, so without this the freed
@@ -271,22 +304,123 @@ func _rebuild_views() -> void:
 	_prestige.node_purchase_requested.connect(_on_node_purchase)
 	_prestige.demolish_requested.connect(_on_demolish)
 
-	# Sibling order decides both drawing and input, and the two panels want
-	# OPPOSITE answers.
-	#
-	# FloorPanel is a bottom SHEET: the sim runs behind it and the HUD must stay
-	# reachable, so the pager and MANAGE sit above it. _ready builds the views
-	# first and the HUD after, which gets that right on the initial build; a
-	# remove_child + add_child rebuild appends the views last and would put the
-	# sheet's full-rect scrim above MANAGE for the rest of the session.
-	for later in [_prev_shaft, _next_shaft, _pager_label, _view_button]:
+	_dev = DevPanel.new()
+	_dev.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_dev)
+	_dev.bind(state)
+	_dev.set_insets(_safe)
+	_dev.set_speed(_speed)
+	_dev.cash_requested.connect(_on_dev_cash)
+	_dev.earnings_requested.connect(_on_dev_earnings)
+	_dev.blueprints_requested.connect(_on_dev_blueprints)
+	_dev.speed_requested.connect(_on_dev_speed)
+	_dev.unlock_requested.connect(_on_dev_unlock)
+	_dev.reset_requested.connect(_on_dev_reset)
+
+	_restack()
+
+## Sibling order decides both drawing and input, and the two kinds of surface
+## want OPPOSITE answers.
+##
+## FloorPanel is a bottom SHEET: the sim runs behind it and the HUD must stay
+## reachable, so MANAGE and the shaft readout sit ABOVE it.
+##
+## PrestigePanel and DevPanel are full-screen OVERLAYS, so they go above the HUD
+## in turn. Left among the views they draw underneath MANAGE, which then sits on
+## top of their content -- and once they are last, nothing can draw through them
+## either.
+##
+## Called from BOTH _rebuild_views and the end of _ready, and that is the point:
+## _ready builds the views BEFORE the HUD, so a call from _rebuild_views alone
+## finds _view_button still null, skips it, and leaves the HUD above the panels
+## on the very first boot -- which is the state a player actually starts in.
+func _restack() -> void:
+	for later in [_pager_label, _view_button, _dev_button]:
 		if later != null:
 			move_child(later, get_child_count() - 1)
-	# PrestigePanel is a full-screen OVERLAY, so it goes above the HUD as well.
-	# Left among the views it draws underneath the pager and MANAGE, which then
-	# sit on top of the tech tree -- and nothing else is above it, so this is
-	# also what stops the board bleeding through.
-	move_child(_prestige, get_child_count() - 1)
+	for overlay in [_prestige, _dev]:
+		if overlay != null:
+			move_child(overlay, get_child_count() - 1)
+
+## Seven taps reveals the dev panel. Counted on RELEASE, so a press that turns
+## into a drag does not count, and reset when the gap exceeds DEV_TAP_WINDOW.
+func _on_cash_input(event: InputEvent) -> void:
+	if not PointerEvents.is_release(event):
+		return
+	if state == null or state.meta == null or state.meta.dev_unlocked:
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	_dev_taps = 1 if now - _dev_last_tap > DEV_TAP_WINDOW else _dev_taps + 1
+	_dev_last_tap = now
+	if _dev_taps < DEV_TAPS:
+		return
+	_dev_taps = 0
+	state.meta.dev_unlocked = true
+	_refresh_dev_button()
+	save_now()                       # persistent state, so it is written at once
+
+func _refresh_dev_button() -> void:
+	if _dev_button != null:
+		_dev_button.visible = state != null and state.meta != null \
+			and state.meta.dev_unlocked
+
+# --- the dev panel's actions ------------------------------------------------
+
+## Cash ONLY. It must never call Economy.accrue(), which also raises
+## lifetime_earnings -- the exact field Prestige.yield_for consumes. Routing dev
+## money through accrue would mint Blueprints on every use.
+func _on_dev_cash(amount: float) -> void:
+	state.economy.cash += amount
+
+## The prestige tester, and the one row that deliberately moves the yield.
+func _on_dev_earnings(amount: float) -> void:
+	state.economy.cash += amount
+	state.economy.lifetime_earnings += amount
+
+func _on_dev_blueprints(amount: int) -> void:
+	# Clamped exactly as Prestige.demolish clamps, so the in-memory and on-disk
+	# bounds stay one statement.
+	state.meta.blueprints = mini(state.meta.blueprints + amount, Meta.MAX_BLUEPRINTS)
+	save_now()
+	_dev.refresh()
+
+func _on_dev_speed(multiplier: int) -> void:
+	_speed = maxi(multiplier, 1)
+	_dev.set_speed(_speed)
+
+## Grants levels without charging for them. `floor` and `shaft` are SKIPPED, and
+## not for tidiness: grant_level deliberately never calls _apply, so granting
+## `floor` would claim floors had been bought while the building still had six,
+## and the next autosave makes that desync durable. ManagementView skips exactly
+## these two ids for the same underlying reason -- they are bought on the board.
+func _on_dev_unlock(level: int) -> void:
+	for id in state.upgrades.ids():
+		if id == "floor" or id == "shaft":
+			continue
+		state.upgrades.grant_level(id, level, state.building)
+	_management.refresh()
+
+func _on_dev_reset() -> void:
+	# Read the catalogs off the OUTGOING run before replacing it, so a reset
+	# rebuilds against the same files this session was started with rather than
+	# silently reverting to the shipped ones and defeating the overrides.
+	var catalog := state.catalog_path()
+	var blueprints := state.blueprints_path()
+	SaveStore.clear()
+	_speed = 1
+	state = GameState.new(GameState.BASE_FLOORS, GameState.BASE_SHAFTS,
+		GameState.BASE_SEED, catalog, null, blueprints)
+	if not state.is_valid():
+		_show_error_screen(state.invalid_what(), state.invalid_path())
+		_saving_enabled = false
+		set_physics_process(false)
+		return
+	last_selected_floor = -1
+	_rebuild_views()
+	_view_button.text = "MANAGE"
+	_refresh_dev_button()
+	_last_shape = Vector2i(state.building.floor_count, state.building.cars.size())
+	_refresh_pager()
 
 func _on_prestige_requested() -> void:
 	_prestige.open(state)
@@ -374,8 +508,6 @@ func _on_toggle_view() -> void:
 	_view.visible = showing_board
 	_view_button.text = "BOARD" if _management.visible else "MANAGE"
 	if _management.visible:
-		_prev_shaft.visible = false
-		_next_shaft.visible = false
 		_pager_label.visible = false
 	else:
 		_refresh_pager()
@@ -387,16 +519,14 @@ func _refresh_pager() -> void:
 	if _management.visible:
 		return
 	var total := state.building.cars.size()
+	# Still hidden entirely while every slot fits: a readout for something you
+	# can already see is noise on a 393pt-wide phone.
 	var pageable := _view.max_scroll() > 0
-	_prev_shaft.visible = pageable
-	_next_shaft.visible = pageable
 	_pager_label.visible = pageable
 	if not pageable:
 		return
 	var first := _view.first_visible_shaft()
 	var last := mini(first + _view.visible_shafts(), total)
-	_prev_shaft.disabled = first <= 0
-	_next_shaft.disabled = first >= _view.max_scroll()
 	_pager_label.text = "shafts %d-%d of %d" % [first + 1, maxi(last, first + 1), total]
 
 ## Saving on a timer AND on the way out. iOS suspends an app without warning,
@@ -425,9 +555,14 @@ func _physics_process(delta: float) -> void:
 		_since_save = 0.0
 		save_now()
 
+	# The multiplier runs each GRANTED tick n times rather than asking the clock
+	# for more. SimClock.MAX_TICKS_PER_FRAME (8) clamps take_ticks so a frame
+	# hitch drains the accumulator instead of spiralling, and at 60fps the sim
+	# already wants ~3.33 ticks a frame -- so asking for 4x would request 13.3,
+	# get clipped to 8, and silently deliver 2.4x while the button said 4x.
 	var ticks := state.clock.take_ticks(delta)
 	if ticks > 0:
-		state.tick(ticks)
+		state.tick(ticks * _speed)
 
 	var shape := Vector2i(state.building.floor_count, state.building.cars.size())
 	if shape != _last_shape:
