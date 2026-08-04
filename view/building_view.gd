@@ -226,7 +226,10 @@ func _build_slots() -> void:
 		_shaft_viewport.add_child(slot)
 
 		var bg := ColorRect.new()
-		bg.color = Palette.SHAFT_BG
+		# GHOST_BG, not SHAFT_BG: this slot is a shaft you have NOT bought, and
+		# it sits directly under the ghost floor band, which recedes. Painting
+		# it the shaft's own rust made an unbought slot read as a built shaft.
+		bg.color = Palette.GHOST_BG
 		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(bg)
 		slot.set_meta("bg", bg)

@@ -132,17 +132,31 @@ func test_the_idle_bar_is_present_but_inert() -> void:
 # --------------------------------------------------------- affordability --
 
 func test_an_unaffordable_price_is_dim_but_not_gone() -> void:
-	# Deliberately low: "you cannot buy this" should recede. The first theme
-	# pass took it to 1.86:1, which crossed from dim into absent, and the
-	# player loses the price as well as the affordability.
-	var c := _contrast(Palette.AFFORD_OFF, Palette.APP_BG)
-	assert_gt(c, 2.0, "an unaffordable price must still be legible")
-	assert_lt(c, 3.5, "an unaffordable price must not look purchasable")
+	# Deliberately low: "you cannot buy this" should recede. It has crossed from
+	# dim into ABSENT twice -- 1.86:1 on the dark theme, and 1.29:1 on the light
+	# one, where the player simply could not see "+ BUILD FLOOR $200".
+	#
+	# Measured against GHOST_BG, because that is what these are drawn on: the
+	# ghost floor band and the empty shaft slot. The earlier version of this
+	# test measured against APP_BG and passed at 2.03 while the real, darker
+	# surface underneath was at 1.29 -- a green test over an invisible label.
+	# Assert against the surface a thing LANDS on, not the one nearby.
+	var c := _contrast(Palette.AFFORD_OFF, Palette.GHOST_BG)
+	assert_gt(c, 1.8, "an unaffordable price must still be legible")
+	assert_lt(c, 3.0, "an unaffordable price must not look purchasable")
 
 func test_an_affordable_price_outranks_an_unaffordable_one() -> void:
-	assert_gt(_contrast(Palette.AFFORD, Palette.APP_BG),
-		_contrast(Palette.AFFORD_OFF, Palette.APP_BG),
+	assert_gt(_contrast(Palette.AFFORD, Palette.GHOST_BG), 4.0,
+		"an affordable price must read clearly on the ghost band")
+	assert_gt(_contrast(Palette.AFFORD, Palette.GHOST_BG),
+		_contrast(Palette.AFFORD_OFF, Palette.GHOST_BG),
 		"affordable must be louder than unaffordable")
+
+func test_the_cap_notice_reads_on_the_ghost_band() -> void:
+	# "CAP REACHED -- REBUILD" replaces the price in the same band, so it lands
+	# on the same surface and needs the same check.
+	assert_gt(_contrast(Palette.CAP_REACHED, Palette.GHOST_BG), 3.0,
+		"the cap notice must read on the ghost band")
 
 # -------------------------------------------------------------- traffic --
 

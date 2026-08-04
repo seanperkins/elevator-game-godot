@@ -78,8 +78,14 @@ const CARD_BG := TAN
 ## Dims the board behind FloorPanel. A scrim on a LIGHT ground has to work
 ## harder to read as "pushed back" than one on a dark ground did.
 const SCRIM := Color("1f3f3c", 0.45)
-## A shaft's rail, and an empty (unbought) shaft slot -- deliberately the same,
-## because an empty slot IS a shaft you have not paid for yet.
+## A shaft's rail. NOT the empty slot next to it: an unbought shaft uses
+## GHOST_BG, like the ghost floor does.
+##
+## These were the same colour, on the argument that "an empty slot IS a shaft
+## you have not paid for yet". On the dark theme both were dark and it passed
+## unnoticed; on cream the rust is the heaviest mass on screen, so an unbought
+## slot rendered as a fully built shaft while the ghost FLOOR directly above it
+## correctly receded. Two ghosts, two different answers.
 const SHAFT_BG := RUST
 ## The lit edge of a shaft, where the mockup catches light down both sides.
 const SHAFT_EDGE := RUST_LIGHT
@@ -127,10 +133,17 @@ const DOOR := Color("306b65", 0.55)
 # ----------------------------------------------------------- affordability --
 
 ## A price you can pay.
-const AFFORD := Color("4f7a1f")
+##
+## Measured against GHOST_BG, which is where both of these are actually drawn
+## -- the ghost floor band and the empty shaft slot. Tuning them against the
+## page was the bug: the band is darker than the page, so AFFORD_OFF measured
+## 2.03:1 there but only 1.29:1 where it lands, and "+ BUILD FLOOR $200" was
+## effectively not on screen.
+const AFFORD := Color("3d5c14")
 ## A price you cannot. Low contrast BY DESIGN -- and on a light ground "low"
-## means PALE.
-const AFFORD_OFF := BROWN_FAINT
+## means PALE -- but "dim" and "absent" are different, and this crossed that
+## line once already on the dark theme too.
+const AFFORD_OFF := Color("9a8258")
 ## The build cap: not a price, a wall.
 const CAP_REACHED := RUST
 

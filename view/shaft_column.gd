@@ -62,6 +62,13 @@ var shaft_index: int = 0
 var _gesture: Gesture
 var _coords: BoardCoords
 var _shaft_bg: ColorRect
+## The two lit rails, left and right. Sized in _layout with the shaft itself so
+## they cannot drift out of alignment with it.
+var _shaft_edges: Array[ColorRect] = []
+## How wide each lit rail is, as a fraction of the shaft. Measured off the
+## mockup: its shaft spans x 208-328, with light bands at 208-224 and 304-328,
+## so roughly an eighth of the width per side.
+const EDGE_FRACTION := 0.125
 var _car_rect: ColorRect
 var _car_label: Label
 var _door_left: ColorRect
@@ -85,6 +92,21 @@ func setup(index: int, coords: BoardCoords, car_floor_provider: Callable) -> voi
 	_shaft_bg.color = Palette.SHAFT_BG
 	_shaft_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_shaft_bg)
+
+	# Lit edges down both sides, as the mockup draws them: the shaft is not a
+	# flat slab there, it is a dark core with the light catching its corners.
+	#
+	# This matters more here than it does in the mockup, because the layouts
+	# differ. The mockup puts people BETWEEN two narrow shafts (~31% of its
+	# width); this board keeps people on the left and shafts on the right, so
+	# the shafts are a much larger share of the screen and a solid dark rust
+	# becomes the heaviest thing on a cream page. The edges break that mass up.
+	for i in 2:
+		var edge := ColorRect.new()
+		edge.color = Palette.SHAFT_EDGE
+		edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(edge)
+		_shaft_edges.append(edge)
 
 	_car_rect = ColorRect.new()
 	_car_rect.color = Palette.CAR
@@ -139,6 +161,15 @@ func door_width() -> float:
 func set_car_position(position_floor: float) -> void:
 	_shaft_bg.position = Vector2(0, _coords.floor_to_y(_coords.top_floor))
 	_shaft_bg.size = Vector2(size.x, _coords.content_height())
+
+	# Same y extent as the shaft, so the rails start and stop with the building
+	# rather than running up through the sky above the roof.
+	var edge_w := maxf(size.x * EDGE_FRACTION, 1.0)
+	for i in _shaft_edges.size():
+		var edge: ColorRect = _shaft_edges[i]
+		edge.position = Vector2(0.0 if i == 0 else size.x - edge_w,
+			_shaft_bg.position.y)
+		edge.size = Vector2(edge_w, _shaft_bg.size.y)
 	_car_rect.position = Vector2(3, _coords.car_y(position_floor) + 2.0)
 	_car_rect.size = Vector2(size.x - 6.0, _coords.floor_height - 4.0)
 	_car_label.size = _car_rect.size
