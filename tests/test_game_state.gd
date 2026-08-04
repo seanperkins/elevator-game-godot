@@ -208,6 +208,19 @@ func test_a_malformed_catalog_makes_the_state_invalid() -> void:
 	var bad := GameState.new(6, 1, 1, "res://data/does_not_exist.json")
 	assert_false(bad.is_valid())
 
+func test_a_malformed_catalog_names_itself() -> void:
+	# The boot path draws this on screen. A player who cannot read a console
+	# needs the offending file named, not a blank board.
+	var bad := GameState.new(6, 1, 1, "res://data/does_not_exist.json")
+	assert_eq(bad.invalid_what(), "tenant catalog", "which kind of file")
+	assert_eq(bad.invalid_path(), "res://data/does_not_exist.json", "which file")
+
+func test_a_valid_state_names_nothing() -> void:
+	var good := GameState.new(6, 1, 1)
+	assert_true(good.is_valid(), "valid")
+	assert_eq(good.invalid_what(), "", "nothing to name")
+	assert_eq(good.invalid_path(), "", "nothing to name")
+
 ## Silences traffic so a rule test asserts the rule, not the seed. One tenanted
 ## floor cannot generate a trip (a trip needs two floors), so nothing spawns.
 ## Replaces `spawner.curve = PackedFloat32Array()`, which set a field that is

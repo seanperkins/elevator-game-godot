@@ -630,6 +630,10 @@ func test_an_invalid_state_shows_an_error_screen_and_does_not_start_the_sim() ->
 	await wait_physics_frames(2)
 	assert_true(bad.error_screen_visible(), "the boot path names the offence")
 	assert_false(bad.sim_running(), "and refuses to run the sim against it")
+	assert_string_contains(bad.error_screen_text(), "does_not_exist.json",
+		"the file is the offence, so it is on the screen")
+	assert_string_contains(bad.error_screen_text(), "tenant catalog",
+		"and the screen says what kind of file it was")
 
 func test_a_debug_board_never_writes_over_a_save() -> void:
 	# --board is for screenshots. Letting it save would mean taking one costs

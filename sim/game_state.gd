@@ -42,7 +42,20 @@ var _source_revision: int = -1
 const DEFAULT_ROSTER: Array[String] = ["shops", "apartments", "apartments",
 	"apartments", "apartments", "apartments"]
 
-var _valid: bool = true
+## Defaults to FALSE and is set true as the LAST statement of _init.
+##
+## Verified on Godot 4.7: a constructor that errors returns a HALF-BUILT object
+## -- every field below the abort point at its declared default -- and the
+## caller resumes normally rather than unwinding. So `var _valid := true` hands
+## back a GameState whose clock or catalog may be null and whose is_valid()
+## says yes. This is the single enforcement point for the fatal-shipped-data
+## rule, and a gate whose default is `pass` cannot do that job.
+var _valid: bool = false
+
+## Which file made this state invalid, so the boot path can name it on screen
+## rather than on a console the player cannot see. Empty when valid.
+var _invalid_what: String = ""
+var _invalid_path: String = ""
 
 func _init(floors: int, shafts: int, p_seed: int,
 		catalog_path := "res://data/tenants.json") -> void:
@@ -58,9 +71,11 @@ func _init(floors: int, shafts: int, p_seed: int,
 	if not catalog.load_from(catalog_path):
 		# No push_error here: GUT counts it as a test error, which turns the
 		# malformed-catalog refusal test red for the wrong reason. is_valid() is
-		# the contract, and the boot path (Task 18) draws the path on an error
-		# screen instead of relying on a console line a player cannot see.
-		_valid = false
+		# the contract, and the boot path draws the path on an error screen
+		# instead of relying on a console line a player cannot see.
+		_invalid_what = "tenant catalog"
+		_invalid_path = catalog_path
+		return
 
 	var prefix := mini(building.floor_count, DEFAULT_ROSTER.size())
 	tenancy = Tenancy.new(building.floor_count, prefix)
@@ -73,11 +88,22 @@ func _init(floors: int, shafts: int, p_seed: int,
 	metrics = Metrics.new()
 	auto = AutoDispatch.new()
 
+	_valid = true
+
 ## RefCounted cannot fail in _init, so construction records the failure and the
 ## boot path checks it. SaveCodec.decode returns null rather than handing back a
 ## poisoned state.
 func is_valid() -> bool:
 	return _valid
+
+## The kind of file that made this state invalid ("tenant catalog"), for the
+## error screen. Empty when valid.
+func invalid_what() -> String:
+	return _invalid_what
+
+## The path of the file that made this state invalid. Empty when valid.
+func invalid_path() -> String:
+	return _invalid_path
 
 ## Buying a floor extends the board, so tenancy must grow with it.
 ##

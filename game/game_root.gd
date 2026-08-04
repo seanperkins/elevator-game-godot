@@ -72,7 +72,10 @@ func _ready() -> void:
 	# blank board with a console message they cannot see is indistinguishable
 	# from a hang, so a bad catalog is a named error screen, not a silent freeze.
 	if state == null or not state.is_valid():
-		_show_error_screen(catalog_path)
+		if state == null:
+			_show_error_screen("tenant catalog", catalog_path)
+		else:
+			_show_error_screen(state.invalid_what(), state.invalid_path())
 		_saving_enabled = false
 		set_physics_process(false)
 		return
@@ -204,7 +207,11 @@ func _on_upgrade_requested(floor_index: int) -> void:
 		panel.show_floor(state, floor_index)   # reflect the new class and its newly freed kinds
 
 ## A named refusal to start: the file is the offence, so it is on the screen.
-func _show_error_screen(catalog_path: String) -> void:
+##
+## Parameterised on WHAT the file is, not just its path. There is more than one
+## fatal shipped-data file now, and a screen hardcoded to "No valid tenant
+## catalog" would announce every one of them under the wrong name.
+func _show_error_screen(what: String, path: String) -> void:
 	var bg := ColorRect.new()
 	bg.color = Color("101418")
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -212,7 +219,7 @@ func _show_error_screen(catalog_path: String) -> void:
 	add_child(bg)
 
 	_error_label = Label.new()
-	_error_label.text = "No valid tenant catalog\n\n%s\n\nCannot start." % catalog_path
+	_error_label.text = "No valid %s\n\n%s\n\nCannot start." % [what, path]
 	_error_label.add_theme_font_size_override("font_size", 20)
 	_error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_error_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -222,6 +229,11 @@ func _show_error_screen(catalog_path: String) -> void:
 
 func error_screen_visible() -> bool:
 	return _error_label != null and _error_label.visible
+
+## The text seam the boot tests read: asserting the screen is merely VISIBLE
+## would pass with the wrong file named on it.
+func error_screen_text() -> String:
+	return "" if _error_label == null else _error_label.text
 
 func sim_running() -> bool:
 	return is_physics_processing()
