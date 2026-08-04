@@ -63,7 +63,15 @@ const V3_CAR_KEYS := {
 }
 
 static func _migrate_to_v3(data: Dictionary) -> Dictionary:
-	if int(data.get("version", -1)) >= 3:
+	# Float-compared for the same reason _is_usable is: an out-of-range cast to
+	# int64 saturates on arm64 and returns INT64_MIN on x86-64, so a version of
+	# 1e300 skipped this migration on one target and ran it on the other.
+	#
+	# No observable difference TODAY -- _is_usable refuses such a save on both,
+	# so only the path there diverged, not the outcome. Changed anyway, because
+	# the identical shape one function away is what cost a day of red CI, and
+	# for every version a real save can hold the two forms agree exactly.
+	if float(data.get("version", -1)) >= 3.0:
 		return data
 	var out := data.duplicate(true)
 	for old in V3_KEYS:
@@ -472,4 +480,20 @@ static func _is_usable(data: Dictionary) -> bool:
 			return false
 	if typeof(data["cars"]) != TYPE_ARRAY:
 		return false
-	return int(data["floor_count"]) >= 1
+	# Compared as a FLOAT, deliberately. `int(data["floor_count"]) >= 1` looks
+	# equivalent and is not: the cast of an out-of-range float to int64 is
+	# platform-defined, and the two targets this ships to disagree about it.
+	#
+	#   arm64 (macOS, iOS):  int(1e300) saturates to INT64_MAX -> >= 1 is TRUE
+	#   x86-64 (Linux CI):   cvttsd2si returns the "integer indefinite" value
+	#                        INT64_MIN -> >= 1 is FALSE
+	#
+	# So a save with floor_count 1e300 was accepted here and REFUSED in CI, on
+	# the same commit -- a green local suite over a red pipeline, for a whole
+	# day. _bounded_int exists precisely to keep such values away from a raw
+	# cast, but this guard runs BEFORE any bounding and had one of its own.
+	#
+	# The float comparison is exact for every finite value and identical on both
+	# targets. _preflight has already established this is a finite, integral
+	# number, so there is nothing the cast bought.
+	return float(data["floor_count"]) >= 1.0
