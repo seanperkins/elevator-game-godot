@@ -46,8 +46,19 @@ var _count: Label
 var _bar_track: ColorRect
 var _bar_fill: ColorRect
 var _sprites: Array[PersonSprite] = []
+var _scenery: TextureRect
 
 func _ready() -> void:
+	# FIRST child, so everything else in the row draws over it. It covers x 0 to
+	# STRIP_RIGHT -- the whole board left of the shafts -- and is simply absent
+	# for a kind with no art yet, which is most of them.
+	_scenery = TextureRect.new()
+	_scenery.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_scenery.stretch_mode = TextureRect.STRETCH_SCALE
+	_scenery.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_scenery.visible = false
+	add_child(_scenery)
+
 	# A hairline at the top of the band: without it 40 floors read as one field.
 	var rule := ColorRect.new()
 	rule.color = Palette.RULE
@@ -123,6 +134,24 @@ func set_waiting(passengers: Array, show_direction: bool) -> void:
 				PersonSprite.key_for(p.origin_floor, p.destination_floor, p.source_floor))
 		else:
 			_sprites[i].recycle()
+
+## What this floor looks like. Empty id -- a vacant floor, or a kind whose image
+## has not been drawn yet -- leaves the plain cream ground.
+func set_scenery(kind_id: String) -> void:
+	if _scenery == null:
+		return
+	var tex := FloorScenery.texture_for(kind_id)
+	_scenery.texture = tex
+	_scenery.visible = tex != null
+	_scenery.position = Vector2.ZERO
+	_scenery.size = Vector2(STRIP_RIGHT, size.y)
+
+## The scenery a row is showing, or "" -- the seam a test reads, since a
+## TextureRect's pixels are not observable headlessly.
+func scenery_id() -> String:
+	if _scenery == null or _scenery.texture == null:
+		return ""
+	return (_scenery.texture as Texture2D).resource_path.get_file().get_basename()
 
 ## Three states in one 4-unit bar.
 ##   tenanted   -- filled proportional to satisfaction, red->green

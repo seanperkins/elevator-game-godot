@@ -1241,3 +1241,40 @@ func test_the_doors_stay_above_the_riders_by_tree_order() -> void:
 	var first_door := mini(kids.find(col._door_left), kids.find(col._door_right))
 	for chip in col._chips:
 		assert_lt(kids.find(chip), first_door, "every rider is behind the doors")
+
+
+# --- floor scenery ----------------------------------------------------------
+
+func test_a_tenanted_floor_shows_its_kind_and_a_vacant_one_shows_none() -> void:
+	# The board asks for scenery by KIND, and a vacant floor asks for nothing --
+	# it is not a tenant with a blank picture, it is an empty shell.
+	var f := 1
+	root.state.tenancy.lease(f, "apartments")
+	view.refresh()
+	await wait_physics_frames(1)
+	assert_eq(view._floors[f].scenery_id(), "apartments")
+	# restore_floor is the only public path back to vacant -- a tenant otherwise
+	# leaves through the move-out countdown, which is a minute of sim time.
+	root.state.tenancy.restore_floor(f, 1.0, true, 0, "")
+	view.refresh()
+	await wait_physics_frames(1)
+	assert_eq(view._floors[f].scenery_id(), "", "a vacant floor draws bare ground")
+
+func test_the_scenery_stops_where_the_shafts_begin() -> void:
+	# It covers the gutter and the people strip and nothing under a shaft --
+	# a shaft is opaque, so any pixel beyond STRIP_RIGHT is never seen.
+	root.state.tenancy.lease(1, "apartments")
+	view.refresh()
+	await wait_physics_frames(1)
+	var s: TextureRect = view._floors[1]._scenery
+	assert_almost_eq(s.size.x, FloorRow.STRIP_RIGHT, 0.01)
+	assert_almost_eq(s.size.y, BuildingView.FLOOR_HEIGHT, 0.01)
+	assert_almost_eq(s.position.x, 0.0, 0.01)
+
+func test_the_scenery_is_behind_everything_else_in_the_row() -> void:
+	root.state.tenancy.lease(1, "apartments")
+	view.refresh()
+	await wait_physics_frames(1)
+	var row: FloorRow = view._floors[1]
+	assert_eq(row.get_children().find(row._scenery), 0,
+		"first child, so the people and the numbers draw over it")

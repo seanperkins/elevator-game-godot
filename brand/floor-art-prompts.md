@@ -55,12 +55,26 @@ Wide landscape format, aspect ratio 26:15. Edge to edge, full bleed, no border,
 no frame, no vignette.
 
 ABSOLUTELY NO: people, figures, humans, silhouettes of people, text, letters,
-numbers, signage with words, logos, watermarks, UI elements, arrows, icons.
+numbers, signage with words, logos, watermarks, UI elements, arrows, icons,
+sparkles, stars, glints, lens flares, light rays, glow.
 
 It is a side-on cutaway view of one floor of a building interior, as if the wall
 has been removed — a flat elevation, straight on, no perspective, no vanishing
 point. The floor line runs along the bottom edge.
 ```
+
+---
+
+**Two artefacts seen so far, both worth pre-empting.** A small four-pointed
+white sparkle appears near the lower right of every generation — hence the
+negative list above. And a soft diagonal light-ray was baked into the shops
+awning, which the "no lighting effects" line was meant to prevent; say it twice
+if it recurs.
+
+**Composition that worked:** the shops image weights everything into the left
+half and leaves the right as open cream. That is the shape to aim for — the
+figures stand along the bottom, spread across the full width, so a subject that
+fills the centre (as the apartments doors do) sits directly behind them.
 
 ---
 
