@@ -80,12 +80,19 @@ point. The floor line runs along the bottom edge.
 
 ---
 
-**Scale was the first real failure.** The first three generations came back
-consistently ~1.4x oversized — apartment doors at 54% of frame height where 43%
-is right, office desks at 24% where 16% is. People looked like children standing
-in a giant's office. The figures were bumped 7% (26x41 -> 28x44, which is the
-most the hall can give without dropping from eight people to three), and the
-rest is the table above. **Check a generation against it before accepting.**
+**Scale was the first real failure, and the table above fixed it.** The first
+three generations came back consistently ~1.4x oversized — apartment doors at
+55% of frame height where 43% is right, office desks at 24% where 16% is. People
+looked like children standing in a giant's office. The figures were bumped 7%
+(26x41 -> 28x44, the most the hall can give without dropping from eight people
+to three), the table went into the style block, and the regenerated set came back
+at 41% doors. **Apartments and shops were re-rolled for this reason** — a set
+where two images are 1.3x the other five is worse than either scale consistently.
+
+**Check a new generation against the table before accepting it.** Measure the
+object's HEIGHT, not the height of its top edge: these rooms have a floor band
+along the bottom, so a door standing on it tops out well above 43% while still
+being a 43% door.
 
 **Two artefacts seen so far, both worth pre-empting.** A small four-pointed
 white sparkle appears near the lower right of every generation — hence the
@@ -161,6 +168,23 @@ obviously incomplete.
 
 ---
 
+## How the shipped set was generated
+
+All seven come from **Nano Banana Pro** (`gemini-3-pro-image-preview`) via the
+`ml:nanobanana` skill, at **16:9 / 2K** — the closest supported ratio to 26:15,
+so the crop costs 90px off the right rather than distorting anything:
+
+```sh
+export GEMINI_API_KEY="$(security find-generic-password -s nanobanana -w)"
+python3 ~/.claude/plugins/cache/mobility-labs/ml/0.2.0/skills/nanobanana/generate.py \
+  --prompt "<style block>\n\n<subject>" --output raw/office.png \
+  --model pro --aspect-ratio 16:9 --resolution 2K
+```
+
+The crop to 26:15 is **left-aligned, not centred**: the style block asks for
+compositions weighted left, so the width the ratio costs comes off the open right
+side where there is nothing to lose.
+
 ## After generating
 
 1. **Downsample to 416 × 240.** Generate large (1024-wide or more) and scale
@@ -172,6 +196,9 @@ obviously incomplete.
 3. **Put a person on it before committing to the set.** The whole point is that
    figures stay readable; one screenshot with a pale-skinned figure over the
    busiest image settles it faster than any amount of sampling.
-4. **Keep the sources.** `brand/art/` is excluded from the export preset
-   (`5ab8ac4`), so full-size originals can live there without shipping. Only the
-   downsampled 416 × 240 files go anywhere the game imports from.
+4. **Keep the sources, but not at full size.** `brand/art/floors/` is excluded
+   from the export preset (`5ab8ac4`), so originals live there without shipping —
+   held at **1280 wide, 64-colour**, which is ~400 KB each rather than 3.5 MB.
+   Seven 2K PNGs would have more than doubled a 20 MB repo to buy a resolution
+   nothing consumes; 1280 is still 3× the shipped width, which is what a re-crop
+   actually needs. Only the 416 × 240 files go where the game imports from.

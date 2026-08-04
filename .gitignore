@@ -15,3 +15,6 @@ export_credentials.cfg
 # as files.
 .claude/worktrees/
 .claude/.cc-writes/
+
+# Multi-model review scratch (/debate). Reviewer output and a copy of the diff.
+.tmp/

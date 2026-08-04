@@ -135,8 +135,9 @@ func set_waiting(passengers: Array, show_direction: bool) -> void:
 		else:
 			_sprites[i].recycle()
 
-## What this floor looks like. Empty id -- a vacant floor, or a kind whose image
-## has not been drawn yet -- leaves the plain cream ground.
+## What this floor looks like: a tenant kind id, or FloorScenery.VACANT for the
+## construction shell. An empty id -- a kind whose image has not been drawn --
+## leaves the plain cream ground.
 func set_scenery(kind_id: String) -> void:
 	if _scenery == null:
 		return

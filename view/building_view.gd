@@ -356,7 +356,7 @@ func refresh() -> void:
 	for i in range(_floors.size()):
 		var waiting := _state.building.waiting_at(i)
 		var vacant := _state.tenancy.is_vacant(i)
-		_floors[i].set_scenery("" if vacant else _state.tenancy.kind_at(i))
+		_floors[i].set_scenery(FloorScenery.VACANT if vacant else _state.tenancy.kind_at(i))
 		_floors[i].set_tenant(
 			_state.tenancy.satisfaction_at(i), vacant,
 			_state.tenancy.is_moving_out(i),

@@ -103,7 +103,7 @@ func test_a_full_rank_spans_evenly() -> void:
 	var b := ChipGrid.position_of(1, 4, s, area, Vector2(square, square))
 	assert_almost_eq(b.x - a.x, square + ChipGrid.GAP, 0.01)
 
-func test_the_block_is_centred_in_its_area() -> void:
+func test_the_block_is_centred_across_and_stands_on_the_floor() -> void:
 	var s := ChipGrid.shape(2, ROOMY, ROOMY)
 	var area := Vector2(200, 100)
 	var square := 30.0
@@ -111,7 +111,28 @@ func test_the_block_is_centred_in_its_area() -> void:
 	var b := ChipGrid.position_of(1, 2, s, area, Vector2(square, square))
 	var block_centre := (a.x + b.x + square) * 0.5
 	assert_almost_eq(block_centre, 100.0, 0.01, "horizontally centred")
-	assert_almost_eq(a.y, (100.0 - square) * 0.5, 0.01, "vertically centred")
+	assert_almost_eq(a.y + square, area.y, 0.01, "feet on the bottom edge")
+
+func test_a_half_full_hall_still_stands_on_the_floor() -> void:
+	# The case that was wrong on the phone: one rank in a two-rank area used to
+	# be centred, so three people waiting hovered.
+	var cell := PersonSprite.HALL_CELL
+	var area := Vector2(FloorRow.STRIP_RIGHT - FloorRow.SPRITE_X, BuildingView.FLOOR_HEIGHT)
+	var one := ChipGrid.shape(3, ChipGrid.columns_for(area.x, cell.x),
+		ChipGrid.rows_for(area.y, cell.y))
+	assert_eq(one.y, 1, "three people are one rank")
+	assert_almost_eq(ChipGrid.position_of(0, 3, one, area, cell).y + cell.y,
+		area.y, 0.01, "and that rank's feet are on the floor")
+
+func test_a_full_hall_is_unchanged_by_standing_on_the_floor() -> void:
+	# Two ranks exactly fill the row, so the fix must move nothing here.
+	var cell := PersonSprite.HALL_CELL
+	var area := Vector2(FloorRow.STRIP_RIGHT - FloorRow.SPRITE_X, BuildingView.FLOOR_HEIGHT)
+	var full := ChipGrid.shape(8, ChipGrid.columns_for(area.x, cell.x),
+		ChipGrid.rows_for(area.y, cell.y))
+	assert_eq(full.y, 2)
+	assert_almost_eq(ChipGrid.position_of(0, 8, full, area, cell).y, 0.0, 0.01,
+		"the top rank still starts at the top of the row")
 
 # --- the cell is a Vector2, not a square ------------------------------------
 

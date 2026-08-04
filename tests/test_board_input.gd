@@ -1245,9 +1245,10 @@ func test_the_doors_stay_above_the_riders_by_tree_order() -> void:
 
 # --- floor scenery ----------------------------------------------------------
 
-func test_a_tenanted_floor_shows_its_kind_and_a_vacant_one_shows_none() -> void:
-	# The board asks for scenery by KIND, and a vacant floor asks for nothing --
-	# it is not a tenant with a blank picture, it is an empty shell.
+func test_a_tenanted_floor_shows_its_kind_and_a_vacant_one_shows_the_shell() -> void:
+	# The board asks for scenery by KIND. A vacant floor has no kind to ask with,
+	# so it asks by the VACANT sentinel instead -- an empty id means "no art",
+	# which is not the same thing as "the construction shell".
 	var f := 1
 	root.state.tenancy.lease(f, "apartments")
 	view.refresh()
@@ -1258,7 +1259,8 @@ func test_a_tenanted_floor_shows_its_kind_and_a_vacant_one_shows_none() -> void:
 	root.state.tenancy.restore_floor(f, 1.0, true, 0, "")
 	view.refresh()
 	await wait_physics_frames(1)
-	assert_eq(view._floors[f].scenery_id(), "", "a vacant floor draws bare ground")
+	assert_eq(view._floors[f].scenery_id(), FloorScenery.VACANT,
+		"a vacant floor draws the construction shell")
 
 func test_the_scenery_stops_where_the_shafts_begin() -> void:
 	# It covers the gutter and the people strip and nothing under a shaft --

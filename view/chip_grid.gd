@@ -57,8 +57,14 @@ static func columns_for(width: float, cell_w: float) -> int:
 static func rows_for(height: float, cell_h: float) -> int:
 	return maxi(int((height + GAP) / (cell_h + GAP)), 0)
 
-## Top-left of item `index`, with the block centred in the area and each rank
-## centred on the block, so a short last rank is not left ragged.
+## Top-left of item `index`. Horizontally the block is centred in the area and
+## each rank is centred on the block, so a short last rank is not left ragged.
+##
+## VERTICALLY THE BLOCK SITS ON THE FLOOR, not in the middle. People stand on
+## something. Centring was invisible while the hall was always two ranks deep --
+## the block then measured exactly the row height -- but a floor with four or
+## fewer waiting is one rank, and centred it hovered half a person above the
+## ground with a floor picture drawn underneath.
 static func position_of(index: int, count: int, grid: Vector2i, area: Vector2,
 		cell: Vector2) -> Vector2:
 	if grid.x <= 0 or grid.y <= 0:
@@ -70,4 +76,4 @@ static func position_of(index: int, count: int, grid: Vector2i, area: Vector2,
 	var block_h := float(grid.y) * cell.y + float(grid.y - 1) * GAP
 	return Vector2(
 		(area.x - rank_w) * 0.5 + float(col) * (cell.x + GAP),
-		(area.y - block_h) * 0.5 + float(row) * (cell.y + GAP))
+		area.y - block_h + float(row) * (cell.y + GAP))
