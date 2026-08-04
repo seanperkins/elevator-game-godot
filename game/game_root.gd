@@ -166,7 +166,7 @@ func _ready() -> void:
 	# the player acts on.
 	_clock_label = Label.new()
 	_clock_label.add_theme_font_size_override("font_size", 16)
-	_clock_label.add_theme_color_override("font_color", Palette.INK)
+	_clock_label.add_theme_color_override("font_color", Palette.INK_MUTED)
 	_clock_label.position = Vector2(16 + _safe.x, 72 + _safe.y)
 	add_child(_clock_label)
 
@@ -185,7 +185,7 @@ func _ready() -> void:
 	# cannot tell you that.
 	_pager_label = Label.new()
 	_pager_label.add_theme_font_size_override("font_size", 14)
-	_pager_label.add_theme_color_override("font_color", Palette.INK)
+	_pager_label.add_theme_color_override("font_color", Palette.INK_MUTED)
 	_pager_label.position = Vector2(328 + _safe.x, 38 + _safe.y)
 	_pager_label.size = Vector2(88, 20)
 	_pager_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
