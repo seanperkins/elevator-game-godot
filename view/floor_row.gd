@@ -3,7 +3,7 @@ extends Control
 
 ## One floor of the board, in four fixed regions:
 ##
-##   [count] [tenant bar] [floor no.] | people strip | (shafts, drawn above)
+##   [count] [floor no.] | people strip | (shafts, drawn above)
 ##
 ## The waiting count is leftmost and never moves. It is the number a dispatch
 ## decision is made on, so it cannot shift with the shaft count, and it cannot
@@ -39,18 +39,28 @@ const CALL_DOWN := PersonSprite.ARROW_DOWN
 const CALL_UNKNOWN := ""
 
 const MAX_INDIVIDUALS := 12
-## People are laid out by ChipGrid with a 20 x 40 cell -- a person stands rather
-## than sits. The car no longer shares this rule: riders stand in ranks there.
-const STRIP_RIGHT := GUTTER_WIDTH + STRIP_WIDTH          # 208
+## People are laid out by ChipGrid with PersonSprite.HALL_CELL -- a person stands
+## rather than sits, on the floor rather than centred in the band. The car no
+## longer shares this rule: riders stand in ranks there.
+const STRIP_RIGHT := GUTTER_WIDTH + STRIP_WIDTH          # 192
 
-const GUTTER_WIDTH := 64.0
+## 64 until the tenant bar went. The bar held x 30-34 and the layout was built
+## around it; with it gone the gutter carries two labels and the space between
+## them, which measures 48:
+##
+##   count   0-20   two digits at font 18 come to ~19.8 units
+##   (gap)  20-23
+##   number 23-48   two digits at font 22 come to ~24.2 units, so 24 was 0.2
+##                  short -- caught by test_board_geometry, not by looking
+##
+## THE 16 UNITS THIS RELEASED ARE NOT SPARE -- they are what buys the exterior in
+## BuildingView. Widening this again takes them straight back out of the world
+## outside the building, and on a 688-unit device board there is nowhere else for
+## them to come from. See BuildingView.EXTERIOR_LEFT.
+const GUTTER_WIDTH := 48.0
 const STRIP_WIDTH := 144.0
-const COUNT_WIDTH := 26.0
-## x 30-34 used to be the tenant bar. The floor number stays at 38 rather than
-## sliding left into the space: the UI spec's coordinate table gives it 38-64,
-## and moving it buys 8 units of nothing while shifting an element the eye
-## already knows the position of.
-const LABEL_X := 38.0
+const COUNT_WIDTH := 20.0
+const LABEL_X := 23.0
 const SPRITE_X := GUTTER_WIDTH + 4.0
 
 var floor_index: int = 0
@@ -86,11 +96,10 @@ func _ready() -> void:
 	add_child(_count)
 
 	_label = Label.new()
-	# Capped by the gutter budget, not by taste: the UI spec's coordinate table
-	# gives the floor number x 38-64, i.e. 26 units, and the people strip starts
-	# at SPRITE_X. Two digits (floors run to Building.MAX_FLOORS) at 22 come to
-	# ~24 units. Going further needs the gutter widened first -- an earlier
-	# draft overlapped this label by ~12 units and it was a real bug.
+	# Capped by the gutter budget, not by taste: x 23-48 is 25 units and two
+	# digits at 22 come to ~24.2, so there is 0.8 of room. Going further needs
+	# the gutter widened first, which now costs the building's exterior -- an
+	# earlier draft overlapped this label by ~12 units and it was a real bug.
 	_label.add_theme_font_size_override("font_size", 22)
 	_label.add_theme_color_override("font_color", Palette.INK_FLOOR)
 	_label.position = Vector2(LABEL_X, 3)
@@ -100,9 +109,10 @@ func set_floor(index: int) -> void:
 	floor_index = index
 	_label.text = str(index)
 
-## Everyone waiting, drawn as figures. Rows are a fixed 120 units now, so a
-## 20 x 40 cell packs six across and two deep -- all twelve on every floor. The
-## count beside them is still exact regardless of how many are drawn.
+## Everyone waiting, drawn as figures. Rows are a fixed 120 units, and the strip
+## packs HALL_CELL (32 x 58) four across and two deep -- eight of a possible
+## twelve. The count beside them is exact regardless of how many are drawn, which
+## is what lets the figures be legible rather than complete.
 ## `show_direction` is required rather than defaulted to true: a default would
 ## let a future caller silently opt out of the gate, which is the same class of
 ## bug the note_expiry(fare) default caused.

@@ -63,8 +63,11 @@ func ghost_centre_y() -> float:
 	return root.HUD_HEIGHT + view.coords().floor_to_y(view.coords().top_floor) \
 		- BuildingView.FLOOR_HEIGHT * 0.5
 
+## Screen x, so it carries the exterior. SHAFT_AREA_X is measured from the
+## BUILDING's left wall, and the building no longer starts at the screen edge.
 func column_x(slot: int) -> float:
-	return BuildingView.SHAFT_AREA_X + float(slot) * BuildingView.SHAFT_WIDTH + 40.0
+	return BuildingView.EXTERIOR_LEFT + BuildingView.SHAFT_AREA_X \
+		+ float(slot) * BuildingView.SHAFT_WIDTH + 40.0
 
 ## in_local_coords = true: see the header. Without it every coordinate is
 ## multiplied by twenty and the whole file passes vacuously.
@@ -344,8 +347,10 @@ func test_the_ghost_still_wins_after_a_rebuild() -> void:
 
 func test_a_tap_at_exactly_the_shaft_boundary_reaches_the_shaft() -> void:
 	# Rewritten from test_a_tap_past_the_strip_reaches_the_column_not_the_confirm.
-	await do_tap(BuildingView.SHAFT_AREA_X, floor_centre_y(1))
-	assert_eq(root.last_selected_floor, -1, "x = 240 belongs to the shaft, not the hall")
+	await do_tap(BuildingView.EXTERIOR_LEFT + BuildingView.SHAFT_AREA_X,
+		floor_centre_y(1))
+	assert_eq(root.last_selected_floor, -1,
+		"the first pixel past the strip belongs to the shaft, not the hall")
 	assert_eq(root.state.building.cars[0].target_floor, 1,
 		"and it reached the shaft, which dispatches on a tap")
 

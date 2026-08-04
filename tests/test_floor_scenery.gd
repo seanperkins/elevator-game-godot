@@ -30,11 +30,11 @@ func test_the_vacant_shell_has_art_under_its_own_name() -> void:
 func test_a_kind_with_art_resolves_to_a_texture() -> void:
 	var tex := FloorScenery.texture_for("apartments")
 	assert_not_null(tex, "art/floors/apartments.png should be imported")
-	assert_eq(tex.get_width(), 416, "the 2x width of the 208-unit region")
+	assert_eq(tex.get_width(), 384, "the 2x width of the 192-unit region")
 	assert_eq(tex.get_height(), 240, "the 2x height of the 120-unit row")
 
 func test_every_image_matches_the_region_it_covers() -> void:
-	# 208 x 120 units at 2x. A mismatch shows immediately on flat poster art as
+	# 192 x 120 units at 2x. A mismatch shows immediately on flat poster art as
 	# skewed doorframes, and it is per-image -- one bad crop is enough.
 	var want := FloorRow.STRIP_RIGHT / BuildingView.FLOOR_HEIGHT
 	for id: String in KINDS + [FloorScenery.VACANT]:

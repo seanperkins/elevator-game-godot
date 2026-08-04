@@ -12,9 +12,12 @@ extends RefCounted
 ## `data/tenants.json` before its image exists draws plain ground instead of
 ## crashing the board.
 ##
-## The images are 416 x 240 for a 208 x 120 region (2x), and cover the board from
-## x 0 to FloorRow.STRIP_RIGHT -- everything left of the shafts. See
-## `brand/floor-art-prompts.md`.
+## The images are 384 x 240 for a 192 x 120 region (2x), and cover the board from
+## x 0 to FloorRow.STRIP_RIGHT -- everything left of the shafts. They were 416 x
+## 240 until the gutter narrowed to pay for the building's exterior, which is
+## exactly the hazard the backlog flagged: a raster asset PINS the constants it
+## was cut to. Both sizes were re-cut from `brand/art/floors/` rather than
+## regenerated. See `brand/floor-art-prompts.md`.
 
 const DIR := "res://art/floors/"
 

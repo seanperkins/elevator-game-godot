@@ -24,12 +24,15 @@ signal shaft_purchase_requested()
 ## connections, so the persistent consumer -- GameRoot -- binds to this instead.
 signal hall_floor_selected(floor_index: int)
 
-const SHAFT_AREA_X := FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH   # 208
+## Measured from the building's left wall, NOT from the screen. 192 since the
+## gutter narrowed to pay for the exterior.
+const SHAFT_AREA_X := FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH   # 192
 ## Two columns across the shaft viewport, on the DEVICE board -- not the canvas.
 ## SafeArea floors both side insets at CORNER_MARGIN 16, so the board is 688
-## wide on a phone and 720 only headless; 230 gives two columns on both, with 20
-## units of slack. 240 gives two on the canvas and ONE on the device, which is
-## how a one-column board nearly shipped with a green suite.
+## wide on a phone and 720 only headless. After EXTERIOR_LEFT the viewport is
+## 476 on the device, so 230 gives two columns with 16 spare -- and that spare is
+## what the far wall scrolls into. 240 gives two on the canvas and ONE on the
+## device, which is how a one-column board nearly shipped with a green suite.
 ##
 ## The column draws at 226 and the car at 220, which is what makes a two-digit
 ## destination badge 13.1pt at every capacity from 4 to 12 -- see the design
@@ -42,11 +45,46 @@ const SHAFT_WIDTH := 230.0
 ## a 116-unit car. At 112 the badge falls to 27 and the font to 21.
 const FLOOR_HEIGHT := 120.0
 
+# ------------------------------------------------------------------ outside --
+#
+# The building stands in a world rather than filling the screen edge to edge
+# (`brand/art/dir3_in_game.png`). Every unit of that world is bought, not free:
+# the device board is 688 and the building's contents take 640 of it, so this
+# margin is exactly the 16 units the gutter released when the tenant bar was
+# deleted, plus the slack that already existed.
+#
+# ONLY THE LEFT IS A FIXED MARGIN. The right wall is not a margin at all: it
+# lives at the end of the shaft slots, inside the scrolling viewport, so the
+# building runs flush to the screen edge until you page all the way right and
+# reach its actual far side. That costs nothing -- the sliver revealed there is
+# the slack the viewport already carried beyond two columns -- and it is truer to
+# what the board is, a building wider than the window rather than a picture of
+# one.
+const EXTERIOR_LEFT := 20.0
+## The shadowed side of the building, drawn inside the left margin. What is left
+## of that margin is sky.
+const SIDE_FACE := 8.0
+## The far wall, revealed only at full right scroll. Thinner than the near side
+## face: it is the edge you see across the building, not the face beside you.
+const EDGE := 4.0
+## Where each neighbour's roof sits, as a fraction of the board height. Static
+## scenery standing in the sky, so this is all they need.
+const SKYLINE_NEAR := 0.22
+const SKYLINE_FAR := 0.44
+
 var _state: GameState
 var _coords: BoardCoords
 ## Continuous, in units, not whole columns. Panning is smooth and the pager
 ## still works by stepping it a column at a time.
 var _shaft_offset: float = 0.0
+
+var _sky: ColorRect
+var _neighbour_near: ColorRect
+var _face_left: ColorRect
+## These two ride INSIDE the shaft viewport, so they scroll with the shafts and
+## only come into view at the far right of the building.
+var _wall_right: ColorRect
+var _neighbour_far: ColorRect
 
 var _shaft_viewport: Control
 var _ghost_floor: Control
@@ -65,6 +103,7 @@ func bind(state: GameState) -> void:
 	# The board scrolls, so floors exist above and below the window. Without this
 	# they draw straight over the HUD.
 	clip_contents = true
+	_build_outside()
 	_shaft_viewport = Control.new()
 	_shaft_viewport.clip_contents = true
 	add_child(_shaft_viewport)
@@ -104,8 +143,10 @@ func _build_all() -> void:
 	if _state.building.floor_count < Building.MAX_FLOORS:
 		_build_ghost_floor()
 
-	_shaft_viewport.position = Vector2(SHAFT_AREA_X, 0.0)
-	_shaft_viewport.size = Vector2(size.x - SHAFT_AREA_X, size.y)
+	_shaft_viewport.position = Vector2(EXTERIOR_LEFT + SHAFT_AREA_X, 0.0)
+	_shaft_viewport.size = Vector2(building_width() - SHAFT_AREA_X, size.y)
+	_layout_outside()
+	_build_far_side()
 	_build_slots()
 	_build_columns()
 	# The ghost band sits in the sky above the roof, where the full-height
@@ -119,10 +160,12 @@ func _build_all() -> void:
 ## every scroll and every rebuild, so there is one place that knows what moves.
 func _reposition_floors() -> void:
 	for i in range(_floors.size()):
-		_floors[i].position = Vector2(0, _coords.floor_to_y(i))
+		_floors[i].position = Vector2(EXTERIOR_LEFT, _coords.floor_to_y(i))
 	if _ghost_floor != null:
-		_ghost_floor.position = Vector2(0,
+		_ghost_floor.position = Vector2(EXTERIOR_LEFT,
 			_coords.floor_to_y(_coords.top_floor) - FLOOR_HEIGHT)
+	_layout_face_left()
+	_layout_far_side()
 
 func scroll_board_by(delta: float) -> void:
 	_coords.scroll_by(delta)
@@ -149,8 +192,8 @@ func board_scroll_offset() -> float:
 func _build_floors() -> void:
 	for i in range(_state.building.floor_count):
 		var floor_index := FloorRow.new()
-		floor_index.position = Vector2(0, _coords.floor_to_y(i))
-		floor_index.size = Vector2(size.x, _coords.floor_height)
+		floor_index.position = Vector2(EXTERIOR_LEFT, _coords.floor_to_y(i))
+		floor_index.size = Vector2(building_width(), _coords.floor_height)
 		floor_index.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(floor_index)
 		floor_index.set_floor(i)
@@ -162,7 +205,7 @@ func _build_floors() -> void:
 ## with no offset arithmetic -- the property that kept ShaftColumn correct.
 func _build_hall_column() -> void:
 	hall_column = HallColumn.new()
-	hall_column.position = Vector2.ZERO
+	hall_column.position = Vector2(EXTERIOR_LEFT, 0.0)
 	hall_column.size = Vector2(FloorRow.STRIP_RIGHT, size.y)
 	hall_column.setup(_coords)
 	hall_column.pan_requested.connect(pan_board_by)
@@ -172,11 +215,89 @@ func _build_hall_column() -> void:
 func _on_hall_floor_selected(floor_index: int) -> void:
 	hall_floor_selected.emit(floor_index)
 
+## The world outside: sky, the neighbour standing in it, and the building's own
+## near side face. Built once in bind() and NEVER rebuilt -- rebuild() throws
+## away floors, columns and the ghost band, and the sky is none of those.
+##
+## All of it is MOUSE_FILTER_IGNORE. It is scenery, and the hall column sits
+## directly beside it; an exterior that ate touches would put a dead 20-unit
+## stripe down the edge of the one region that selects floors.
+func _build_outside() -> void:
+	_sky = ColorRect.new()
+	_sky.color = Palette.SKY
+	_sky.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sky.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_sky)
+
+	# Does NOT scroll with the building. It is another building, not a floor of
+	# this one, and parallax on a 12-unit sliver reads as a rendering fault.
+	_neighbour_near = ColorRect.new()
+	_neighbour_near.color = Palette.SKY_FAR
+	_neighbour_near.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_neighbour_near)
+
+	_face_left = ColorRect.new()
+	_face_left.color = Palette.SKY_FAR
+	_face_left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_face_left)
+
+## The far side of the building and what stands beyond it. Children of the SHAFT
+## VIEWPORT, not of this view, which is the whole trick: they sit at the end of
+## the slot run, so they scroll into view exactly when the last shaft does and
+## the building otherwise runs flush to the screen edge.
+func _build_far_side() -> void:
+	_wall_right = ColorRect.new()
+	_wall_right.color = Palette.SKY_FAR
+	_wall_right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shaft_viewport.add_child(_wall_right)
+
+	_neighbour_far = ColorRect.new()
+	_neighbour_far.color = Palette.NEIGHBOUR
+	_neighbour_far.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shaft_viewport.add_child(_neighbour_far)
+
+## How wide the building is. Everything from the gutter to the far wall lives in
+## here; the left margin is world, not board.
+func building_width() -> float:
+	return size.x - EXTERIOR_LEFT
+
+## Sky furniture that depends only on the board's size, not on its scroll.
+func _layout_outside() -> void:
+	if _neighbour_near == null:
+		return
+	_neighbour_near.position = Vector2(0, size.y * SKYLINE_NEAR)
+	_neighbour_near.size = Vector2(EXTERIOR_LEFT - SIDE_FACE, size.y)
+
+## The near side face spans the BUILDING, so it follows the board's scroll: it
+## has a roof and a ground floor like the thing it is the side of.
+func _layout_face_left() -> void:
+	if _face_left == null or _coords == null:
+		return
+	var top := _coords.floor_to_y(_coords.top_floor)
+	if _ghost_floor != null:
+		top -= FLOOR_HEIGHT
+	_face_left.position = Vector2(EXTERIOR_LEFT - SIDE_FACE, top)
+	_face_left.size = Vector2(SIDE_FACE, _coords.floor_to_y(0) + FLOOR_HEIGHT - top)
+
+## Everything whose x follows the shaft scroll or whose y follows the board.
+func _layout_far_side() -> void:
+	if _wall_right == null:
+		return
+	var x := float(slot_count()) * SHAFT_WIDTH - _shaft_offset
+	var top := _coords.floor_to_y(_coords.top_floor)
+	if _ghost_floor != null:
+		top -= FLOOR_HEIGHT
+	var tall := _coords.floor_to_y(0) + FLOOR_HEIGHT - top
+	_wall_right.position = Vector2(x, top)
+	_wall_right.size = Vector2(EDGE, tall)
+	_neighbour_far.position = Vector2(x + EDGE, size.y * SKYLINE_FAR)
+	_neighbour_far.size = Vector2(maxf(_shaft_viewport.size.x - x - EDGE, 0.0), size.y)
+
 ## A full-height empty floor above the top floor. A floor, not a button, so the next
 ## floor is always visibly there; at the cap the term simply leaves the divisor.
 func _build_ghost_floor() -> void:
 	_ghost_floor = Control.new()
-	_ghost_floor.size = Vector2(size.x, FLOOR_HEIGHT)
+	_ghost_floor.size = Vector2(building_width(), FLOOR_HEIGHT)
 	add_child(_ghost_floor)
 
 	var bg := ColorRect.new()
@@ -306,9 +427,11 @@ func _position_columns() -> void:
 		# window cannot take a tap through the people strip beside it.
 		_columns[i].visible = x + SHAFT_WIDTH > 0.0 and x < window
 	_position_slots(_state.building.cars.size())
+	_layout_far_side()
 
+## Off the BUILDING's width, not the screen's -- the left margin is not board.
 func visible_shafts() -> int:
-	return maxi(int((size.x - SHAFT_AREA_X) / SHAFT_WIDTH), 1)
+	return maxi(int((building_width() - SHAFT_AREA_X) / SHAFT_WIDTH), 1)
 
 ## Counts the trailing ghost slot, so the eighth shaft is reachable. Without it,
 ## five owned shafts fill all five visible positions and shafts 6-8 are dead.

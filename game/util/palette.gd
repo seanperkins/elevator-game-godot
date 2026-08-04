@@ -108,6 +108,22 @@ const SHAFT_EDGE := RUST_LIGHT
 const GHOST_BG := TAN_DEEP
 ## The hairline at the top of a floor band.
 const RULE := TAN_RULE
+
+# ------------------------------------------------------------------- outside --
+#
+# The world the building stands in (`brand/art/dir3_in_game.png`). Cream is the
+# INTERIOR -- floors, halls, the page behind panels -- so the exterior has to be
+# something else entirely or the building has no silhouette. The mockup answers
+# with the teal family, which is already the game's other primary.
+
+## Beyond the building's walls.
+const SKY := TEAL
+## The building's own shadowed side face, and the neighbours standing behind it.
+## Darker than SKY on purpose: it is the same teal in shade, which is what makes
+## the edge read as a FACE rather than as an outline drawn around a shape.
+const SKY_FAR := TEAL_DARK
+## A neighbouring building catching the light, the one warm note outside.
+const NEIGHBOUR := GOLD
 ## The unfilled part of a crowd bar.
 const BAR_TRACK := TAN_DEEP
 
