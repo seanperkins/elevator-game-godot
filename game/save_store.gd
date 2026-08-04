@@ -125,16 +125,19 @@ static func _select() -> Variant:
 	return null
 
 ## Everything the save carries, read from one parsed dictionary.
-static func load_all() -> Dictionary:
+static func load_all(catalog_path := "res://data/tenants.json",
+		blueprints_path := "res://data/blueprints.json") -> Dictionary:
 	var parsed: Variant = _select()
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {"state": null}
-	return {"state": SaveCodec.decode(parsed as Dictionary)}
+	return {"state": SaveCodec.decode(parsed as Dictionary, catalog_path,
+		blueprints_path)}
 
 ## The saved state, or null if there is nothing to load or it cannot be read.
 ## Null always means "start a new game" -- never a partly applied save.
-static func load_state() -> GameState:
-	return load_all()["state"]
+static func load_state(catalog_path := "res://data/tenants.json",
+		blueprints_path := "res://data/blueprints.json") -> GameState:
+	return load_all(catalog_path, blueprints_path)["state"]
 
 static func clear() -> void:
 	var dir := DirAccess.open("user://")

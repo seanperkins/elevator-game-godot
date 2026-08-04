@@ -74,7 +74,7 @@ func _ready() -> void:
 		state = GameState.new(floors, shafts, START_SEED, catalog_path, null,
 			blueprints_path)
 	else:
-		state = SaveStore.load_state()
+		state = SaveStore.load_state(catalog_path, blueprints_path)
 		if state == null:
 			state = GameState.new(floors, shafts, START_SEED, catalog_path, null,
 				blueprints_path)

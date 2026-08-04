@@ -277,3 +277,169 @@ func test_migrating_does_not_mutate_the_callers_dictionary() -> void:
 	SaveCodec.decode(data)
 	assert_true(data.has("row_count"), "the original still spells it row_count")
 	assert_false(data.has("floor_count"))
+
+# --- v4: the tech tree rides in the same file as the run --------------------
+
+## A state whose Meta carries a balance, a run count AND a spent level, since
+## those are three independent things the codec can drop separately.
+##
+## 20 - cost_of("height") = 14 is the balance the tests below assert: buy()
+## SPENDS, so seeding a balance and then buying leaves less than was seeded.
+func meta_state() -> GameState:
+	var m := Meta.new()
+	assert_true(m.load_defs("res://data/blueprints.json"), "defs")
+	m.blueprints = 20
+	m.runs_completed = 3
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1, "res://data/tenants.json", m)
+	assert_true(m.buy("height", s.upgrades), "a node the save must carry")
+	assert_eq(m.blueprints, 14, "the fixture's balance, after the purchase")
+	return s
+
+func test_a_populated_meta_round_trips_in_memory() -> void:
+	# The test that catches a TYPE_FLOAT-only rule rejecting the codec's own
+	# GDScript ints: encode() returns a live Dictionary and the whole suite
+	# round-trips with no JSON.stringify between.
+	var before := meta_state()
+	var after := SaveCodec.decode(SaveCodec.encode(before))
+	assert_not_null(after, "decodes")
+	assert_eq(after.meta.blueprints, 14, "blueprints")
+	assert_eq(after.meta.runs_completed, 3, "runs")
+	assert_eq(after.meta.level_of("height"), 1, "spent")
+
+func test_a_populated_meta_survives_real_json() -> void:
+	var before := meta_state()
+	var json := JSON.new()
+	assert_eq(json.parse(JSON.stringify(SaveCodec.encode(before))), OK, "parses")
+	var after := SaveCodec.decode(json.data as Dictionary)
+	assert_not_null(after, "decodes")
+	assert_eq(after.meta.blueprints, 14, "every number arrives as TYPE_FLOAT here")
+	assert_eq(after.meta.level_of("height"), 1, "spent")
+
+func test_the_cap_survives_a_reload() -> void:
+	# Every other codec test operates on a fresh or legacy state, which is
+	# exactly where the broken cap arithmetic happened to be right.
+	var m := Meta.new()
+	m.load_defs("res://data/blueprints.json")
+	m.blueprints = 100
+	# BEFORE the run is constructed: the cap is applied in _init, so a node
+	# bought mid-run does nothing until the next rebuild -- which is the
+	# documented behaviour, not an accident to work around.
+	var scratch := Upgrades.new()
+	scratch.load_defs("res://data/upgrades.json")
+	assert_true(m.buy("height", scratch), "L1")
+	assert_true(m.buy("height", scratch), "L2")
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1, "res://data/tenants.json", m)
+	for i in range(7):
+		s.economy.cash = 1_000_000.0
+		assert_true(s.buy("floor"), "floor %d" % i)
+	var after := SaveCodec.decode(SaveCodec.encode(s))
+	assert_not_null(after, "decodes")
+	for i in range(20):
+		after.economy.cash = 1_000_000.0
+		after.buy("floor")
+	assert_eq(after.building.floor_count, 20, "twenty is still reachable")
+
+func test_a_save_is_not_refused_because_the_meta_grants_more_than_it_holds() -> void:
+	var m := Meta.new()
+	m.load_defs("res://data/blueprints.json")
+	m.blueprints = 100
+	var s := GameState.new(8, 1, 1, "res://data/tenants.json", m)
+	assert_true(m.buy("shafts", s.upgrades), "shafts mid-run")
+	var after := SaveCodec.decode(SaveCodec.encode(s))
+	assert_not_null(after, "not refused")
+	assert_eq(after.building.floor_count, 8, "at the size it was saved at")
+	assert_eq(after.building.cars.size(), 1, "and the shafts it was saved with")
+
+func test_a_v4_save_with_the_meta_erased_is_not_grandfathered() -> void:
+	# Keying on a missing key rather than on the version would hand a truncated
+	# or tampered v4 file the whole cap ladder, permanently.
+	var m := Meta.new()
+	m.load_defs("res://data/blueprints.json")
+	var s := GameState.new(20, 1, 1, "res://data/tenants.json", m)
+	var data := SaveCodec.encode(s)
+	data.erase("meta")
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "still loads")
+	assert_eq(after.meta.level_of("height"), 0, "and grants nothing")
+
+func test_a_malformed_v4_meta_yields_an_empty_meta_rather_than_refusing() -> void:
+	# In this codebase "refuse" means "delete": decode returns null, the boot
+	# path starts a fresh game, and the autosave overwrites the only copy
+	# within ten seconds. Losing a tech tree beats losing a building. The
+	# INVERSE of this test is what a future reviewer will try to "fix".
+	var s := meta_state()
+	var data := SaveCodec.encode(s)
+	data["meta"] = "not a dictionary"
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "the building survives")
+	assert_eq(after.building.floor_count, GameState.BASE_FLOORS, "intact")
+	assert_eq(after.meta.blueprints, 0, "the tree does not")
+
+func test_a_legacy_save_is_granted_the_height_its_building_implies() -> void:
+	for pair in [[6, 0, 10], [11, 1, 15], [14, 1, 15], [20, 2, 20]]:
+		var m := Meta.new()
+		m.load_defs("res://data/blueprints.json")
+		var s := GameState.new(pair[0], 1, 1, "res://data/tenants.json", m)
+		var data := SaveCodec.encode(s)
+		data["version"] = 3
+		data.erase("meta")
+		var after := SaveCodec.decode(data)
+		assert_not_null(after, "%d floors decodes" % pair[0])
+		assert_eq(after.meta.level_of("height"), pair[1], "%d floors -> height" % pair[0])
+		assert_eq(after.meta.height_cap(), pair[2], "%d floors -> cap" % pair[0])
+		assert_eq(after.building.floor_count, pair[0], "and loses no floors")
+		assert_eq(after.meta.blueprints, 0, "granted, never charged")
+
+func test_a_malformed_blueprint_catalog_refuses_the_decode() -> void:
+	# Malformed SHIPPED data still refuses. The asymmetry is between data the
+	# player cannot have damaged and a file they can.
+	var s := meta_state()
+	assert_null(SaveCodec.decode(SaveCodec.encode(s), "res://data/tenants.json",
+		"res://data/does_not_exist.json"), "fatal")
+
+func test_decode_refuses_an_invalid_state_rather_than_handing_it_back() -> void:
+	# game_state.gd already CLAIMS this; it has been aspirational until now.
+	var s := meta_state()
+	assert_null(SaveCodec.decode(SaveCodec.encode(s),
+		"res://data/does_not_exist.json"), "null, not a poisoned state")
+
+func test_the_preflight_refuses_shapes_migration_would_abort_on() -> void:
+	# Each of these aborts inside _migrate_to_v3 today, BEFORE any check runs.
+	# GUT fails a test on unhandled engine errors, so "without throwing" is a
+	# real and observable assertion rather than a wish.
+	for poison in [{"version": {}}, {"cars": null}, {"levels": []},
+			{"floor_count": {}}]:
+		var data := SaveCodec.encode(GameState.new(6, 1, 1))
+		for key in poison:
+			data[key] = poison[key]
+		assert_null(SaveCodec.decode(data), "%s is refused" % [poison])
+
+func test_blueprints_survive_the_demolish_write() -> void:
+	# The demolish and the discarded building arrive in ONE payload. A crash
+	# between two writes would either duplicate the yield or destroy it.
+	var s := meta_state()
+	s.economy.accrue(Prestige.DEMOLITION_FLOOR + 1600.0)
+	var next := Prestige.demolish(s)
+	assert_not_null(next, "demolished")
+	var after := SaveCodec.decode(SaveCodec.encode(next))
+	assert_not_null(after, "decodes")
+	assert_eq(after.meta.blueprints, 18, "14 banked plus 4 earned")
+	assert_eq(after.meta.runs_completed, 4, "the run was counted")
+	assert_eq(after.building.floor_count, GameState.BASE_FLOORS,
+		"and the smaller building came in the same payload")
+
+func test_the_real_device_fixture_is_grandfathered_and_charged_nothing() -> void:
+	# _real_v2_save() is a REAL v2 save pulled off the device before the
+	# rename -- the only input in this file nobody wrote. Padded exactly as the
+	# tests beside it already pad it.
+	var data := _real_v2_save()
+	(data["rows"] as Array).resize(7)
+	for i in range(1, 7):
+		data["rows"][i] = {"class": 1, "kind": "apartments",
+			"move_out_left": 0, "satisfaction": 0.9, "vacant": false}
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "a v2 save still loads under v4")
+	assert_eq(after.building.floor_count, 7, "and loses no floors")
+	assert_eq(after.meta.blueprints, 0, "granted, never charged")
+	assert_eq(after.meta.level_of("height"), 0, "seven floors implies no height")
+	assert_eq(after.meta.height_cap(), 10, "so it gets the base cap")
