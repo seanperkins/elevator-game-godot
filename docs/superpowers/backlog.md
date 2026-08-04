@@ -510,7 +510,36 @@ exactly the knife-edge that ordering exists to remove.
 
 ---
 
-## Show the time of day
+## Show the time of day — BUILT 2026-08-04
+
+**Shipped, and larger than this entry proposed.** The HUD's `09:00` label is
+gone; in its place is a full-width `DaySparkline` showing the **whole
+building's** day with a playhead on the current hour (`5d2188d`).
+
+Two things this entry did not anticipate:
+
+- **The amalgamation is the feature, not the playhead.** This entry proposed a
+  playhead on a *kind's* curve. Summing every tenanted floor is what makes it a
+  decision aid — a tower of offices shows one brutal spike where a mixed one is
+  smoother but never quiet, and that is the shape you are steering.
+- **It had to be sim-side.** `sim/building_day.gd` sums the same
+  `TrafficSource` array the spawner consumes, the same way, and reproduces the
+  lobby collapse exactly (no usable lobby → everything interfloor, including a
+  tenant *on* floor 0). A chart that disagreed with the traffic would be worse
+  than no chart, so nine tests pin the agreement.
+
+**What was already there and only needed wiring:** `set_now()`, `playhead_bar()`
+and `COLOUR_NOW` all existed and were tested — built for the lease picker and
+never pointed at the clock.
+
+**The naming trap below was real and is still unresolved in the code:**
+`sim_minute()` still returns an hour bucket. `hour_of_day()` exists and is what
+callers use, but the misleading name survives.
+
+**Still open:** the numeric hour is gone entirely. The playhead's position
+implies it, but there is no way to read `14:00` exactly. One label if wanted.
+
+<details><summary>Original entry</summary>
 
 **Idea.** Put the hour on screen. Right now traffic swings hard between the
 overnight trough and the 07:00 peak and the player has no way to know which they
@@ -539,6 +568,8 @@ UI that surfaces it as "minute" will be wrong, and the method name will actively
 mislead whoever writes it. Either rename it on the way in, or at minimum do not
 propagate the word outward. The same confusion already cost real time when
 `TICKS_PER_MINUTE` turned out to be doing two jobs (see the traffic-pacing spec).
+
+</details>
 
 **Open question.** Does the clock show anywhere on the board, or only in
 management? The board is 393pt wide and every unit of the gutter is already
@@ -615,6 +646,165 @@ Tier 1 first, alone. Tier 2 rides on the freight work and should be scheduled
 with it, not before it. Tier 3 wants its own design pass — it is the only one of
 the five that adds a phase to the tick order, which is player-visible and pinned
 by tests.
+
+---
+
+## From the people-and-car review (2026-08-04)
+
+Issues found by a nine-seat review panel over the shipped people-and-car
+changeset, plus my own verification against the current tree. Items already
+fixed by later commits are omitted; these all still reproduce.
+
+### The design spec says 240, the code ships 230
+
+`2026-08-04-passenger-and-car-design.md:645` (§6 code-shape table) reads
+`SHAFT_WIDTH 160 → 240`, but `view/building_view.gd:37` is `230.0`. The
+spec's own §4.1.1 explains why 230 (240 would drop the device board to one
+column), so the table is stale, not the code. Fix the row and re-read the
+spec for any other `240` left over from an earlier draft. *(auditor, cartographer)*
+
+### `PIP_FREE` is a phantom role
+
+`2026-08-04-passenger-and-car-design.md:593` (§5 table) lists `PIP_FREE` ("the
+pip's own track") as a role. The code never implements it — `_draw_pips`
+(`view/shaft_column.gd`) paints every hollow pip with `Palette.PERSON_BAR_TRACK`,
+reusing the patience-track role. Two documents now disagree about a colour that
+does not exist. Delete the row, or restate it as "hollow = `PERSON_BAR_TRACK`, no
+new role". *(simplifier)*
+
+### `PersonSprite.recycle()` redraws even when already hidden
+
+`view/person_sprite.gd:129-131` — `recycle()` sets `visible = false` and calls
+`_dirty()` unconditionally. `FloorRow.set_waiting()` calls it on every unused
+sprite each refresh, so the whole strip queues a redraw every frame, violating
+the "Setters early-out on unchanged args" contract the spec's §2.4 is built on.
+Return early when the sprite is already recycled. *(cartographer)*
+
+### The ghost band cannot reach prestige at the cap
+
+At the 10-floor cap (10 × 120 = 1200 > the 1184 viewport) the ghost band sits
+above the window and cannot be tapped, so `_on_ghost_input`'s
+`prestige_requested.emit()` branch (`view/building_view.gd:219`) is dead — the
+cap's only board-level route to the prestige panel is gone. The management
+view still opens it, so this is a UX gap, not a blocker. Either make the capped
+band reachable (count the ghost row into the scrollable content) or remove the
+dead branch. *(auditor, fable)*
+
+### The pip strip re-records every frame
+
+`set_riders` calls `_car_rect.queue_redraw()` unconditionally each
+`BuildingView.refresh()`, and `_draw_pips` re-emits up to 2×capacity `draw_rect`
+commands per car per frame (~192 at 8 cars × cap 12) — the same per-frame cost
+`PersonSprite`'s redraw suppression exists to avoid. Add a `(_lit, _pips)`
+fingerprint gate like the sprite's. *(fable, opus)*
+
+### Stale comments and test messages from the old geometry
+
+The old constants survive in comments and test messages, all verified present:
+
+- `view/floor_row.gd:16-17` — "the crowd bar, whose LENGTH is the encoding",
+  but the crowd bar is deleted and rows are a fixed 120.
+- `view/building_view.gd:313-314` and `:223` — "five owned shafts fill all five
+  visible positions"; there are two visible columns now. The slot docstring
+  still describes five positions.
+- `view/shaft_column.gd:30-31` — "Today's PassengerSprite.FONT, kept" — a
+  dangling reference to the deleted class.
+- `tests/test_board_input.gd` — `:343` "x = 240 belongs to the shaft, not the
+  hall" (SHAFT_AREA_X is 208); `:386` "the chip is still drawn" (it is a
+  figure); `:442` "Four filled squares of four IS the count" (pips, not
+  squares); `:767` "the 88-unit pan strip" (rows are 120, and at the cap the
+  band is off-screen anyway).
+- `tests/test_palette.gd:102-104` — "INK_ON_LIGHT is drawn on the car AND on the
+  patience chips" — the patience-chip half was deleted two lines below by the
+  same change; the sentence contradicts itself.
+- `tests/test_gesture.gd:4-5` — `H := 29.6` is the old capped row height. The
+  assertion still passes (12 < 14.8 < 60) and the spec says not to "fix" it,
+  but the header comment is stale.
+- `tests/test_coords_scroll.gd:10` / `tests/test_pan_gesture.gd:9` — `const H :=
+  88.0`. Scale-invariant, so they pass and test the transform correctly, but the
+  design spec's §8 item 19 said to re-derive or justify them and this pass
+  neither re-derived nor justified. *(cartographer, opus, fable)*
+
+### `set_cell` carries two always-constant arguments
+
+`view/person_sprite.gd:93` — `set_cell(cell, badge_h, font_size)` has exactly one
+caller (`view/shaft_column.gd`), always passing `CarRack.BADGE_H` (30) and
+`CAR_FONT` (24); the hall never calls it. And the `_font_size = 12` default is
+never rendered. Collapse to `set_cell(cell)` with the two constants read from
+`CarRack`/a `PersonSprite` constant, or say what future caller will pass
+something different. *(simplifier)*
+
+### The call-direction spec and plan document the deleted call
+
+`2026-08-02-call-direction-upgrade-design.md:75-83` still shows the `show_as(...)`
+call, while the live caller is `show_waiting(...)` (`view/floor_row.gd:120`); the
+implementation plan `2026-08-03-call-direction-upgrade.md:192-197` repeats it.
+Update both. *(cartographer)*
+
+### The pager readout timing is untested
+
+`game/game_root.gd` hides the readout when `max_scroll() == 0`, and the column
+widening moved that boundary to `owned = 2`. The spec itself
+(`2026-08-04-passenger-and-car-design.md:358`) acknowledges no test pins it.
+Worth a test: at owned = 2 the readout appears. *(opus)*
+
+---
+
+## A background for every floor (2026-08-04)
+
+**Idea (yours).** A floor that has a tenant shows what that place *is* — the
+door to a club, a row of apartment doors, part of a dance floor, a bar. A floor
+with nothing shows the shell it actually is: columns, cement bags, bare
+concrete.
+
+**Why it is more than decoration.** Right now a floor's identity is a word in
+the panel and a curve in the sparkline. Nothing on the board says what a floor
+*is* — a leased apartment and a leased gym are the same cream band with the same
+people on it. Scenery would make the building legible at a glance, and it would
+make the vacant floors read as *unfinished* rather than merely empty, which is
+the difference between "I have not got to that yet" and "nothing is there".
+
+It also pays off Spec A. Tenant kinds already differ in traffic shape, class and
+fare; the one thing they do not differ in is how they LOOK, so the strategic
+choice the design spent a whole spec on is invisible on the board.
+
+**What it touches, and this is the hard part.**
+
+- **It reverses a decision this codebase just made deliberately.** The
+  people-and-car spec (§9) rules generated raster art out of scope, and
+  `PersonSprite` is drawn with primitives *specifically* so nothing needs a
+  texture. The shipped `.pck` is **160 KB**; the exclusion of `brand/art/`
+  bought 0.17 MB of that. Per-kind backgrounds are the first real art asset in
+  the project and the first thing to make that number move.
+- **The threadless web export is the binding constraint**, not the phone. Pages
+  cannot set the COOP/COEP headers, so this ships single-threaded to mobile
+  Safari, and every KB is a KB somebody downloads before the game starts.
+- **A floor band is 144 x 120 units** on a 720-wide canvas — roughly 79 x 66 pt.
+  That is a small canvas for "a bar" to read as a bar rather than as noise
+  behind the people standing on it.
+- **The people have to stay readable on top of it.** The whole palette argument
+  in the people-and-car spec is contrast against TWO known grounds, cream and
+  the car's teal. A per-kind background makes the ground a variable, and eight
+  decorative pigments that were solved against two grounds would need re-solving
+  against N. That is the AFFORD_OFF failure waiting to happen at scale.
+
+**The cheap version worth considering first.** Not illustration — a per-kind
+**motif** drawn with the same primitives the people use: a doorway shape, a
+counter line, a row of bollards for the shell. Costs no bytes, cannot break the
+contrast argument (it is drawn from the palette), and answers "what is this
+floor" without answering "what does this place look like". If that reads well,
+the illustrated version is a swap behind the same seam; if it does not, the
+question was never about fidelity.
+
+**Open questions.**
+- Does a vacant floor's construction look apply to a floor that has *never* been
+  leased, or also to one whose tenant just left? Those are different states and
+  the tenancy model distinguishes them (`MOVE_OUT_TICKS`).
+- Does the scenery scroll with the band or sit behind it? A parallax layer would be
+  cheap and would make the board feel like a building rather than a list.
+- Is it per KIND or per CLASS? Fitout tiers already change a floor's fare
+  multiplier; scenery that reflected the tier would make an upgrade visible,
+  which no other upgrade in the game manages.
 
 ---
 
