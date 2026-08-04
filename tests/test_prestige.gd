@@ -178,3 +178,13 @@ func test_the_next_run_starts_with_what_the_tree_bought() -> void:
 	assert_eq(next.upgrades.level_of("speed"), 1, "the granted motor level")
 	assert_almost_eq(next.building.cars[0].floors_per_tick,
 		next.upgrades.effect_value("speed", 1), 1e-9, "and the cars are synced")
+
+func test_a_demolish_carries_the_dev_unlock_across() -> void:
+	# meta.gd states this as a designed property; it works only because
+	# to_dict/restore happen to round-trip the flag, and nothing pinned it.
+	# Rebuilding is a game action, not a factory reset.
+	var s := played(F + 1600.0)
+	s.meta.dev_unlocked = true
+	var next := Prestige.demolish(s)
+	assert_not_null(next, "allowed")
+	assert_true(next.meta.dev_unlocked, "the panel stays found across a rebuild")

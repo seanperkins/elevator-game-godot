@@ -392,3 +392,31 @@ func test_the_run_keeps_the_paths_it_was_built_against() -> void:
 	var s := GameState.new(GameState.BASE_FLOORS, 1, 1)
 	assert_eq(s.catalog_path(), "res://data/tenants.json", "catalog")
 	assert_eq(s.blueprints_path(), "res://data/blueprints.json", "blueprints")
+
+# --- the dev-unlock flag ----------------------------------------------------
+
+func test_dev_unlocked_defaults_false_and_round_trips() -> void:
+	var m := loaded()
+	assert_false(m.dev_unlocked, "locked by default")
+	m.dev_unlocked = true
+	var clone := loaded()
+	assert_true(clone.restore(m.to_dict()), "restores")
+	assert_true(clone.dev_unlocked, "and the flag rode along")
+
+func test_a_meta_with_no_dev_key_restores_false() -> void:
+	# The pre-feature save. It has no `dev` key at all, and must not inherit a
+	# stale value from whatever the Meta held before.
+	var m := loaded()
+	m.dev_unlocked = true
+	assert_true(m.restore({"blueprints": 3}), "restores")
+	assert_false(m.dev_unlocked, "absent key reads false, not stale-true")
+
+func test_a_non_bool_dev_restores_false_without_throwing() -> void:
+	# THE test for the guard. Rewriting meta.gd's check as
+	# `not not d.get("dev")` or `bool(d.get("dev", false))` unlocks the panel
+	# from a poisoned save -- a non-empty String booleanizes true -- and without
+	# this test the whole suite still passes. Type first, then value.
+	for bad in ["true", "abc", 1, 1.0, {}, [], null]:
+		var m := loaded()
+		assert_true(m.restore({"dev": bad}), "%s does not refuse" % [bad])
+		assert_false(m.dev_unlocked, "%s must not unlock the panel" % [bad])

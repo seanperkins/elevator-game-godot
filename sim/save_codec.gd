@@ -40,6 +40,13 @@ const MAX_MONEY := 1e15
 const MAX_CAPACITY := Upgrades.CAPACITY_BASE + 8
 const MAX_SPEED := Upgrades.SPEED_BASE * (1.0 + 0.25 * 12.0)
 const MIN_SPEED := 0.0001
+## An upper bound for restored upgrade LEVELS. Deliberately far above any real
+## max_level: restore_levels has no upper clamp on purpose (a level above
+## max_level is inert, not an error), so this bounds only the CAST, not the
+## documented behaviour. Without it a finite, integral, out-of-range float --
+## 1e300 -- passes the type guard below and saturates to int64 max on arm64,
+## with the ship target's behaviour undefined.
+const MAX_LEVEL := 1 << 20
 
 ## v3 is a KEY RENAME, not a format change: a v1 or v2 save differs only in how
 ## these are spelled. Migration runs before _is_usable, which indexes the new
@@ -295,7 +302,10 @@ static func decode(p_data: Dictionary,
 	if not _is_usable(data):
 		return null
 
-	var floors: int = int(data["floor_count"])
+	# Bounded rather than cast raw: _is_number admits any finite integral float,
+	# including 1e300, and Building._init's clampi would only see a saturated
+	# value.
+	var floors: int = _bounded_int(data["floor_count"], 1, Building.MAX_FLOORS, 1)
 	var version := int(data["version"])
 
 	# The Meta must exist before GameState.new, because every cap derivation
@@ -341,11 +351,16 @@ static func decode(p_data: Dictionary,
 	# restore_levels is void: aborting inside it half-restores and hands back a
 	# non-null state whose surviving levels depend on iteration order.
 	var levels: Dictionary = data.get("levels", {})
+	var bounded_levels := {}
 	for id in levels.keys():
 		var lt := typeof(levels[id])
 		if lt != TYPE_INT and lt != TYPE_FLOAT:
 			return null
-	state.upgrades.restore_levels(levels)
+		# The type guard alone is a MID-LOOP-ABORT guard, not a value bound.
+		# restore_levels does maxi(int(levels[id]), 0) with no clamp, so a
+		# finite out-of-range float reaches a platform-defined conversion.
+		bounded_levels[id] = _bounded_int(levels[id], 0, MAX_LEVEL, 0)
+	state.upgrades.restore_levels(bounded_levels)
 
 	var top_floor := float(state.building.floor_count - 1)
 	for i in range(mini(cars.size(), state.building.cars.size())):

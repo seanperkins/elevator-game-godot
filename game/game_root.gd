@@ -138,8 +138,12 @@ func _ready() -> void:
 	# tall rather than 39. The rate and clock labels sit inside that rect and
 	# keep IGNORE, so their taps fall through to here rather than being eaten.
 	_cash_label.mouse_filter = Control.MOUSE_FILTER_STOP
-	_cash_label.custom_minimum_size = Vector2(200, 88)
-	_cash_label.size = Vector2(200, 88)
+	# 86, not 88: the label starts at y=10 and the board is added at
+	# HUD_HEIGHT (96) as a LATER sibling, so it wins picking below that line.
+	# Claiming 88 would hand two units of the tap target to the board, where a
+	# stray tap dispatches a car.
+	_cash_label.custom_minimum_size = Vector2(200, HUD_HEIGHT - 10.0)
+	_cash_label.size = Vector2(200, HUD_HEIGHT - 10.0)
 	_cash_label.gui_input.connect(_on_cash_input)
 	add_child(_cash_label)
 
@@ -201,6 +205,14 @@ func _ready() -> void:
 	_dev_button.pressed.connect(func() -> void: _dev.open(state))
 	add_child(_dev_button)
 	_refresh_dev_button()
+
+	# Anchor the shaft readout off DEV rather than off its own +_safe.x origin.
+	# The two used OPPOSITE inset conventions -- the label at 328 + _safe.x, DEV
+	# derived from _view_button's (size.x - 208 - _safe.z) -- so at the 16-unit
+	# minimum inset SafeArea floors to, they overlapped by 32 units on every
+	# real phone while sitting exactly adjacent at the zero insets a headless
+	# test sees. Relative positioning cannot drift that way.
+	_pager_label.position.x = _dev_button.position.x - 8.0 - _pager_label.size.x
 
 	# AFTER the HUD exists: the call inside _rebuild_views ran before these
 	# controls were built, so without this the overlays sit under them until the
@@ -342,8 +354,13 @@ func _restack() -> void:
 		if overlay != null:
 			move_child(overlay, get_child_count() - 1)
 
-## Seven taps reveals the dev panel. Counted on RELEASE, so a press that turns
-## into a drag does not count, and reset when the gap exceeds DEV_TAP_WINDOW.
+## Seven taps reveals the dev panel, counted on RELEASE and reset when the gap
+## exceeds DEV_TAP_WINDOW.
+##
+## Counting on release does NOT filter out drags: Godot routes the release to
+## whichever control took the press, so press-here, drag away, release still
+## counts. Harmless, because no draggable surface starts in the HUD band -- but
+## the window is what actually does the work, not the release.
 func _on_cash_input(event: InputEvent) -> void:
 	if not PointerEvents.is_release(event):
 		return
@@ -397,10 +414,23 @@ func _on_dev_unlock(level: int) -> void:
 	for id in state.upgrades.ids():
 		if id == "floor" or id == "shaft":
 			continue
-		state.upgrades.grant_level(id, level, state.building)
+		# maxi, because grant_level ASSIGNS rather than raises. "Fit everything
+		# to Lv1" on a run that had bought speed to Lv3 would otherwise DEMOTE
+		# it and write the slower value onto every car -- the button reads as a
+		# floor, so it behaves as one.
+		state.upgrades.grant_level(id, maxi(level, state.upgrades.level_of(id)),
+			state.building)
 	_management.refresh()
 
 func _on_dev_reset() -> void:
+	# A delete is strictly more destructive than a write, so it needs at least
+	# the same gate. Without this, `godot -- --board=40x8` -- a session whose
+	# whole point is that "taking a screenshot cannot cost somebody their
+	# building" -- can still reach DEV (seven taps arm it in memory even though
+	# save_now() correctly no-ops) and wipe the real save AND its backup, since
+	# SaveStore.clear() removes BACKUP_PATH too. There is no recovery from that.
+	if not _saving_enabled:
+		return
 	# Read the catalogs off the OUTGOING run before replacing it, so a reset
 	# rebuilds against the same files this session was started with rather than
 	# silently reverting to the shipped ones and defeating the overrides.
@@ -413,13 +443,20 @@ func _on_dev_reset() -> void:
 	# straight back out, so "Reset save" leaves a save behind.
 	_since_save = 0.0
 	_speed = 1
-	state = GameState.new(GameState.BASE_FLOORS, GameState.BASE_SHAFTS,
+	# Built into a LOCAL and validated BEFORE `state` is overwritten. Assigning
+	# first and returning on the error path skips _rebuild_views(), leaving the
+	# old panels visible, still wired to their handlers, and now pointing at a
+	# GameState whose _init returned early before constructing `economy` -- and
+	# the error screen's ColorRect is MOUSE_FILTER_IGNORE, so it draws over them
+	# without swallowing the tap.
+	var fresh := GameState.new(GameState.BASE_FLOORS, GameState.BASE_SHAFTS,
 		GameState.BASE_SEED, catalog, null, blueprints)
-	if not state.is_valid():
-		_show_error_screen(state.invalid_what(), state.invalid_path())
+	if not fresh.is_valid():
+		_show_error_screen(fresh.invalid_what(), fresh.invalid_path())
 		_saving_enabled = false
 		set_physics_process(false)
 		return
+	state = fresh
 	last_selected_floor = -1
 	_rebuild_views()
 	_view_button.text = "MANAGE"
@@ -560,14 +597,24 @@ func _physics_process(delta: float) -> void:
 		_since_save = 0.0
 		save_now()
 
-	# The multiplier runs each GRANTED tick n times rather than asking the clock
-	# for more. SimClock.MAX_TICKS_PER_FRAME (8) clamps take_ticks so a frame
-	# hitch drains the accumulator instead of spiralling, and at 60fps the sim
-	# already wants ~3.33 ticks a frame -- so asking for 4x would request 13.3,
-	# get clipped to 8, and silently deliver 2.4x while the button said 4x.
-	var ticks := state.clock.take_ticks(delta)
+	# The multiplier scales the DELTA handed to the clock, not the granted count.
+	#
+	# An earlier version multiplied the granted count and justified it with
+	# arithmetic that was wrong three ways: it claimed the sim wants ~3.33 ticks
+	# per frame at 60fps. Ticks per frame is frame_seconds / TICK_SECONDS =
+	# (1/60) / 0.05 = 0.333 -- a 20Hz sim under a 60Hz callback, exactly as this
+	# file's own header says. So take_ticks(delta * 4) asks for int(1.333) = 1
+	# and the accumulator CARRIES the remainder, averaging a true 4x; the clamp
+	# binds only when delta * speed > 0.4s, i.e. below 10fps.
+	#
+	# Multiplying the granted count instead defeats the clamp it claimed to
+	# respect: MAX_TICKS_PER_FRAME (8) exists so "a hitch cannot spiral", and
+	# 8 * 4 = 32 ticks in the frame AFTER a hitch is the spiral. Measured, not
+	# reasoned: test_a_hitch_is_still_clamped_at_speed ran 32 against a clamp of
+	# 8 before this change.
+	var ticks := state.clock.take_ticks(delta * float(_speed))
 	if ticks > 0:
-		state.tick(ticks * _speed)
+		state.tick(ticks)
 
 	var shape := Vector2i(state.building.floor_count, state.building.cars.size())
 	if shape != _last_shape:

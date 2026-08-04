@@ -9,15 +9,20 @@ Read sim state, emit signals, never mutate logic. Bound to sim by `game/game_roo
 `DEFAULT_CATALOG`, `DEFAULT_BLUEPRINTS`, `HUD_HEIGHT=96`, `TOUCH_MIN=88`, `AUTOSAVE_SECONDS=10`.
 Overrides: `catalog_path_override`, `blueprints_path_override`.
 * `_ready()` reads safe-area insets, calls `_rebuild_views()`, then builds the
-  HUD (cash, rate, clock, view toggle, pager) — the HUD is built AFTER, so those
-  nodes are later siblings than the panels' scrims.
+  HUD (cash, rate, clock, view toggle, shaft readout, DEV) — and calls
+  `_restack()` again afterwards, because the first call ran before those nodes
+  existed.
 * Cold boot uses **`SaveStore.load_all()`** (one source selection). A refused run
   still salvages its Meta; a null Meta draws the error screen and stops.
-* `_rebuild_views()` replaces `_view`/`_management`/`panel`/`_prestige` —
+* `_rebuild_views()` replaces `_view`/`_management`/`panel`/`_prestige`/`_dev` —
   `bind()` add_childs unconditionally, so it frees SYNCHRONOUSLY (queue_free is
-  deferred) and then `move_child`s the pager + view button back on top.
-  **Confirmed by measurement**: without that, `_view_button` lands at index 7
-  against the panel's 11 and a real tap on MANAGE is swallowed by the scrim.
+  deferred) and then calls `_restack()`.
+* **`_restack()` gives the two kinds of surface OPPOSITE answers.** `FloorPanel`
+  is a bottom SHEET, so the HUD sits ABOVE it and MANAGE stays reachable —
+  confirmed by measurement: without it `_view_button` lands at index 7 against
+  the sheet's 11 and a real tap on MANAGE is swallowed by its scrim.
+  `PrestigePanel` and `DevPanel` are full-screen OVERLAYS and go above the HUD
+  in turn, or MANAGE and the shaft readout draw across their content.
 * `_on_demolish()` — **writes before swapping** and checks the bool. Swapping
   first shows the new run while the durable file still holds the old,
   still-demolish-eligible one. `save_now(s: GameState = null) -> bool`.
@@ -71,6 +76,18 @@ Signal: `prestige_requested`. Builds the readout (riders/min, avg wait, gave-up,
 **blueprints**), a REBUILD heading at the bottom, one row per upgrade (name, level, effect, cost, Buy — greyed on max / unaffordable / zero-delta), and the per-shaft dispatch toggle cycling `PRESET_ORDER`.
 The upgrade list is **generated from the catalog**, so a new id in `upgrades.json` appears with no UI change.
 
+## ui/dev_panel.gd — cheats, behind seven taps on the cash readout
+Signals: `cash_requested`, `earnings_requested`, `blueprints_requested`,
+`speed_requested`, `unlock_requested`, `reset_requested`. `bind/open/close/
+refresh/set_insets/set_speed/is_reset_armed`.
+Rows: `+$10K cash` (cash only), `+$10K earned` (**also** `lifetime_earnings`, so
+it moves the Blueprint yield — the two are separate so a cash cheat cannot mint
+Blueprints), `+5 Blueprints`, speed `1x/2x/4x`, `Fit everything to LvN` (skips
+`floor`/`shaft`; `maxi`, so it never demotes), and `Reset save` behind its own
+Confirm/Cancel — it destroys the save, the backup AND the Meta, which is
+strictly more than the prestige REBUILD does.
+The unlock flag lives in the save's `meta` block, so `SaveCodec.VERSION` stays 4.
+
 ## ui/prestige_panel.gd — the tech tree and the demolish
 Signals: `node_purchase_requested(id)`, `demolish_requested`. `BUTTON_HEIGHT=88`.
 `bind/open/close/refresh/is_armed`.
@@ -85,6 +102,10 @@ that Mechanical nodes apply from the next rebuild, and REBUILD.
 physical tap twice, so arming on tap 1 and committing on tap 2 lets a stray
 double-tap destroy a run. It EMITS rather than mutates: a node purchase changes
 persistent state and is written immediately.
+**Both overlays have an explicit `← BACK` first row and NO scrim.** A scrim was
+copied from FloorPanel and was unreachable — buried under the opaque full-rect
+bg — so opening either panel trapped the player until they force-quit. A
+full-screen opaque overlay has no visible "outside" for a scrim to be.
 
 ## ui/floor_panel.gd — the per-floor sheet
 Replaced `relet_confirm.gd`. Opens on a floor tap: lease a kind, upgrade the floor class, and compare kinds via `DaySparkline`.

@@ -35,6 +35,11 @@ var _close_button: Button
 var _box: VBoxContainer
 var _speed_buttons: Dictionary = {}     # multiplier -> Button
 var _speed: int = 1
+var _readout: Label
+var _reset_button: Button
+var _reset_confirm: Button
+var _reset_cancel: Button
+var _reset_armed: bool = false
 
 func bind(state: GameState) -> void:
 	_state = state
@@ -68,6 +73,14 @@ func bind(state: GameState) -> void:
 	# First row: leaving must not require scrolling past every cheat.
 	_close_button = _action("← BACK", func() -> void: close())
 
+	# Gives the grants visible feedback. +5 Blueprints otherwise produces no
+	# on-screen change at all, so you cannot tell it worked.
+	_readout = Label.new()
+	_readout.add_theme_font_size_override("font_size", 16)
+	_readout.add_theme_color_override("font_color", Color("7c8899"))
+	_readout.custom_minimum_size = Vector2(0, 24)
+	_box.add_child(_readout)
+
 	_box.add_child(_heading("MONEY"))
 	# The two money rows are separate ON PURPOSE and must not be merged.
 	# Economy.accrue() adds to cash AND lifetime_earnings, and
@@ -99,7 +112,28 @@ func bind(state: GameState) -> void:
 			func() -> void: unlock_requested.emit(captured_level))
 
 	_box.add_child(_heading("DANGER"))
-	_action("Reset save and start over", func() -> void: reset_requested.emit())
+	var danger := Label.new()
+	danger.text = "Reset also deletes the backup and the tech tree — Blueprints, nodes and run count."
+	danger.add_theme_font_size_override("font_size", 13)
+	danger.add_theme_color_override("font_color", Color("7c8899"))
+	danger.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_box.add_child(danger)
+	# This row DOES get a Confirm/Cancel pair, reversing the original decision.
+	# The rationale for refusing one was "confirming one row would suggest the
+	# others are safe" -- but the panel already singles this row out under a
+	# DANGER heading, so that line is crossed either way, and the asymmetry the
+	# rationale missed is that Reset destroys strictly MORE than the prestige
+	# REBUILD does: the save, the backup, and the whole Meta. REBUILD is
+	# confirmed for less, in a game whose stated invariant is no fail state.
+	_reset_button = _action("Reset save and start over", func() -> void:
+		_reset_armed = true
+		refresh())
+	_reset_confirm = _action("Delete everything", func() -> void:
+		_reset_armed = false
+		reset_requested.emit())
+	_reset_cancel = _action("Cancel", func() -> void:
+		_reset_armed = false
+		refresh())
 	refresh()
 
 ## Insets the hardware has already claimed. This panel covers the WHOLE screen,
@@ -111,11 +145,16 @@ func set_insets(safe: Vector4) -> void:
 
 func open(state: GameState) -> void:
 	_state = state
+	_reset_armed = false
 	visible = true
 	refresh()
 
 func close() -> void:
+	_reset_armed = false
 	visible = false
+
+func is_reset_armed() -> bool:
+	return _reset_armed
 
 ## game_root owns the multiplier; this only renders which one is live.
 func set_speed(multiplier: int) -> void:
@@ -125,9 +164,15 @@ func set_speed(multiplier: int) -> void:
 func refresh() -> void:
 	if _state == null:
 		return
+	_readout.text = "$%s    %d Blueprints    %d runs" % [
+		NumberFormat.compact(_state.economy.cash), _state.meta.blueprints,
+		_state.meta.runs_completed]
 	for n in _speed_buttons.keys():
 		var b: Button = _speed_buttons[n]
 		b.disabled = (n == _speed)
+	_reset_button.visible = not _reset_armed
+	_reset_confirm.visible = _reset_armed
+	_reset_cancel.visible = _reset_armed
 
 func _heading(text: String) -> Label:
 	var l := Label.new()

@@ -621,6 +621,13 @@ func assert_sane(s: GameState, why: String) -> void:
 		and s.economy.combo <= Economy.COMBO_MAX, "%s: combo" % why)
 	assert_true(s.meta.blueprints >= 0
 		and s.meta.blueprints <= Meta.MAX_BLUEPRINTS, "%s: blueprints" % why)
+	# The oracle read floor_count, cash, lifetime, combo, blueprints and the car
+	# fields, but never a restored upgrade level -- so the sweep could not have
+	# seen a saturated one even with the right poison in the list.
+	for id in s.upgrades.ids():
+		var lvl := s.upgrades.level_of(id)
+		assert_true(lvl >= 0 and lvl <= SaveCodec.MAX_LEVEL,
+			"%s: level_of(%s) = %d" % [why, id, lvl])
 	for c in s.building.cars:
 		assert_true(is_finite(c.floors_per_tick) and c.floors_per_tick > 0.0,
 			"%s: speed" % why)
@@ -637,7 +644,11 @@ func test_a_generative_poison_sweep_never_throws() -> void:
 	#
 	# GUT fails a test on unhandled engine errors, so "never throws" is an
 	# assertion this harness genuinely makes rather than a wish.
-	var poisons: Array = [{}, [], null, "abc", 1e400, -1, NAN]
+	# 1e300 and -1e300 are the value class the original list could not reach:
+	# 1e400 parses to INF and NAN is NAN, so both are caught by the is_finite
+	# guards before any cast, and -1 is an in-range int. A FINITE, INTEGRAL,
+	# out-of-range float passes every stated check and saturates the conversion.
+	var poisons: Array = [{}, [], null, "abc", 1e400, -1, NAN, 1e300, -1e300]
 	var checked := 0
 	for path in leaf_paths(SaveCodec.encode(played_state()), []):
 		for poison in poisons:
@@ -725,3 +736,66 @@ func test_salvage_of_a_save_with_no_meta_is_an_empty_usable_meta() -> void:
 	assert_not_null(salvaged, "not null")
 	assert_true(salvaged.is_usable(), "defs loaded, so a run can be built on it")
 	assert_eq(salvaged.blueprints, 0, "and it grants nothing")
+
+func test_a_finite_but_out_of_range_level_does_not_reach_an_unguarded_cast() -> void:
+	# The poison sweep cannot see this value class: 1e400 parses to INF and NAN
+	# is NAN, so both are caught by the is_finite guards and never reach a cast;
+	# -1 is an in-range int. A FINITE, INTEGRAL, out-of-range float passes
+	# decode's type guard (which exists to stop a mid-loop abort, not to bound a
+	# value) and hits maxi(int(levels[id]), 0) in upgrades.gd. Out-of-range
+	# float->int is platform-defined, and the ship target is threadless WASM.
+	for poison in [1e300, -1e300]:
+		var data := SaveCodec.encode(played_state())
+		(data["levels"] as Dictionary)["speed"] = poison
+		var after := SaveCodec.decode(data)
+		assert_not_null(after, "%s does not refuse" % poison)
+		if after != null:
+			var lvl := after.upgrades.level_of("speed")
+			# Bounded, not clamped to max_level: restore_levels deliberately has
+			# no upper clamp (an over-max level is inert, not an error), so the
+			# contract is only that the CAST cannot saturate to int64 max.
+			assert_true(lvl >= 0 and lvl <= SaveCodec.MAX_LEVEL,
+				"%s -> level %d must be bounded, not saturated" % [poison, lvl])
+
+func test_a_finite_but_out_of_range_floor_count_is_bounded() -> void:
+	# It is BOUNDED first and refused second, and the order is the point. The
+	# raw cast would saturate to int64 max; bounding it to MAX_FLOORS (40) makes
+	# the saved 7-entry `floors` array short for the building, which is the
+	# codec's existing short-array refusal. Refusing is the right answer for a
+	# nonsense size -- what must not happen is a saturated value reaching
+	# Building._init.
+	for poison in [1e300, 9.3e18]:
+		var data := SaveCodec.encode(played_state())
+		data["floor_count"] = poison
+		assert_null(SaveCodec.decode(data),
+			"%s is refused rather than saturating" % poison)
+
+	# And with a floors array long enough to survive, the clamp is observable.
+	var padded := SaveCodec.encode(played_state())
+	padded["floor_count"] = 1e300
+	var floors: Array = padded["floors"]
+	while floors.size() < Building.MAX_FLOORS:
+		floors.append({"class": 1, "kind": "apartments", "move_out_left": 0,
+			"satisfaction": 0.9, "vacant": false})
+	var after := SaveCodec.decode(padded)
+	assert_not_null(after, "now it loads")
+	assert_eq(after.building.floor_count, Building.MAX_FLOORS,
+		"clamped to the structural cap, not saturated to int64 max")
+
+func test_the_save_format_is_still_v4() -> void:
+	# Pins the deliberate ABSENCE of a version bump: the dev flag went inside
+	# the existing meta block precisely so this number would not move.
+	# test_a_save_from_another_version_is_refused uses VERSION + 1 and would
+	# pass at any value, so it cannot pin this.
+	assert_eq(SaveCodec.VERSION, 4, "the dev flag did not need a format bump")
+
+func test_a_v4_save_carries_the_dev_flag() -> void:
+	var m := Meta.new()
+	assert_true(m.load_defs("res://data/blueprints.json"), "defs")
+	m.dev_unlocked = true
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1, "res://data/tenants.json", m)
+	var data := SaveCodec.encode(s)
+	assert_eq(data["version"], 4, "still v4")
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "decodes")
+	assert_true(after.meta.dev_unlocked, "and the flag survived the round trip")

@@ -828,7 +828,7 @@ func test_the_board_is_showing_after_a_demolish() -> void:
 	assert_eq(root._view_button.text, "MANAGE",
 		"the button lives outside the rebuilt range and is reset by hand")
 
-func test_the_pager_and_view_button_are_not_duplicated_by_a_demolish() -> void:
+func test_the_hud_buttons_are_not_duplicated_by_a_demolish() -> void:
 	await demolish_now()
 	var buttons := 0
 	for child in root.get_children():
@@ -985,15 +985,13 @@ func test_fitting_upgrades_costs_nothing() -> void:
 	root._on_dev_unlock(1)
 	assert_eq(root.state.economy.cash, 0.0, "granted, never charged")
 
-func test_the_speed_multiplier_runs_more_ticks_for_the_same_delta() -> void:
-	var one: int = root.state.clock.ticks_executed
-	root._physics_process(1.0)
-	var at_1x: int = root.state.clock.ticks_executed - one
-	root._on_dev_speed(4)
-	var two: int = root.state.clock.ticks_executed
-	root._physics_process(1.0)
-	var at_4x: int = root.state.clock.ticks_executed - two
-	assert_eq(at_4x, at_1x * 4, "4x is really 4x, not clipped by the frame cap")
+# NOTE: the test that used to live here measured a single _physics_process(1.0)
+# and asserted at_4x == at_1x * 4. That is the HITCH case -- a one-second frame
+# -- where both speeds are clamped to MAX_TICKS_PER_FRAME. It passed only
+# because the implementation multiplied the already-clamped count, so it pinned
+# the clamp-defeating behaviour AS the contract. Replaced by the pair below:
+# one asserts the hitch stays clamped, the other measures 4x across real 60fps
+# frames, which is the only way the multiplier is observable at all.
 
 func test_reset_save_starts_over_and_clears_the_file() -> void:
 	await build_to(9)
@@ -1086,3 +1084,86 @@ func test_a_dev_reset_does_not_immediately_rewrite_the_save() -> void:
 	await wait_physics_frames(2)
 	assert_false(SaveStore.has_save(),
 		"the autosave timer must not fire straight after a reset")
+
+func test_a_throwaway_board_cannot_delete_a_real_save() -> void:
+	# game_root's own words: "A debug board is a throwaway: it neither loads a
+	# save nor overwrites one, so taking a screenshot cannot cost somebody their
+	# building." _saving_enabled gates save_now(), but _on_dev_reset called
+	# SaveStore.clear() unconditionally -- and clear() takes BACKUP_PATH too, so
+	# there is nothing to recover from. Seven taps arm DEV in memory even on a
+	# board that was constructed specifically not to be able to touch the save.
+	root.save_now()
+	assert_true(SaveStore.has_save(), "a real save exists")
+	root._saving_enabled = false
+	root._on_dev_reset()
+	await wait_physics_frames(1)
+	assert_true(SaveStore.has_save(),
+		"a session that may not WRITE a save must not DELETE one either")
+
+func test_a_hitch_is_still_clamped_at_speed() -> void:
+	# THE point of SimClock.MAX_TICKS_PER_FRAME: "a hitch cannot spiral".
+	# Multiplying the already-CLAMPED count defeats it -- the clamp grants 8 and
+	# the multiplier turns that into 32, so the frame after a hitch does four
+	# times the work the guard exists to bound.
+	root._on_dev_speed(4)
+	var before: int = root.state.clock.ticks_executed
+	root._physics_process(1.0)          # a one-second hitch
+	var ran: int = root.state.clock.ticks_executed - before
+	assert_true(ran <= SimClock.MAX_TICKS_PER_FRAME,
+		"a hitch frame ran %d ticks against a clamp of %d"
+			% [ran, SimClock.MAX_TICKS_PER_FRAME])
+
+func test_four_times_speed_really_is_four_times_over_real_frames() -> void:
+	# At 60fps the sim wants 20/60 = 0.333 ticks per frame, so a single frame
+	# grants 0 or 1 and the accumulator carries the remainder. The multiplier is
+	# only observable across many frames -- a one-frame measurement says nothing.
+	var frame := 1.0 / 60.0
+	root._on_dev_speed(1)
+	var a: int = root.state.clock.ticks_executed
+	for i in range(60):
+		root._physics_process(frame)
+	var at_1x: int = root.state.clock.ticks_executed - a
+	root._on_dev_speed(4)
+	var b: int = root.state.clock.ticks_executed
+	for i in range(60):
+		root._physics_process(frame)
+	var at_4x: int = root.state.clock.ticks_executed - b
+	assert_almost_eq(float(at_4x), float(at_1x) * 4.0, 2.0,
+		"one real second: %d ticks at 1x, %d at 4x" % [at_1x, at_4x])
+
+func test_reset_needs_a_confirm_because_it_destroys_more_than_rebuild_does() -> void:
+	# Reset wipes the save, the BACKUP and the whole Meta -- Blueprints, nodes,
+	# run count. The prestige REBUILD destroys strictly less and is confirmed.
+	await tap_cash(7)
+	root._dev.open(root.state)
+	root.save_now()
+	var bp: int = root.state.meta.blueprints
+	root._dev._reset_button.pressed.emit()
+	await wait_physics_frames(1)
+	assert_true(root._dev.is_reset_armed(), "armed, not fired")
+	assert_true(SaveStore.has_save(), "and nothing deleted yet")
+	assert_eq(root.state.meta.blueprints, bp, "nor the tree touched")
+	root._dev._reset_cancel.pressed.emit()
+	await wait_physics_frames(1)
+	assert_false(root._dev.is_reset_armed(), "Cancel disarms")
+	assert_true(SaveStore.has_save(), "and the save is still there")
+
+func test_leaving_the_dev_panel_disarms_the_reset() -> void:
+	await tap_cash(7)
+	root._dev.open(root.state)
+	root._dev._reset_button.pressed.emit()
+	assert_true(root._dev.is_reset_armed(), "armed")
+	root._dev.close()
+	assert_false(root._dev.is_reset_armed(),
+		"a live Delete must not be waiting on the next visit")
+
+func test_the_dev_button_does_not_overlap_the_shaft_readout() -> void:
+	# These used OPPOSITE inset conventions -- the label at 328 + _safe.x, DEV
+	# derived from _view_button's (size.x - 208 - _safe.z). At the 16-unit
+	# minimum SafeArea floors to, that overlapped by 32 units on a real phone
+	# while sitting exactly ADJACENT at the zero insets a headless test sees, so
+	# no rect-intersection assertion could ever have caught it. Assert the
+	# relative anchoring instead, which cannot drift with the insets.
+	var label_right: float = root._pager_label.position.x + root._pager_label.size.x
+	assert_almost_eq(root._dev_button.position.x - label_right, 8.0, 0.01,
+		"the readout is anchored 8 units left of DEV, whatever the insets are")

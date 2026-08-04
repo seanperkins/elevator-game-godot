@@ -40,8 +40,13 @@ var runs_completed: int = 0
 ## rather than as a new top-level save key, which is why SaveCodec.VERSION stays
 ## 4: this dictionary is already validated key by key and already tolerates an
 ## absent or malformed shape without throwing, so adding a field inside it is
-## additive within v4 -- no version bump, no migration, and the generative
-## poison sweep covers it by construction.
+## additive within v4 -- no version bump and no migration.
+##
+## The guard below is TYPE-FIRST for a reason worth stating: a "simplification"
+## to bool(d.get("dev", false)) unlocks the panel from any non-empty string in a
+## hostile save. test_a_non_bool_dev_restores_false_without_throwing is what
+## goes red for that; the generative poison sweep does NOT cover this value (it
+## asserts the building survives, never what `dev` restored to).
 ##
 ## It survives a demolish, because Prestige.demolish clones the Meta through
 ## to_dict/restore. Rebuilding is a game action, not a factory reset.
