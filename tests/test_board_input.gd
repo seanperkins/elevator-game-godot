@@ -1194,3 +1194,26 @@ func test_the_dev_button_does_not_overlap_the_shaft_readout() -> void:
 	var label_right: float = root._pager_label.position.x + root._pager_label.size.x
 	assert_almost_eq(root._dev_button.position.x - label_right, 8.0, 0.01,
 		"the readout is anchored 8 units left of DEV, whatever the insets are")
+
+
+# --- the doors must not escape their own car ------------------------------
+
+func test_the_doors_carry_no_z_index() -> void:
+	# z_index is NOT local: a CanvasItem at z 1 draws above EVERY z-0 node in
+	# the canvas layer, so doors at z 1 rendered over the open FloorPanel as a
+	# car-shaped sage smear. Ordering among siblings is what was wanted.
+	var col: ShaftColumn = view._columns[0]
+	assert_eq(col._door_left.z_index, 0, "a door must not outrank the whole layer")
+	assert_eq(col._door_right.z_index, 0)
+
+func test_the_doors_stay_above_the_riders_by_tree_order() -> void:
+	# The property the z_index was protecting: riders are pooled lazily, so they
+	# are added AFTER the doors and would otherwise draw over them.
+	board_riders([5, 2])
+	var col: ShaftColumn = view._columns[0]
+	var kids := col._car_rect.get_children()
+	assert_true(kids[kids.size() - 1] == col._door_right
+		or kids[kids.size() - 1] == col._door_left, "a door is drawn last")
+	var first_door := mini(kids.find(col._door_left), kids.find(col._door_right))
+	for chip in col._chips:
+		assert_lt(kids.find(chip), first_door, "every rider is behind the doors")

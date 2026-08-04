@@ -140,10 +140,24 @@ func _make_door() -> ColorRect:
 	var d := ColorRect.new()
 	d.color = DOOR_COLOUR
 	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	d.z_index = 1               # above the seats, whatever order they were added
+	# NO z_index. It used to be 1, to sit above riders that _grow_pools adds
+	# later -- but z_index is not local: a CanvasItem at z 1 draws above EVERY
+	# z-0 node in the canvas layer, so the doors also outranked the FloorPanel
+	# and two translucent panels rendered as a car-shaped smear across an open
+	# bottom sheet. Ordering among siblings is what was wanted, so _raise_doors()
+	# does it by tree position instead.
 	d.visible = false
 	_car_rect.add_child(d)
 	return d
+
+## Keep the doors last among the car's children, so they draw over the riders.
+## Called whenever the rider pool grows, because those chips are added after the
+## doors were.
+func _raise_doors() -> void:
+	if _door_left != null:
+		_car_rect.move_child(_door_left, -1)
+	if _door_right != null:
+		_car_rect.move_child(_door_right, -1)
 
 ## `open_fraction` is 0.0 shut through 1.0 wide open. The panels meet in the
 ## middle when shut and retract to the car's edges when open.
@@ -241,12 +255,16 @@ func _header_for(riders: Array, capacity: int) -> String:
 	return head + tail
 
 func _grow_pools(count: int) -> void:
+	var grew := false
 	while _chips.size() < count:
 		var chip := PersonSprite.new()
 		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_car_rect.add_child(chip)
 		chip.recycle()
 		_chips.append(chip)
+		grew = true
+	if grew:
+		_raise_doors()
 
 ## Two rects per pip: its own track, and a lit fill inset inside it. The track
 ## is PER PIP rather than one bar behind them all -- two adjacent hollows on a
