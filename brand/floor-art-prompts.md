@@ -12,18 +12,25 @@ entirely, so there is no chroma key and no despill step.
 
 ---
 
-## The rule that is not negotiable
+## The contrast rule — relaxed, and why
 
-The game draws figures on top of these, and the lightest thing it draws is a
-pale skin tone at luminance **0.462**. A background between luminance **0.377
-and 0.565** makes that figure vanish into it.
+**This used to be a hard constraint and no longer is.** Every person the game
+draws now carries a 1-unit pale outline (`bbf8e62`), so a figure is separated
+from a background of ANY luminance — worst case 1.37, swept over every possible
+value and pinned by `tests/test_palette.gd`.
 
-In practice: **keep every large area either clearly light (cream/tan) or clearly
-dark (rust/brown/deep teal). Nothing muddy in between.** Two of the game's own
-pigments — `#d5bd92` and `#bda67e` — fall inside the dead band and must not be
-used as fills, only as thin lines.
+That change was made *because of* the first generated image. It scored well on
+everything asked of it — 1.736 ratio, 0% of pixels in the old dead band, cream
+and rust within a hair of the game's own pigments — and a rust-shirted passenger
+still vanished into a rust door at **1.07**. Only two colours in the whole
+palette cleared all nine figure colours, so constraining the art meant boxing
+every future image into teal-or-tan. Outlining the figures was one draw pass and
+freed the art permanently.
 
----
+**What remains, as guidance rather than law:** keep the composition calm behind
+the characters. The outline guarantees they are *visible*; it does not stop a
+busy background from being noisy. Large flat areas still read better than
+detail, and darks still work best under about a quarter of the frame.
 
 ## Shared style block
 
@@ -39,10 +46,10 @@ teal #306b65, near-black teal #1f3f3c, rust #9d4227, light rust #c76d48, gold
 
 The image is a BACKGROUND. Composition must be calm and mostly empty, weighted
 to the left and bottom, with the centre and upper area left as plain flat cream
-so that foreground characters drawn on top remain readable. Large areas must be
-either light (cream or tan) or dark (rust, brown, deep teal) — never a mid grey
-or muddy mid-tone. Use the dark colours only for outlines, silhouettes and small
-details, never as more than about a quarter of the image.
+so that foreground characters drawn on top remain readable. Prefer large flat
+areas over detail, and keep the dark colours to roughly a quarter of the image
+or less — the characters stand along the bottom and the picture should stay calm
+behind them.
 
 Wide landscape format, aspect ratio 26:15. Edge to edge, full bleed, no border,
 no frame, no vignette.
@@ -123,9 +130,9 @@ obviously incomplete.
 1. **Downsample to 416 × 240.** Generate large (1024-wide or more) and scale
    down — it averages away any residual edge noise, which is what makes flat
    art key cleanly even when no keying is involved.
-2. **Check the dead band.** Sample a few large areas; nothing should land
-   between luminance 0.377 and 0.565. `tests/test_palette.gd`'s
-   `_relative_luminance` is the formula the game uses.
+2. **Check it is calm, not that it is legal.** The outline handles legibility;
+   what it cannot fix is a background so busy that eight people standing on it
+   read as clutter. Squint at it.
 3. **Put a person on it before committing to the set.** The whole point is that
    figures stay readable; one screenshot with a pale-skinned figure over the
    busiest image settles it faster than any amount of sampling.
