@@ -137,6 +137,134 @@ func note_of(id: String) -> String:
 func branch_of(id: String) -> String:
 	return str(_defs[id]["branch"]) if _defs.has(id) else ""
 
+# --- the tree ---------------------------------------------------------------
+
+func level_of(id: String) -> int:
+	return int(_spent.get(id, 0))
+
+func is_maxed(id: String) -> bool:
+	if not _defs.has(id):
+		return true
+	return level_of(id) >= int(_defs[id]["max_level"])
+
+func cost_of(id: String) -> int:
+	if not _defs.has(id):
+		return 0
+	return int(_defs[id]["base"]) * (level_of(id) + 1)
+
+## True when the next level of this node would change nothing, mirroring
+## Upgrades.is_zero_delta -- which is why the refusal lives in the sim rather
+## than in a view enforcing a rule the sim does not hold.
+##
+## It takes an Upgrades because effect_value is an instance method, and it
+## evaluates at THIS META's level, never the run's. Delegating to
+## up.is_zero_delta(target) would read the run's CURRENT level: a player whose
+## run had bought doors past the DOOR_TICKS_MIN plateau would see `gearing`
+## refused even at gearing L0, precisely while shopping the panel before a
+## demolish -- though the next run starts at doors <= 4, where the effect is
+## real.
+##
+## Returns false for `height` and `shafts`: they map to no upgrade, so there is
+## nothing to compare. Getting that wrong makes `height` permanently unbuyable.
+func is_zero_delta(id: String, up: Upgrades) -> bool:
+	if not NODE_TO_UPGRADE.has(id):
+		return false
+	var target: String = NODE_TO_UPGRADE[id]
+	var lvl := level_of(id)
+	return is_equal_approx(up.effect_value(target, lvl), up.effect_value(target, lvl + 1))
+
+func can_buy(id: String, up: Upgrades) -> bool:
+	if not _defs.has(id) or is_maxed(id):
+		return false
+	if is_zero_delta(id, up):
+		return false
+	return blueprints >= cost_of(id)
+
+## The ONLY spender of Blueprints. Spending never routes through the cash path:
+## no can_afford, no `cash -=`.
+func buy(id: String, up: Upgrades) -> bool:
+	if not can_buy(id, up):
+		return false
+	blueprints -= cost_of(id)      # BEFORE the level moves, or it prices the next one
+	_spent[id] = level_of(id) + 1
+	return true
+
+# --- serialization ----------------------------------------------------------
+
+## Deep. Never returns the live _spent: the staged clone in Prestige.demolish is
+## independent only if this pair deep-copies at both ends, and a tidy-up that
+## returned the live dictionary would quietly re-create the shared mutable state
+## the clone exists to remove.
+func to_dict() -> Dictionary:
+	return {
+		"blueprints": blueprints,
+		"runs": runs_completed,        # the KEY is `runs`; the field is `runs_completed`
+		"spent": _spent.duplicate(true),
+	}
+
+## ALL meta-block validation lives here. It returns false ONLY when there are no
+## definitions to validate against -- a malformed or absent block is an EMPTY
+## Meta, not a refusal, because in this codebase "refuse" means "delete":
+## decode returns null, the boot path starts a fresh game, and the autosave
+## overwrites the only copy within ten seconds. Losing a tech tree beats losing
+## a building.
+func restore(data: Variant) -> bool:
+	if not _defs_loaded:
+		return false
+	blueprints = 0
+	runs_completed = 0
+	_spent = {}                        # fresh storage; never aliased from `data`
+	if typeof(data) != TYPE_DICTIONARY:
+		return true
+	var d := data as Dictionary
+	blueprints = _clamped_int(d.get("blueprints"), 0, MAX_BLUEPRINTS)
+	runs_completed = _clamped_int(d.get("runs"), 0, MAX_RUNS)
+	var spent: Variant = d.get("spent")
+	if typeof(spent) != TYPE_DICTIONARY:
+		return true
+	# Iterate OUR ids, never the parsed dictionary's keys. Unknown ids are
+	# dropped rather than stored, which also makes the parsed key count
+	# irrelevant -- JSON parsing has already paid that allocation anyway.
+	for id in ids():
+		var raw: Variant = (spent as Dictionary).get(id)
+		if raw == null:
+			continue
+		var lvl := _clamped_int(raw, 0, int(_defs[id]["max_level"]))
+		if lvl > 0:
+			_spent[id] = lvl
+	return true
+
+# --- the derivations --------------------------------------------------------
+#
+# THE definitions. The panel annotates from these, so an annotation can never
+# fabricate a cap by copying the formula and dropping a clamp.
+
+func height_cap() -> int:
+	return mini(BASE_HEIGHT_CAP + HEIGHT_PER_LEVEL * level_of("height"), MAX_HEIGHT_CAP)
+
+func starting_shafts() -> int:
+	return mini(BASE_STARTING_SHAFTS + level_of("shafts"), Building.MAX_SHAFTS)
+
+## The level an upgrade BEGINS a run at. Takes an Upgrades id, not a node id.
+func starting_level(upgrade_id: String) -> int:
+	for node_id in NODE_TO_UPGRADE:
+		if NODE_TO_UPGRADE[node_id] == upgrade_id:
+			return level_of(node_id)
+	return 0
+
+## Clamps in FLOAT space before the int() cast, because out-of-range float->int
+## is platform-defined (it saturates on arm64; the ship target is threadless
+## WASM, a different toolchain) and a dev-machine test would pass either way.
+## Type first: is_finite(Dictionary) is itself a runtime error.
+static func _clamped_int(v: Variant, lo: int, hi: int) -> int:
+	var t := typeof(v)
+	if t != TYPE_INT and t != TYPE_FLOAT:
+		return lo
+	var fv := float(v)
+	if not is_finite(fv) or fv != floorf(fv):
+		return lo
+	return int(clampf(fv, float(lo), float(hi)))
+
 ## Numeric, finite, integral, and within [lo, hi]. TYPE FIRST: is_finite() on a
 ## Dictionary is itself a runtime error, so the order is load-bearing rather
 ## than stylistic.
