@@ -170,6 +170,47 @@ func is_zero_delta(id: String) -> bool:
 	var lvl := level_of(id)
 	return is_equal_approx(effect_value(id, lvl), effect_value(id, lvl + 1))
 
+## Blueprints raise per-run ceilings. data/ holds the ladder's TOP rung; the
+## live cap is whatever the run was started with.
+##
+## is_maxed() is the only reader of max_level, and purchase() gates on it at
+## :83. cost_of() does NOT read it -- it reads base, growth and level_of -- so
+## an implementer should not go looking for a change there.
+##
+## Clamped to [0, inf): GameState.new(1, 1, 7) exists in this suite today, and
+## a budget of floor_count - BASE_FLOORS is then negative.
+func set_max_level(id: String, level: int) -> void:
+	if not _defs.has(id):
+		return
+	_defs[id]["max_level"] = maxi(level, 0)
+
+## Levels the run BEGINS with -- granted size and Meta-granted mechanicals.
+##
+## Takes the Building because Upgrades owns no cars: _sync_car() needs an
+## ElevatorCar (:169), so a signature without it cannot keep its promise, and a
+## Meta with motor: 4 would report level_of("speed") == 4 while every car on the
+## fresh board still ran at base speed.
+##
+## It sets _levels[id] and syncs each car. It NEVER calls _apply() and never
+## changes building.floor_count or cars.size(): an implementer mirroring
+## purchase() (:82-94) would call building.add_floor() fourteen times, and on
+## the decode path -- where _init is handed the SAVED size -- that grows the
+## building past saved_floors.size() and every reload silently adds floors.
+##
+## Granting also consumes the price ladder, because cost_of prices from
+## level_of: without it a run starting with four shafts would price the FIFTH
+## at $500 instead of $5,324.
+##
+## Grants apply at construction only, and restore_levels overwrites, so buying a
+## Mechanical node mid-run does nothing until the next rebuild. That is
+## intended; the prestige panel says so.
+func grant_level(id: String, level: int, building: Building) -> void:
+	if not _defs.has(id):
+		return
+	_levels[id] = clampi(level, 0, int(_defs[id]["max_level"]))
+	for car in building.cars:
+		_sync_car(car)
+
 func _sync_car(car: ElevatorCar) -> void:
 	car.spring_multiplier = effect_value("spring", level_of("spring"))
 	car.door_ticks = int(effect_value("doors", level_of("doors")))

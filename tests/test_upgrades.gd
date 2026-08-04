@@ -180,3 +180,81 @@ func test_an_upgrade_note_survives_the_load() -> void:
 	assert_true(u.load_defs("res://data/upgrades.json"), "loads")
 	assert_string_contains(u.note_of("auto"), "shaft", "the note is there")
 	assert_eq(u.note_of("speed"), "", "and an upgrade with no note reads empty")
+
+# --- the per-run ceiling and the levels a run BEGINS with --------------------
+
+func fresh_upgrades() -> Upgrades:
+	var u := Upgrades.new()
+	assert_true(u.load_defs("res://data/upgrades.json"), "defs")
+	return u
+
+func test_set_max_level_moves_the_purchasable_ceiling() -> void:
+	var u := fresh_upgrades()
+	u.set_max_level("floor", 4)
+	for i in range(4):
+		assert_false(u.is_maxed("floor"), "purchase %d is allowed" % i)
+		u.restore_levels({"floor": i + 1})
+	assert_true(u.is_maxed("floor"), "and the fifth is not")
+
+func test_set_max_level_never_goes_negative() -> void:
+	# GameState.new(1, 1, 7) exists in this suite today, so a budget of
+	# floor_count - BASE_FLOORS is -5.
+	var u := fresh_upgrades()
+	u.set_max_level("floor", -5)
+	assert_true(u.is_maxed("floor"), "a negative budget is no budget")
+
+func test_set_max_level_ignores_an_unknown_id() -> void:
+	var u := fresh_upgrades()
+	u.set_max_level("wizardry", 4)
+	assert_true(u.is_maxed("wizardry"), "still unknown, still maxed")
+
+func test_grant_level_sets_the_level_without_building_anything() -> void:
+	# An implementer mirroring purchase() would call building.add_floor()
+	# fourteen times -- and on the decode path, where _init is handed the SAVED
+	# size, that grows the building past saved_floors.size() and every reload
+	# silently adds floors.
+	var u := fresh_upgrades()
+	var b := Building.new(6, 1)
+	u.set_max_level("floor", 14)
+	u.grant_level("floor", 4, b)
+	assert_eq(u.level_of("floor"), 4, "the level moved")
+	assert_eq(b.floor_count, 6, "the building did not")
+
+func test_grant_level_syncs_every_car() -> void:
+	# A Meta with motor: 4 reporting level_of("speed") == 4 while every car ran
+	# at base speed is the node silently doing nothing.
+	var u := fresh_upgrades()
+	var b := Building.new(6, 2)
+	u.grant_level("speed", 4, b)
+	assert_almost_eq(b.cars[0].floors_per_tick, u.effect_value("speed", 4), 1e-9,
+		"car 0")
+	assert_almost_eq(b.cars[1].floors_per_tick, u.effect_value("speed", 4), 1e-9,
+		"every car, not just the first")
+
+func test_grant_level_clamps_to_the_max() -> void:
+	var u := fresh_upgrades()
+	var b := Building.new(6, 1)
+	u.set_max_level("floor", 4)
+	u.grant_level("floor", 99, b)
+	assert_eq(u.level_of("floor"), 4, "clamped up")
+	u.grant_level("shaft", -5, b)
+	assert_eq(u.level_of("shaft"), 0,
+		"clamped down -- a negative level prices below base and unreaches is_maxed")
+
+func test_a_granted_shaft_consumes_its_own_price_ladder() -> void:
+	# Otherwise a run starting with four shafts prices the FIFTH at $500 rather
+	# than $5,324 -- the limitation already documented for --board=40x8, which
+	# is harmless for screenshots and a balance hole here.
+	var u := fresh_upgrades()
+	var b := Building.new(6, 4)
+	var first_price := u.cost_of("shaft")
+	u.grant_level("shaft", 3, b)
+	assert_gt(u.cost_of("shaft"), first_price * 5.0, "the ladder was consumed")
+
+func test_grant_level_does_not_charge_anything() -> void:
+	var u := fresh_upgrades()
+	var b := Building.new(6, 1)
+	var econ := Economy.new()
+	u.grant_level("speed", 3, b)
+	assert_eq(econ.cash, 0.0, "granted levels are not bought")
+	assert_eq(u.level_of("speed"), 3, "but they are real")
