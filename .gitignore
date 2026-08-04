@@ -7,3 +7,11 @@ export.cfg
 build/
 export_credentials.cfg
 .superpowers/
+
+# Claude Code scratch. NOT a blanket .claude/ ignore: real config there
+# (settings.json, hooks, skills) should still show up and be committable.
+# These two are machine-local noise -- worktrees/ holds registered git
+# worktrees, which git already tracks as branches and must not be committed
+# as files.
+.claude/worktrees/
+.claude/.cc-writes/
