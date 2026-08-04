@@ -31,6 +31,16 @@ extends RefCounted
 const VERSION := 4
 const SUPPORTED_VERSIONS := [1, 2, 3, 4]
 
+## Bounds for the save-derived values that have no natural ceiling elsewhere.
+## MAX_MONEY is far past any reachable balance and exists only to keep INF out
+## of a currency: once any of these is INF every comparison degrades silently.
+const MAX_MONEY := 1e15
+## CAPACITY_BASE + capacity.max_level, and MIN_SPEED keeps a car from being
+## frozen in place by a saved zero.
+const MAX_CAPACITY := Upgrades.CAPACITY_BASE + 8
+const MAX_SPEED := Upgrades.SPEED_BASE * (1.0 + 0.25 * 12.0)
+const MIN_SPEED := 0.0001
+
 ## v3 is a KEY RENAME, not a format change: a v1 or v2 save differs only in how
 ## these are spelled. Migration runs before _is_usable, which indexes the new
 ## names.
@@ -81,6 +91,35 @@ static func _migrate_to_v3(data: Dictionary) -> Dictionary:
 ##
 ## Type first, then value, throughout: is_finite(Dictionary) is itself a
 ## runtime error.
+## Every conversion whose argument comes from the save is type-guarded in a
+## frame that can still refuse -- in decode, never in a `void` callee.
+## restore_levels is exactly the counterexample: it does maxi(int(levels[id]), 0)
+## with no type check, so a container value aborts it MID-LOOP and decode
+## returns a non-null, HALF-restored state.
+##
+## The consequence of a violation is CLAMP, not refuse, for every row these
+## guard. That is a deliberate override of the base design's
+## reject-do-not-clamp rule, stated rather than made silently: SaveStore has no
+## backup-before-refuse for a REFUSED (as opposed to truncated) save and
+## game_root has no writes_disabled latch, so a rejection deletes a building.
+static func _num(v: Variant, fallback: float) -> float:
+	var t := typeof(v)
+	if t != TYPE_INT and t != TYPE_FLOAT:
+		return fallback
+	var fv := float(v)
+	return fv if is_finite(fv) else fallback
+
+## clampf(NAN, 1, 10) returns NAN, so the finite check has to come first and
+## cannot be folded into the clamp.
+static func _bounded(v: Variant, lo: float, hi: float, fallback: float) -> float:
+	return clampf(_num(v, fallback), lo, hi)
+
+## Clamps in FLOAT space before the int() cast: int(roundf(INF)) saturates to
+## 9223372036854775807 on arm64 and is platform-defined on WASM, which is
+## exactly the hazard yield_for refuses to accept.
+static func _bounded_int(v: Variant, lo: int, hi: int, fallback: int) -> int:
+	return int(_bounded(v, float(lo), float(hi), float(fallback)))
+
 static func _preflight(data: Dictionary) -> bool:
 	if not _is_number(data.get("version", 0)):
 		return false
@@ -96,11 +135,13 @@ static func _preflight(data: Dictionary) -> bool:
 			return false
 	return true
 
-## Numeric, finite and integral. A stored null counts as absent for the callers
-## above, which pass their own default in.
+## Numeric, finite and integral.
+##
+## A STORED null is rejected, while an ABSENT key is not: Dictionary.get returns
+## the stored null but the caller's own default when the key is missing, so
+## rejecting null here refuses {"version": null} and still lets a v1 save with
+## no such key through to the checks that handle it.
 static func _is_number(v: Variant) -> bool:
-	if v == null:
-		return true
 	var t := typeof(v)
 	if t == TYPE_INT:
 		return true
@@ -238,31 +279,65 @@ static func decode(p_data: Dictionary,
 		return null                 # malformed SHIPPED data is fatal
 
 	var cars: Array = data["cars"]
-	var state := GameState.new(floors, maxi(cars.size(), 1), int(data["seed"]),
-		catalog_path, meta, blueprints_path)
+	# The seed feeds RandomNumberGenerator.seed, so it takes a float-space bound
+	# before the cast like every other integral conversion here.
+	var state := GameState.new(floors, maxi(cars.size(), 1),
+		_bounded_int(data["seed"], 0, 1 << 60, 0), catalog_path, meta, blueprints_path)
 	if not state.is_valid():
 		return null
 
-	state.clock.ticks_executed = int(data["ticks"])
-	state.economy.cash = float(data["cash"])
-	state.economy.lifetime_earnings = float(data.get("lifetime", 0.0))
-	state.economy.combo = float(data.get("combo", 1.0))
-	state.economy.streak = int(data.get("streak", 0))
-	state.economy.riders_served = int(data.get("riders_served", 0))
+	state.clock.ticks_executed = _bounded_int(data["ticks"], 0, 1 << 60, 0)
+	state.economy.cash = _bounded(data["cash"], 0.0, MAX_MONEY, 0.0)
+	state.economy.lifetime_earnings = _bounded(data.get("lifetime", 0.0), 0.0,
+		MAX_MONEY, 0.0)
+	# `combo` is restored beside `lifetime` and writes straight INTO it:
+	# credit_delivery does `paid = fare * combo; lifetime_earnings += paid` and
+	# then heals the combo on the next line, so "combo": 1e400 poisons the
+	# prestige input on the first delivery, after any check on `lifetime` has
+	# run, and erases its own evidence.
+	state.economy.combo = _bounded(data.get("combo", 1.0), 1.0, Economy.COMBO_MAX, 1.0)
+	state.economy.streak = _bounded_int(data.get("streak", 0), 0, 1 << 40, 0)
+	state.economy.riders_served = _bounded_int(data.get("riders_served", 0), 0,
+		1 << 40, 0)
 
 	# Levels before cars: restoring a level runs no effect, so the car values
 	# saved alongside them are the authority on what the cars actually are.
-	state.upgrades.restore_levels(data.get("levels", {}))
+	#
+	# Type-guarded HERE, in a frame that can still refuse, because
+	# restore_levels is void: aborting inside it half-restores and hands back a
+	# non-null state whose surviving levels depend on iteration order.
+	var levels: Dictionary = data.get("levels", {})
+	for id in levels.keys():
+		var lt := typeof(levels[id])
+		if lt != TYPE_INT and lt != TYPE_FLOAT:
+			return null
+	state.upgrades.restore_levels(levels)
 
+	var top_floor := float(state.building.floor_count - 1)
 	for i in range(mini(cars.size(), state.building.cars.size())):
+		if typeof(cars[i]) != TYPE_DICTIONARY:
+			return null
 		var saved: Dictionary = cars[i]
 		var car: ElevatorCar = state.building.cars[i]
-		car.position_floor = float(saved.get("position_floor", 0.0))
-		car.target_floor = int(saved.get("target_floor", 0))
-		car.capacity = int(saved.get("capacity", car.capacity))
-		car.floors_per_tick = float(saved.get("floors_per_tick", car.floors_per_tick))
-		car.door_ticks = int(saved.get("door_ticks", car.door_ticks))
-		car.spring_multiplier = float(saved.get("spring_multiplier", 1.0))
+		# int(roundf(INF)) saturates to int64 max on arm64 and is
+		# platform-defined on WASM, so these are clamped in float space first.
+		car.position_floor = _bounded(saved.get("position_floor", 0.0), 0.0,
+			top_floor, 0.0)
+		car.target_floor = _bounded_int(saved.get("target_floor", 0), 0,
+			state.building.floor_count - 1, 0)
+		# A saved capacity of 1e9 delivers a billion riders in one door cycle,
+		# which is ~$3.09e9 and 5,559 Blueprints -- 59x the whole tree,
+		# permanently. Same route into lifetime_earnings as `combo`.
+		car.capacity = _bounded_int(saved.get("capacity", car.capacity), 1,
+			MAX_CAPACITY, car.capacity)
+		car.floors_per_tick = _bounded(saved.get("floors_per_tick",
+			car.floors_per_tick), MIN_SPEED, MAX_SPEED, car.floors_per_tick)
+		car.door_ticks = _bounded_int(saved.get("door_ticks", car.door_ticks),
+			Upgrades.DOOR_TICKS_MIN, Upgrades.DOOR_TICKS_BASE, car.door_ticks)
+		# The only legitimate non-1.0 value. Leaving one field of four unbounded
+		# invites treating the whole set as advisory.
+		car.spring_multiplier = _bounded(saved.get("spring_multiplier", 1.0), 1.0,
+			Upgrades.SPRING_BASE, 1.0)
 
 	var saved_floors: Array = data.get("floors", [])
 	# v1 may fall through -- §4.3 defines what floors past the roster get.
@@ -276,21 +351,40 @@ static func decode(p_data: Dictionary,
 		return null
 
 	for floor_index in range(mini(saved_floors.size(), state.building.floor_count)):
+		if typeof(saved_floors[floor_index]) != TYPE_DICTIONARY:
+			return null
 		var r: Dictionary = saved_floors[floor_index]
 		if version >= 2 and not (r.has("kind") and r.has("class")):
 			return null
-		var vacant := bool(r.get("vacant", false))
-		state.tenancy.restore_floor(floor_index, float(r.get("satisfaction", 1.0)),
-			vacant, int(r.get("move_out_left", 0)))
-		state.fitout.set_tier(floor_index, clampi(int(r.get("class", 1)), 1,
-			state.catalog.max_tier()))
+		# bool() has NO Variant constructor for String, Dictionary or Array, so
+		# a bare bool(r.get("vacant")) aborts decode's own frame on
+		# {"vacant": "x"} -- a safe null, but an engine error all the same.
+		var raw_vacant: Variant = r.get("vacant", false)
+		var vacant := false
+		if typeof(raw_vacant) == TYPE_BOOL:
+			vacant = raw_vacant
+		elif typeof(raw_vacant) == TYPE_INT or typeof(raw_vacant) == TYPE_FLOAT:
+			vacant = _num(raw_vacant, 0.0) != 0.0
+		state.tenancy.restore_floor(floor_index,
+			_bounded(r.get("satisfaction", 1.0), 0.0, 1.0, 1.0), vacant,
+			_bounded_int(r.get("move_out_left", 0), 0, Tenancy.MOVE_OUT_TICKS, 0))
+		state.fitout.set_tier(floor_index,
+			_bounded_int(r.get("class", 1), Fitout.BASE_TIER, state.catalog.max_tier(),
+				Fitout.BASE_TIER))
 		state.tenancy.set_kind(floor_index, _restore_kind(state, floor_index, version, r, vacant))
 
 	# Policies go through set_policy, so a save cannot grant a shaft a policy
 	# the hardware does not support or more licences than were bought.
 	var policies: Array = data.get("policies", [])
 	for shaft in range(mini(policies.size(), state.building.cars.size())):
-		state.set_policy(shaft, int(policies[shaft]))
+		# Per-element NUMERIC, not per-element Dictionary: the elements are
+		# integers, and a container check here would silently drop every saved
+		# dispatch policy.
+		var preset := _bounded_int(policies[shaft], 0, 1 << 20,
+			DispatchPolicy.Preset.MANUAL)
+		if not DispatchPolicy.PRESET_ORDER.has(preset):
+			preset = DispatchPolicy.Preset.MANUAL
+		state.set_policy(shaft, preset)
 
 	return state
 

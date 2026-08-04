@@ -443,3 +443,240 @@ func test_the_real_device_fixture_is_grandfathered_and_charged_nothing() -> void
 	assert_eq(after.meta.blueprints, 0, "granted, never charged")
 	assert_eq(after.meta.level_of("height"), 0, "seven floors implies no height")
 	assert_eq(after.meta.height_cap(), 10, "so it gets the base cap")
+
+# --- the fields Meta.restore() never sees -----------------------------------
+
+func test_a_poisoned_lifetime_yields_nothing() -> void:
+	var data := SaveCodec.encode(played_state())
+	data["lifetime"] = 1e400
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "clamped, not refused")
+	assert_eq(Prestige.yield_for(after.economy.lifetime_earnings), 0, "no mint")
+
+func test_a_poisoned_combo_cannot_poison_lifetime_on_the_first_delivery() -> void:
+	# The single most important test here. A `lifetime` check alone does not
+	# close this: credit_delivery multiplies the field the conversion consumes
+	# and then heals the combo to 10.0 on the very next line, erasing its own
+	# evidence. yield_for(INF) is a billion Blueprints from one passenger.
+	var data := SaveCodec.encode(played_state())
+	data["combo"] = 1e400
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "clamped, not refused")
+	assert_true(after.economy.combo <= Economy.COMBO_MAX, "clamped to the cap")
+	after.economy.credit_delivery(3.0)
+	assert_true(is_finite(after.economy.lifetime_earnings), "and lifetime survived it")
+
+func test_a_nan_combo_is_replaced_rather_than_clamped() -> void:
+	# clampf(NAN, 1, 10) returns NAN, so the clamp alone is not enough.
+	var data := SaveCodec.encode(played_state())
+	data["combo"] = NAN
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "not refused")
+	assert_true(is_finite(after.economy.combo), "finite")
+
+func test_a_poisoned_cash_does_not_make_everything_free() -> void:
+	var data := SaveCodec.encode(played_state())
+	data["cash"] = 1e400
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "not refused")
+	assert_true(is_finite(after.economy.cash), "finite")
+	assert_false(after.economy.can_afford(1e308), "can_afford is not unconditional")
+
+func test_a_negative_cash_clamps_to_zero() -> void:
+	var data := SaveCodec.encode(played_state())
+	data["cash"] = -1
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "clamped, not refused")
+	assert_eq(after.economy.cash, 0.0, "floored")
+
+func test_a_string_where_a_number_belongs_falls_back_rather_than_coercing() -> void:
+	# int("abc") == 0 and float("abc") == 0.0 with NO error, so a string is the
+	# poison that proves the TYPE check fires rather than the finite/range check
+	# behind it -- without one, every string silently coerces.
+	#
+	# For `cash` the fallback IS zero, because decode constructs a fresh state
+	# and there is no prior value to keep. So the money is lost either way; what
+	# the type check buys is that the loss is a decision rather than an accident,
+	# and that the same rule protects `combo` and the per-car fields, where the
+	# fallback is a real value and the coercion would be catastrophic.
+	var data := SaveCodec.encode(played_state())
+	data["cash"] = "abc"
+	data["combo"] = "abc"
+	(data["cars"] as Array)[0]["capacity"] = "abc"
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "not refused -- refusing here would delete the building")
+	assert_eq(after.economy.cash, 0.0, "cash has no prior value to fall back to")
+	assert_eq(after.economy.combo, 1.0, "combo falls back to its neutral value")
+	# Not to zero, and not to the restored LEVEL either: restore_levels runs no
+	# effect by design (the saved car values are the authority), so the fallback
+	# is the value the constructor gave the car. A seat is lost; a car frozen at
+	# capacity 0 is not.
+	assert_eq(after.building.cars[0].capacity, Upgrades.CAPACITY_BASE,
+		"capacity falls back to the constructor's value, never to zero")
+
+func test_a_capacity_of_a_billion_does_not_mint_blueprints() -> void:
+	# 1e9 riders in one door cycle is ~$3.09e9, which is 5,559 BP -- 59x the
+	# whole tree, permanently.
+	var data := SaveCodec.encode(played_state())
+	(data["cars"] as Array)[0]["capacity"] = 1000000000
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "clamped, not refused")
+	assert_true(after.building.cars[0].capacity <= Upgrades.CAPACITY_BASE + 8,
+		"bounded by its own max_level")
+
+func test_every_per_car_field_is_bounded() -> void:
+	var data := SaveCodec.encode(played_state())
+	var car: Dictionary = (data["cars"] as Array)[0]
+	car["floors_per_tick"] = 1e400
+	car["door_ticks"] = -50
+	car["spring_multiplier"] = 1e400
+	car["position_floor"] = 1e400
+	car["target_floor"] = 1e400
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "clamped, not refused")
+	var c: ElevatorCar = after.building.cars[0]
+	assert_true(is_finite(c.floors_per_tick) and c.floors_per_tick > 0.0, "speed")
+	assert_true(c.door_ticks >= Upgrades.DOOR_TICKS_MIN, "doors")
+	assert_true(c.spring_multiplier >= 1.0
+		and c.spring_multiplier <= Upgrades.SPRING_BASE, "spring")
+	assert_true(c.position_floor >= 0.0
+		and c.position_floor <= float(after.building.floor_count - 1), "position")
+	assert_true(c.target_floor >= 0
+		and c.target_floor <= after.building.floor_count - 1, "target")
+
+func test_a_levels_value_that_is_a_container_refuses_rather_than_half_restoring() -> void:
+	# restore_levels is a VOID callee: aborting mid-loop leaves decode running
+	# and returns a NON-NULL, half-restored state, with which levels survive
+	# depending on dictionary iteration order. That is the real violation of
+	# "never half-read into a state that looks fine and is not".
+	var data := SaveCodec.encode(played_state())
+	(data["levels"] as Dictionary)["speed"] = {}
+	assert_null(SaveCodec.decode(data), "refused whole, never half-read")
+
+func test_a_policy_element_that_is_not_a_preset_falls_back_to_manual() -> void:
+	var data := SaveCodec.encode(played_state())
+	(data["policies"] as Array)[0] = 9999
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "not refused")
+	assert_eq(after.auto.preset_of(0), DispatchPolicy.Preset.MANUAL, "fell back")
+
+func test_a_non_boolean_vacant_does_not_throw() -> void:
+	# bool() has NO Variant constructor for String, Dictionary or Array, so a
+	# bare bool(r.get("vacant")) aborts decode's own frame on {"vacant": "x"} --
+	# a safe null, but an engine error, and GUT fails the sweep on it.
+	var data := SaveCodec.encode(played_state())
+	(data["floors"] as Array)[0]["vacant"] = "x"
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "not refused")
+	assert_false(after.tenancy.is_vacant(0), "and reads as tenanted")
+
+func test_a_poisoned_satisfaction_is_bounded() -> void:
+	var data := SaveCodec.encode(played_state())
+	(data["floors"] as Array)[0]["satisfaction"] = 1e400
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "not refused")
+	assert_true(after.tenancy.satisfaction_at(0) <= 1.0, "bounded")
+
+func test_a_poisoned_seed_still_produces_a_usable_run() -> void:
+	var data := SaveCodec.encode(played_state())
+	data["seed"] = 1e400
+	var after := SaveCodec.decode(data)
+	assert_not_null(after, "not refused")
+	after.tick(10)
+	assert_true(true, "and ticking it does not throw")
+
+# --- the generative sweep ---------------------------------------------------
+
+## Every leaf path in a nested Dictionary/Array, as an array of keys/indices.
+func leaf_paths(value: Variant, prefix: Array) -> Array:
+	var out := []
+	match typeof(value):
+		TYPE_DICTIONARY:
+			for k in (value as Dictionary):
+				out.append_array(leaf_paths((value as Dictionary)[k], prefix + [k]))
+		TYPE_ARRAY:
+			for i in range((value as Array).size()):
+				out.append_array(leaf_paths((value as Array)[i], prefix + [i]))
+		_:
+			if not prefix.is_empty():
+				out.append(prefix)
+	return out
+
+func poke(container: Variant, path: Array, value: Variant) -> void:
+	var node: Variant = container
+	for i in range(path.size() - 1):
+		node = node[path[i]]
+	node[path[path.size() - 1]] = value
+
+## Whatever decode hands back must be a state the sim can actually run. This is
+## the general invariant, which does not go stale when a key is added -- unlike
+## a hand-written table of expected outcomes, and this spec adds a key.
+func assert_sane(s: GameState, why: String) -> void:
+	assert_true(s.building.floor_count >= 1
+		and s.building.floor_count <= Building.MAX_FLOORS, "%s: floor_count" % why)
+	assert_true(is_finite(s.economy.cash) and s.economy.cash >= 0.0, "%s: cash" % why)
+	assert_true(is_finite(s.economy.lifetime_earnings)
+		and s.economy.lifetime_earnings >= 0.0, "%s: lifetime" % why)
+	assert_true(is_finite(s.economy.combo) and s.economy.combo >= 1.0
+		and s.economy.combo <= Economy.COMBO_MAX, "%s: combo" % why)
+	assert_true(s.meta.blueprints >= 0
+		and s.meta.blueprints <= Meta.MAX_BLUEPRINTS, "%s: blueprints" % why)
+	for c in s.building.cars:
+		assert_true(is_finite(c.floors_per_tick) and c.floors_per_tick > 0.0,
+			"%s: speed" % why)
+		assert_true(c.capacity >= 1 and c.capacity <= Upgrades.CAPACITY_BASE + 8,
+			"%s: capacity" % why)
+		assert_true(c.position_floor >= 0.0
+			and c.position_floor <= float(s.building.floor_count - 1),
+			"%s: position" % why)
+
+func test_a_generative_poison_sweep_never_throws() -> void:
+	# Walk encode()'s output RECURSIVELY and poison every leaf in turn. A
+	# hand-written matrix goes stale the moment a key is added, and a
+	# top-level-only sweep goes stale the moment a value nests -- v4 does both.
+	#
+	# GUT fails a test on unhandled engine errors, so "never throws" is an
+	# assertion this harness genuinely makes rather than a wish.
+	var poisons: Array = [{}, [], null, "abc", 1e400, -1, NAN]
+	var checked := 0
+	for path in leaf_paths(SaveCodec.encode(played_state()), []):
+		for poison in poisons:
+			var data := SaveCodec.encode(played_state())
+			poke(data, path, poison)
+			var after := SaveCodec.decode(data)
+			checked += 1
+			if after != null:
+				assert_sane(after, "%s = %s" % [path, poison])
+	assert_gt(checked, 300, "the sweep actually walked the payload")
+
+func test_the_structural_fields_refuse_a_wrong_type() -> void:
+	# The other half of the oracle: these are not clamped, they are refused,
+	# because a container that is not a container has no salvageable reading.
+	var wrong := {
+		"version": [{}, [], "abc", null],
+		"floor_count": [{}, [], "abc", null],
+		"cars": [{}, "abc", null, 5],
+		"floors": [{}, "abc", null, 5],
+		"policies": [{}, "abc", null, 5],
+		"levels": [[], "abc", null, 5],
+	}
+	for key in wrong:
+		for poison in wrong[key]:
+			var data := SaveCodec.encode(played_state())
+			data[key] = poison
+			assert_null(SaveCodec.decode(data), "%s = %s is refused" % [key, poison])
+
+func test_poisoning_the_meta_never_costs_the_building() -> void:
+	# Losing a tech tree beats losing a building, and this is the sweep's
+	# version of that rule.
+	for path in leaf_paths(SaveCodec.encode(played_state()), []):
+		if str(path[0]) != "meta":
+			continue
+		for poison in [{}, [], null, "abc", 1e400, -1, NAN]:
+			var data := SaveCodec.encode(played_state())
+			poke(data, path, poison)
+			var after := SaveCodec.decode(data)
+			assert_not_null(after, "%s = %s must not refuse" % [path, poison])
+			if after != null:
+				assert_eq(after.building.floor_count, 7,
+					"%s = %s keeps the building" % [path, poison])
