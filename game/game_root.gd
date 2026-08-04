@@ -41,6 +41,7 @@ var state: GameState
 var _view: BuildingView
 var _management: ManagementView
 var panel: FloorPanel
+var _prestige: PrestigePanel
 ## A test-facing seam for hall selection: the hall tap sets this, which is what
 ## lets the input tests observe it.
 var last_selected_floor: int = -1
@@ -160,6 +161,12 @@ func _ready() -> void:
 	panel.lease_requested.connect(_on_lease_requested)
 	panel.upgrade_requested.connect(_on_upgrade_requested)
 
+	_prestige = PrestigePanel.new()
+	_prestige.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_prestige)
+	_prestige.bind(state)
+	_prestige.node_purchase_requested.connect(_on_node_purchase)
+
 	# Paging the shaft strip is a tap, never a swipe: the dispatch drag is
 	# vertical and arcs sideways by more than half a column (§2.1), so any
 	# horizontal read on the board itself would steal the primary verb.
@@ -230,6 +237,18 @@ func _on_hall_floor_selected(floor_index: int) -> void:
 func _on_lease_requested(floor_index: int, kind_id: String) -> void:
 	if state.lease(floor_index, kind_id):
 		panel.show_floor(state, floor_index)   # reflect the new tenant and close the picker
+
+func _on_prestige_requested() -> void:
+	_prestige.open(state)
+
+## A node purchase mutates PERSISTENT state, so it is written immediately rather
+## than waiting for the ten-second autosave. That is why it routes through a
+## signal like FloorPanel.lease_requested instead of ManagementView's direct
+## _state.buy().
+func _on_node_purchase(id: String) -> void:
+	if state.meta.buy(id, state.upgrades):
+		save_now()
+		_prestige.refresh()
 
 func _on_upgrade_requested(floor_index: int) -> void:
 	if state.upgrade_class(floor_index):
