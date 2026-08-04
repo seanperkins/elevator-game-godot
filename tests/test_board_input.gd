@@ -201,7 +201,12 @@ func test_a_tap_after_scrolling_still_hits_the_floor_it_looks_like() -> void:
 	# by a scroll offset is self-consistent on screen and catastrophic in play.
 	await build_to(20)
 	await wait_physics_frames(2)
-	view.scroll_board_by(700.0)
+	# 760, and it has moved twice: once when FLOOR_HEIGHT went 88 -> 120, once
+	# when HUD_HEIGHT went 96 -> 132 and took 36 units off the board. The three
+	# taps below must all land ON the board, so the number is bounded at both
+	# ends -- floor 4 at 1100 must clear the viewport's bottom and floor 12 at
+	# 140 must stay below its top.
+	view.scroll_board_by(760.0)
 	await wait_physics_frames(2)
 	for target in [4, 9, 12]:
 		await do_tap(column_x(0), floor_centre_y(target))

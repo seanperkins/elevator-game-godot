@@ -24,7 +24,13 @@ var blueprints_path_override: String = ""
 
 var _error_label: Label = null
 
-const HUD_HEIGHT := 96.0
+## 96 held two lines of type and a clock. It now holds two lines at the larger
+## sizes plus the day strip -- and 96 was already overflowing: a font-38 cash
+## line from y 10 reaches y 57, where the rate line used to start at 48.
+const HUD_HEIGHT := 132.0
+## The day chart's band inside the HUD, full width less the side margins.
+const DAY_STRIP_TOP := 96.0
+const DAY_STRIP_HEIGHT := 28.0
 const TOUCH_MIN := 88.0          # 48pt at the 0.546 iPhone scale
 
 ## Insets the hardware has already claimed -- Dynamic Island, home indicator,
@@ -47,7 +53,7 @@ var _prestige: PrestigePanel
 var last_selected_floor: int = -1
 var _cash_label: Label
 var _rate_label: Label
-var _clock_label: Label
+var _day_strip: DaySparkline
 var _view_button: Button
 var _dev_button: Button
 var _dev: DevPanel
@@ -157,18 +163,21 @@ func _ready() -> void:
 
 	_rate_label = Label.new()
 	_rate_label.add_theme_font_size_override("font_size", 22)
-	_rate_label.position = Vector2(16 + _safe.x, 48 + _safe.y)
+	_rate_label.position = Vector2(16 + _safe.x, 60 + _safe.y)
 	add_child(_rate_label)
 
 	# Third line of the left column. Cash occupies y 10-44 and the rate 48-68,
 	# so 72-92 is the last free band inside HUD_HEIGHT (96) -- nothing moves to
 	# make room. Dimmed to the pager's grey: the hour is context, not a number
 	# the player acts on.
-	_clock_label = Label.new()
-	_clock_label.add_theme_font_size_override("font_size", 22)
-	_clock_label.add_theme_color_override("font_color", Palette.INK_MUTED)
-	_clock_label.position = Vector2(16 + _safe.x, 72 + _safe.y)
-	add_child(_clock_label)
+	# The clock was a bare "09:00", which said what time it was and nothing about
+	# what that MEANT. The strip below is the same fact plus the one that decides
+	# anything: the whole building's traffic across the day, with a playhead on
+	# the hour now running. A quiet building and a broken one no longer look the
+	# same, which is the thing a bare clock could never fix.
+	_day_strip = DaySparkline.new()
+	_day_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_day_strip)
 
 	_rebuild_views()
 
@@ -644,4 +653,7 @@ func _physics_process(delta: float) -> void:
 		Metrics.format_rate(state.metrics.deliveries()), state.economy.combo]
 	# A bucket is 30 real seconds, so this advances about two hours a minute --
 	# enough to read the rush coming rather than just noticing it arrived.
-	_clock_label.text = "%02d:00" % state.clock.hour_of_day()
+	_day_strip.position = Vector2(16 + _safe.x, DAY_STRIP_TOP + _safe.y)
+	_day_strip.size = Vector2(size.x - 32 - _safe.x - _safe.z, DAY_STRIP_HEIGHT)
+	_day_strip.show_series(state.day_rates(), state.day_mixes())
+	_day_strip.set_now(state.clock.hour_of_day())

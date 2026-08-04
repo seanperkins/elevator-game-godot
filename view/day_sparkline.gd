@@ -15,7 +15,11 @@ extends Control
 
 const BAR_COUNT := 24
 
-var _kind: TenantKind
+## Both callers reduce to the same two arrays, so _draw() has one shape to read
+## and the seams below have one thing to report. A kind's curve and a whole
+## building's differ only in where the numbers came from.
+var _rates: PackedFloat32Array = PackedFloat32Array()
+var _mixes: Array[Vector3] = []
 var _now: int = -1
 
 ## The three series separate by HUE, not lightness -- they are thin strokes and
@@ -27,8 +31,24 @@ const COLOUR_INTERFLOOR := Palette.TRAFFIC_INTER  # neither, blunt
 ## of them without hiding the mix underneath.
 const COLOUR_NOW := Palette.TRAFFIC_NOW
 
+## One kind's day -- the lease picker's question, "what is this tenant like".
 func show_kind(kind: TenantKind) -> void:
-	_kind = kind
+	_rates = PackedFloat32Array()
+	_mixes = []
+	if kind != null:
+		for h in range(BAR_COUNT):
+			_rates.append(kind.rate_at(h))
+			var i := kind.inbound_at(h)
+			var o := kind.outbound_at(h)
+			_mixes.append(Vector3(i, o, maxf(1.0 - i - o, 0.0)))
+	queue_redraw()
+
+## The whole building's day -- the HUD's question, "what is about to happen to
+## ME". Fed from BuildingDay, which sums the same TrafficSource array the
+## spawner consumes, so the picture cannot disagree with the traffic.
+func show_series(rates: PackedFloat32Array, mixes: Array[Vector3]) -> void:
+	_rates = rates
+	_mixes = mixes
 	queue_redraw()
 
 ## Mark where the day currently is. Takes the hour from `SimClock.hour_of_day()`,
@@ -50,26 +70,21 @@ func playhead_bar() -> int:
 func bar_heights() -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	var top := 0.0
-	if _kind != null:
-		for h in range(BAR_COUNT):
-			top = maxf(top, _kind.rate[h])
+	for r in _rates:
+		top = maxf(top, r)
 	top = maxf(top, 0.0001)
 	for h in range(BAR_COUNT):
-		out.append(_kind.rate[h] / top if _kind != null else 0.0)
+		out.append(_rates[h] / top if h < _rates.size() else 0.0)
 	return out
 
 ## (inbound, outbound, interfloor) shares of the hour, summing to 1.
 func segment_shares(bucket: int) -> Vector3:
-	if _kind == null:
+	if _mixes.is_empty():
 		return Vector3.ZERO
-	var i := posmod(bucket, TenantKind.BUCKETS)
-	var inbound := _kind.inbound[i]
-	var outbound := _kind.outbound[i]
-	var interfloor := maxf(1.0 - inbound - outbound, 0.0)
-	return Vector3(inbound, outbound, interfloor)
+	return _mixes[posmod(bucket, _mixes.size())]
 
 func _draw() -> void:
-	if _kind == null:
+	if _rates.is_empty():
 		return
 	var heights := bar_heights()
 	var bar_width := size.x / float(BAR_COUNT)

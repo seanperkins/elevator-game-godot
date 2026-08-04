@@ -33,6 +33,12 @@ var metrics: Metrics
 var auto: AutoDispatch
 
 var _source_cache: Array[TrafficSource] = []
+## The building's day, cached against the SAME revision as the sources it is
+## derived from. Recomputing it per frame would be 24 x floors of arithmetic at
+## 60Hz on a threadless export, for a curve that only moves when somebody leases.
+var _day_rates: PackedFloat32Array = PackedFloat32Array()
+var _day_mixes: Array[Vector3] = []
+var _day_revision: int = -1
 var _source_revision: int = -1
 
 ## The starting assignment: six kind ids, one per floor from the lobby up. NOT
@@ -370,6 +376,29 @@ func _sources() -> Array[TrafficSource]:
 				catalog.fare_multiplier(fitout.tier_at(floor_index))))
 		_source_revision = revision
 	return _source_cache
+
+## The whole building's traffic curve, for the HUD's day chart: 24 absolute
+## rates and 24 directional mixes. Derived from the same TrafficSource array the
+## spawner consumes, so the picture cannot disagree with what actually spawns.
+func day_rates() -> PackedFloat32Array:
+	_refresh_day()
+	return _day_rates
+
+func day_mixes() -> Array[Vector3]:
+	_refresh_day()
+	return _day_mixes
+
+func _refresh_day() -> void:
+	var revision := tenancy.revision() + fitout.revision()
+	if revision == _day_revision:
+		return
+	var src := _sources()
+	_day_rates = BuildingDay.rates(src)
+	_day_mixes = []
+	var lobby := not tenancy.is_vacant(0)
+	for hour in range(TenantKind.BUCKETS):
+		_day_mixes.append(BuildingDay.mix(src, hour, lobby))
+	_day_revision = revision
 
 func _spawn() -> void:
 	for p in spawner.spawn_from_sources(clock.sim_minute(), _sources(),
