@@ -9,6 +9,10 @@ extends Control
 ## upgrade levels come from a user:// save at Milestone 6, on a github.io origin
 ## shared with every other Pages site on the account (see main.gd).
 
+## Opening the prestige panel is a view change, so it is announced rather than
+## performed: game_root owns which surface is showing.
+signal prestige_requested()
+
 const BUTTON_HEIGHT := 88.0       # 48pt at the 0.546 iPhone scale
 const MARGIN := 12.0
 
@@ -17,6 +21,7 @@ var _floors: Dictionary = {}        # id -> Button
 var _riders: Label
 var _wait: Label
 var _gaveup: Label
+var _blueprints: Label
 var _dispatch_box: VBoxContainer
 var _dispatch_note: Label
 var _shaft_buttons: Array[Button] = []
@@ -59,6 +64,16 @@ func bind(state: GameState) -> void:
 	_dispatch_box = VBoxContainer.new()
 	_dispatch_box.add_theme_constant_override("separation", 6)
 	box.add_child(_dispatch_box)
+
+	# Last, under everything you could spend cash on: it is the thing you do
+	# when there is nothing left to buy.
+	box.add_child(_heading("REBUILD"))
+	var rebuild := Button.new()
+	rebuild.text = "Demolish and start again"
+	rebuild.custom_minimum_size = Vector2(0, BUTTON_HEIGHT)
+	rebuild.add_theme_font_size_override("font_size", 18)
+	rebuild.pressed.connect(func() -> void: prestige_requested.emit())
+	box.add_child(rebuild)
 	refresh()
 
 func _heading(text: String) -> Control:
@@ -81,6 +96,8 @@ func _build_readout() -> Control:
 	_riders = _stat(floor_index, "riders / min")
 	_wait = _stat(floor_index, "avg wait")
 	_gaveup = _stat(floor_index, "gave up")
+	# It fits: four captions plus separations come to ~253 of ~720 units.
+	_blueprints = _stat(floor_index, "blueprints")
 	return panel
 
 func _stat(parent: Control, caption: String) -> Label:
@@ -115,6 +132,7 @@ func refresh() -> void:
 	_riders.text = Metrics.format_rate(m.deliveries())
 	_wait.text = Metrics.format_wait(m.average_wait_seconds())
 	_gaveup.text = Metrics.format_rate(m.expiries())
+	_blueprints.text = str(_state.meta.blueprints)
 
 	_refresh_dispatch()
 

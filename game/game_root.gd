@@ -153,6 +153,7 @@ func _ready() -> void:
 	_management.visible = false
 	add_child(_management)
 	_management.bind(state)
+	_management.prestige_requested.connect(_on_prestige_requested)
 
 	panel = FloorPanel.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)

@@ -694,3 +694,16 @@ func test_a_sideways_pan_does_not_dispatch() -> void:
 	await wait_physics_frames(2)
 	assert_eq(root.state.building.cars[0].target_floor, before,
 		"looking sideways is not commanding either")
+
+# --- the way into the tree, and the balance ---------------------------------
+
+func test_management_shows_the_blueprint_balance() -> void:
+	root.state.meta.blueprints = 7
+	root._management.refresh()
+	assert_eq(root._management._blueprints.text, "7", "the balance is on screen")
+
+func test_management_opens_the_prestige_panel() -> void:
+	assert_false(root._prestige.visible, "closed to begin with")
+	root._management.prestige_requested.emit()
+	await wait_physics_frames(1)
+	assert_true(root._prestige.visible, "and the heading opens it")
