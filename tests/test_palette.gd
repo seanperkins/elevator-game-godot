@@ -37,13 +37,20 @@ func _hue_gap(a: Color, b: Color) -> float:
 # ------------------------------------------------------------------- ink --
 
 func test_ink_tiers_are_strictly_ordered() -> void:
-	# The hierarchy IS the gap. Any two tiers that land on the same luminance
-	# read as one tier, and the panels lose their primary/secondary structure
-	# even though every individual label still passes a contrast check.
+	# The hierarchy IS the gap. Any two tiers that land on the same weight read
+	# as one tier, and the panels lose their primary/secondary structure even
+	# though every individual label still passes a contrast check.
+	#
+	# Ordered by CONTRAST against the ground, not by luminance. Luminance
+	# ordering is a dark-theme accident: there, louder meant brighter, so the
+	# two agreed. On a light ground louder means DARKER and a luminance test
+	# would demand precisely the wrong thing. Contrast is what actually means
+	# "louder", in either theme -- this test survived the inversion unchanged
+	# in intent and only changed in measure.
 	var tiers := [Palette.INK, Palette.INK_FLOOR, Palette.INK_MUTED, Palette.INK_FAINT]
 	for i in range(tiers.size() - 1):
-		assert_gt(_relative_luminance(tiers[i]), _relative_luminance(tiers[i + 1]),
-			"ink tier %d must be brighter than tier %d" % [i, i + 1])
+		assert_gt(_contrast(tiers[i], Palette.APP_BG), _contrast(tiers[i + 1], Palette.APP_BG),
+			"ink tier %d must be louder than tier %d against the ground" % [i, i + 1])
 
 func test_every_ink_reads_on_the_surface_it_is_drawn_on() -> void:
 	assert_gt(_contrast(Palette.INK, Palette.APP_BG), 4.5, "INK on APP_BG")
@@ -55,23 +62,53 @@ func test_every_ink_reads_on_the_surface_it_is_drawn_on() -> void:
 
 # -------------------------------------------------------------- surfaces --
 
-func test_the_surface_ladder_ascends() -> void:
-	# The board reads as depth only because each layer sits a step lighter than
-	# the one behind it. Reordering any pair inverts the figure and the ground.
+func test_the_surface_ladder_is_monotonic_and_separated() -> void:
+	# The board reads as depth only because each layer steps away from the one
+	# behind it. What matters is that the steps are MONOTONIC and big enough to
+	# see -- not which direction they run.
+	#
+	# The direction is a property of the theme, not of the design: the dark
+	# palette's ladder ascended in luminance, this light one descends. Pinning
+	# "ascends" made the test fail on a correct light palette, which is the test
+	# doing its job -- it forced this to be a decision rather than a drift.
 	var ladder := [Palette.PANEL_BG, Palette.APP_BG, Palette.CARD_BG,
 		Palette.GHOST_BG, Palette.RULE]
-	for i in range(ladder.size() - 1):
-		assert_lt(_relative_luminance(ladder[i]), _relative_luminance(ladder[i + 1]),
-			"surface %d must be darker than surface %d" % [i, i + 1])
+	var lums := []
+	for c in ladder:
+		lums.append(_relative_luminance(c))
+	var descending: bool = lums[0] > lums[1]
+	for i in range(lums.size() - 1):
+		if descending:
+			assert_gt(lums[i], lums[i + 1],
+				"surface ladder must not reverse at step %d" % i)
+		else:
+			assert_lt(lums[i], lums[i + 1],
+				"surface ladder must not reverse at step %d" % i)
+		# A step too small to see is the same failure as a reversal: the two
+		# layers merge and the board flattens.
+		assert_gt(absf(lums[i] - lums[i + 1]), 0.01,
+			"surfaces %d and %d must be distinguishable" % [i, i + 1])
 
 # ------------------------------------------------------------- the car --
 
 func test_the_car_label_reads_against_the_car() -> void:
-	# The regression this exists for: the first theme pass painted cream on the
-	# terracotta car, which measures 2.14:1 -- a floor number, on the one thing
-	# on screen that moves, that you cannot read.
+	# The regression this exists for: a theme pass painted cream on a terracotta
+	# car at 2.14:1 -- a floor number, on the one thing on screen that moves,
+	# that you cannot read. Which ink is correct flipped when the car became the
+	# dark mass; that it must READ did not.
 	assert_gt(_contrast(Palette.INK_ON_LIGHT, Palette.CAR), 4.5,
 		"the car's floor number must read against the car body")
+
+func test_the_fill_ink_beats_the_alternative_on_every_fill_it_lands_on() -> void:
+	# INK_ON_LIGHT is drawn on the car AND on the patience chips, all of which
+	# are mid-luminance. Mid fills are the worst case for text, and the trap is
+	# picking the ink from the theme's mood ("light theme, so pale ink") rather
+	# than from the fill. Pin the comparison instead of the conclusion: whatever
+	# INK_ON_LIGHT is, it must beat the ground colour used as ink on the same
+	# fill -- otherwise the palette is choosing the losing option.
+	for fill in [Palette.CAR, Palette.PATIENCE_OK, Palette.PATIENCE_LOW]:
+		assert_gt(_contrast(Palette.INK_ON_LIGHT, fill), _contrast(Palette.APP_BG, fill),
+			"INK_ON_LIGHT must out-read the page colour on every fill it sits on")
 
 # -------------------------------------------------------------- patience --
 

@@ -3,165 +3,169 @@ extends RefCounted
 
 ## Every colour the game draws, in one place.
 ##
-## The theme is the mid-century travel poster in `brand/art/` -- deep teal
-## ground, terracotta cars, cream ink, gold and vermilion for the two things
-## that are urgent. Before this file the palette was 41 hex literals spread
-## across ten scripts, and a retheme meant finding all of them.
+## The theme is the mid-century travel poster in `brand/art/dir3_in_game.png`.
+## The pigments below are SAMPLED from that mockup, not invented to resemble it
+## -- the file is the reference, and where code and mockup disagree the mockup
+## wins.
 ##
 ## TWO TIERS, on purpose:
 ##
-##   PIGMENTS are named for what they ARE. They are the poster's ink set, and
-##   nothing outside this file should reference them.
+##   PIGMENTS are named for what they ARE. Nothing outside this file should
+##   reference them.
 ##   ROLES are named for what they DO. Every call site uses these.
 ##
 ## The split is what makes the theme cheap to change. Re-mixing a pigment moves
-## everything painted with it; re-pointing a role changes one thing everywhere
-## it appears, without touching a single call site. A flat list of 41 constants
-## would give the second and not the first.
+## everything painted with it; re-pointing a role changes one thing everywhere,
+## without touching a call site. This file has now been re-pointed once -- from
+## a dark ground to a light one, and with the car and shaft masses swapped --
+## and not one call site changed. That is the whole argument for the split.
 ##
-## CONTRAST IS PART OF THE DESIGN, not a nicety applied afterwards. Every ratio
-## below is measured (WCAG relative luminance) against the surface the thing is
-## actually drawn on, and the value was chosen to match what the old dark-blue
-## palette DID rather than to hit a generic target -- a "dim" label that stops
-## being readable is a bug, and a "dim" label promoted to full contrast breaks
-## the hierarchy just as badly. Ratios are quoted per role below.
+## THIS IS A LIGHT THEME, which inverts two things that are easy to get wrong:
+##
+##   "Dim" means CLOSER TO THE GROUND, and on cream that means LIGHTER. A
+##   receding label here is a pale tan; the dark palette's dim brown would be
+##   darker than the body text and would advance instead of recede.
+##   The surface ladder DESCENDS in luminance as layers come forward, where the
+##   dark palette's ascended.
+##
+## Measured: the mockup's median luma is ~206, with 42% of pixels above 180. The
+## dark palette measured 52.5 and 0.0% above 180 -- which is why no amount of
+## sprite art could have closed the gap on its own.
 
 # ---------------------------------------------------------------- pigments --
-# The poster's ink set. Do not reference these outside this file: a call site
-# that says TERRACOTTA cannot be re-themed, one that says CAR can.
+# Sampled from brand/art/dir3_in_game.png. Do not reference outside this file.
 
-const TEAL_INK := Color("0d1f21")     ## nearly black, the bottom of the ground
-const TEAL_DOOR := Color("17303a")
-const TEAL_SHADOW := Color("18302f")
-const TEAL_DEEP := Color("1f3a3d")    ## the ground itself
-const TEAL_MID := Color("24403f")
-const TEAL_LIGHT := Color("2a4a4d")
-const TEAL_RULE := Color("3a5a5c")
-const TEAL_SEAT := Color("3a6b6e")
-const SKY := Color("6fb3b8")
+## The page the whole game sits on -- 17.6% of the mockup, its commonest colour.
+const CREAM := Color("f7eed1")
+const CREAM_PALE := Color("fbf4dc")
+const TAN := Color("e7d5ad")
+const TAN_DEEP := Color("d5bd92")
+## One step past TAN_DEEP, so the hairline and the ghost band are not the same
+## colour. They were, in the first light draft -- two ladder rungs at identical
+## luminance, which the surface test caught as a zero-size step.
+const TAN_RULE := Color("c0a677")
 
-const CREAM := Color("e5d9b5")
-const SAGE_PALE := Color("a8bdb0")
-const SAGE := Color("9db3a6")
-const SAGE_DIM := Color("6f8a80")
-const SLATE_IDLE := Color("3f4f4a")
+## Teal is an ACCENT here (~10% of the mockup), not the ground. It WAS the
+## ground in the dark palette, which is most of why that read as another game.
+const TEAL := Color("649a8c")        ## the car body
+const TEAL_DARK := Color("306b65")   ## its shadow side
+const TEAL_INK := Color("1f3f3c")    ## dark enough to be text
 
-const ROSE := Color("c98f9c")
-const GOLD := Color("e0a33e")
-const TERRACOTTA := Color("d98e5a")
-const VERMILION := Color("d1553a")
-const OLIVE := Color("9ec46f")
-const BROWN_DARK := Color("2b1a12")
-const BROWN_DIM := Color("7d6b52")
+## The shafts: in the mockup these are the dark vertical masses, and the CARS
+## are the pale teal capsules riding inside them. The dark palette had this
+## exactly backwards -- teal shaft, terracotta car.
+const RUST := Color("9d4227")
+const RUST_LIGHT := Color("c76d48")
+
+const GOLD := Color("cc9737")
+const VERMILION := Color("c4462c")
+const BROWN_DARK := Color("2b1a0c")
+const BROWN_FAINT := Color("bda67e")
 
 # ---------------------------------------------------------------- surfaces --
-# A ladder from the darkest ground up. Keep them in this order: the board reads
-# as depth only because each layer sits a step lighter than the one behind it.
+# A ladder from the page FORWARD. On a light theme each layer that comes
+# forward sits a step DARKER, the opposite of the dark palette -- but the
+# requirement is unchanged: adjacent layers must separate, or the board
+# flattens into one field.
 
-## Behind everything -- the HUD strip and the board's own backdrop.
-const APP_BG := TEAL_DEEP
-## Full-screen overlays: management, prestige, the dev panel.
-const PANEL_BG := TEAL_SHADOW
-## A card floating ON an overlay, and the floor panel's body.
-const CARD_BG := TEAL_MID
-## Dims the board behind FloorPanel. Alpha carried from the old 0.62: enough to
-## push the board back, not so much that you lose the floor you just tapped.
-const SCRIM := Color("0d1f21", 0.62)
+## The page behind everything.
+const APP_BG := CREAM
+## Full-screen overlays: management, prestige, the dev panel. Paper laid on the
+## page, so a shade brighter than it.
+const PANEL_BG := CREAM_PALE
+## A card floating on an overlay, and the floor panel's body.
+const CARD_BG := TAN
+## Dims the board behind FloorPanel. A scrim on a LIGHT ground has to work
+## harder to read as "pushed back" than one on a dark ground did.
+const SCRIM := Color("1f3f3c", 0.45)
 ## A shaft's rail, and an empty (unbought) shaft slot -- deliberately the same,
 ## because an empty slot IS a shaft you have not paid for yet.
-const SHAFT_BG := TEAL_MID
-## The ghost floor and ghost shaft: one step lighter than SHAFT_BG so "could
-## exist" reads as nearer than "does exist" without needing an outline.
-const GHOST_BG := TEAL_LIGHT
-## The hairline at the top of a floor band. Without it 40 floors read as one
-## field -- see FloorRow._ready.
-const RULE := TEAL_RULE
+const SHAFT_BG := RUST
+## The lit edge of a shaft, where the mockup catches light down both sides.
+const SHAFT_EDGE := RUST_LIGHT
+## The ghost floor and ghost shaft. "Could exist" must read quieter than
+## anything real, which on a light ground means closer to the page.
+const GHOST_BG := TAN_DEEP
+## The hairline at the top of a floor band.
+const RULE := TAN_RULE
 ## The unfilled part of a crowd bar.
-const BAR_TRACK := TEAL_SHADOW
+const BAR_TRACK := TAN_DEEP
 
 # --------------------------------------------------------------------- ink --
+# Dark on pale. The tiers are ordered by CONTRAST against the ground, not by
+# luminance: contrast ordering is what survives a theme inversion, and the test
+# pins it that way for exactly that reason.
 
-## Primary text on any dark surface. 8.62:1 on APP_BG.
-const INK := CREAM
-## The floor number in the gutter. 6.11:1 on APP_BG -- the old palette's floor
-## number measured 5.98:1 on the old board, so this is the same weight.
-const INK_FLOOR := SAGE_PALE
-## Secondary notes under a control. 6.28:1 on PANEL_BG (old: 5.14:1).
-const INK_MUTED := SAGE
-## Tertiary labels -- row captions, units. 3.74:1 on PANEL_BG (old: 3.17:1).
-## Dimmer than INK_MUTED on purpose; the gap IS the hierarchy.
-const INK_FAINT := SAGE_DIM
-## Ink on a LIGHT fill: the car, and the patience chips. A warm near-black
-## rather than a neutral one, so it belongs to the poster.
+## Primary text.
+const INK := TEAL_INK
+## The floor number in the gutter.
+const INK_FLOOR := Color("2b5d56")
+## Secondary notes under a control.
+const INK_MUTED := Color("4d6b61")
+## Tertiary labels -- row captions, units.
+const INK_FAINT := Color("768a7f")
+## Dark ink on a COLOURED fill -- the patience chips and the car.
 ##
-## This is the role the first theme pass got wrong. It painted cream on the
-## terracotta car, which measures 2.14:1 -- the floor number on a moving car,
-## unreadable. Dark brown on terracotta is 6.33:1, and the old palette's dark
-## ink on the old blue car was 8.35:1, so this restores the intent.
+## Both are mid-luminance, which is the worst case for text: on the mockup's
+## pale teal car, cream measures 2.77:1 and this brown 5.21:1, so dark wins on
+## a fill that a dark theme would have wanted pale ink for. The mockup cannot
+## settle it -- its car carries no floor number at all.
 const INK_ON_LIGHT := BROWN_DARK
 
 # ------------------------------------------------------------------ the car --
 
-## The car itself. Terracotta is the poster's one warm mass against the teal,
-## and the car is the thing the player's eye must track.
-const CAR := TERRACOTTA
+## The car body: the pale teal capsule the mockup rides inside each rust shaft.
+const CAR := TEAL
+## The band across the car -- the doors' seam, pale against the body.
+const CAR_BAND := CREAM_PALE
 ## An empty seat in the rack.
-const SEAT_FREE := TEAL_SEAT
+const SEAT_FREE := TEAL_DARK
 ## The doors, translucent so the seat rack stays readable while shut -- see
 ## ShaftColumn.DOOR_COLOUR's docstring for why that matters.
-const DOOR := Color("17303a", 0.55)
+const DOOR := Color("306b65", 0.55)
 
 # ----------------------------------------------------------- affordability --
 
-## A price you can pay. 6.11:1 on APP_BG.
-const AFFORD := OLIVE
-## A price you cannot. 2.37:1 on APP_BG -- low BY DESIGN, and measured against
-## the old palette's 2.31:1 for the same state. The first theme pass used a
-## brown at 1.86:1, which crossed from "dim" into "not there".
-const AFFORD_OFF := BROWN_DIM
-## The build cap: not a price, a wall. 5.48:1 on APP_BG.
-const CAP_REACHED := GOLD
+## A price you can pay.
+const AFFORD := Color("4f7a1f")
+## A price you cannot. Low contrast BY DESIGN -- and on a light ground "low"
+## means PALE.
+const AFFORD_OFF := BROWN_FAINT
+## The build cap: not a price, a wall.
+const CAP_REACHED := RUST
 
 # --------------------------------------------------------------- patience --
 # The ramp a waiting passenger walks down. PATIENCE_LOW -> PATIENCE_OK is
-# lerped, so BOTH ends -- and everything between -- must stay light enough for
-# INK_ON_LIGHT to read on top. Measured across the ramp the worst point is
-# 4.03:1, at the vermilion end.
+# lerped and INK_ON_LIGHT is drawn on top, so BOTH ends -- and everything
+# between -- must stay light enough to carry it.
 
-const PATIENCE_OK := OLIVE
-const PATIENCE_LOW := VERMILION
-## Nobody waiting: the bar is present but inert, so it sits barely above its
-## own track (1.62:1, against the old palette's 1.50:1).
-const PATIENCE_IDLE := SLATE_IDLE
+const PATIENCE_OK := Color("9ec46f")
+const PATIENCE_LOW := Color("e07a52")
+## Nobody waiting: present but inert, so it sits just off its own track.
+const PATIENCE_IDLE := Color("ab9670")
 
 # ---------------------------------------------------------------- traffic --
-# DaySparkline's three series. These must separate from each other by HUE, not
-# just lightness -- they are thin strokes, and they overlap, so two series that
-# differ only in chroma read as one series with a light end.
-#
-# That is exactly what the first draft did: it used a sand for INTER, which sits
-# at hue 40 against GOLD's 37 -- three degrees apart, i.e. "gold and pale gold".
-# Clay rose is 51 degrees off the gold and 162 off the sky, and teal/gold/rose
-# is the poster's own three-way split.
+# DaySparkline's three series. They separate by HUE, not lightness -- they are
+# thin strokes and they overlap, so two series differing only in chroma read as
+# one series with a light end. On a light ground they must also be DARK enough
+# to show, which the dark palette's pale series would not be.
 
-const TRAFFIC_IN := SKY          ## incoming visitors, up      (hue 184)
-const TRAFFIC_OUT := GOLD        ## leavers, down              (hue  37)
-const TRAFFIC_INTER := ROSE      ## neither, blunt             (hue 347)
+const TRAFFIC_IN := Color("2a707a")    ## incoming visitors, up
+const TRAFFIC_OUT := Color("8f5a1a")   ## leavers, down
+const TRAFFIC_INTER := Color("83405a") ## neither, blunt
+## The now-marker, a wash over whatever it crosses.
+const TRAFFIC_NOW := Color("1f3f3c", 0.18)
 
 # ------------------------------------------------------------------ theme --
 
 ## The DEFAULT colour of text, applied once at the root so it is inherited.
 ##
-## Without this, a Label that nobody explicitly coloured draws in Godot's stock
-## WHITE -- and 16 of the game's 31 text nodes were in exactly that state, which
-## is why the panels read as half-themed: the upgrade names, the prices and the
-## money counter were never part of the palette at all.
+## Without this a Label nobody explicitly coloured draws in Godot's stock WHITE,
+## which was merely wrong on the dark ground and is invisible on cream. 16 of
+## the game's 31 text nodes were in that state.
 ##
-## Colouring all 16 by hand would work once and then rot, because the next Label
-## anyone adds starts white again. A theme makes cream the DEFAULT and leaves
-## add_theme_color_override for the deliberate exceptions -- the dark ink on the
-## car and on the patience chips, which still win, because a node override beats
-## an inherited theme.
+## A theme makes ink the DEFAULT and leaves add_theme_color_override for the
+## deliberate exceptions, which still win.
 static func build_theme() -> Theme:
 	var t := Theme.new()
 	t.set_color("font_color", "Label", INK)
@@ -171,7 +175,40 @@ static func build_theme() -> Theme:
 	t.set_color("font_hover_color", "Button", INK)
 	t.set_color("font_pressed_color", "Button", CAP_REACHED)
 	t.set_color("font_focus_color", "Button", INK)
-	t.set_color("font_disabled_color", "Button", AFFORD_OFF)
+	# NOT AFFORD_OFF, which is the mistake this replaced. ManagementView sets
+	# `disabled = not can_afford(cost)` on every upgrade row, so at $0 the whole
+	# panel is disabled -- and painting that with the deliberately-recessive
+	# "cannot buy" colour double-dims it, because Godot already dims a disabled
+	# button. Measured on the light theme it produced pale tan on tan: a panel
+	# of prices nobody could read. Disabled must stay LEGIBLE; the affordability
+	# signal is the greyed state itself, not a second colour.
+	t.set_color("font_disabled_color", "Button", INK_MUTED)
+
+	# Buttons also need a BOX. Without one they fall back to Godot's stock grey
+	# slab, which merely looked out of place on the dark ground and looks like a
+	# rendering bug on cream. The mockup's controls are rounded capsules, so
+	# that is what these are.
+	t.set_stylebox("normal", "Button", _capsule(CARD_BG))
+	t.set_stylebox("hover", "Button", _capsule(TAN_DEEP))
+	t.set_stylebox("pressed", "Button", _capsule(TAN_RULE))
+	t.set_stylebox("focus", "Button", _capsule(CARD_BG))
+	t.set_stylebox("disabled", "Button", _capsule(PANEL_BG))
+
+	# Everything else that ships with a stylebox of its own. A theme that covers
+	# only Label and Button leaves these on Godot's stock DARK panel chrome,
+	# which is how a slab of grey ended up behind the management readout
+	# (PanelContainer) and the floor panel's satisfaction bar (ProgressBar).
+	# Neither is a Label or a Button, so neither inherited any of the above.
+	t.set_stylebox("panel", "PanelContainer", _capsule(CARD_BG))
+	t.set_stylebox("background", "ProgressBar", _capsule(BAR_TRACK))
+	t.set_stylebox("fill", "ProgressBar", _capsule(PATIENCE_OK))
 	return t
-## The now-marker, a wash over whatever it crosses.
-const TRAFFIC_NOW := Color("e5d9b5", 0.18)
+
+## A rounded pill in one fill. Content margins are left at Godot's defaults on
+## purpose: the board's touch targets are positioned by hand against the UI
+## spec's coordinate table, and a stylebox that added padding would move them.
+static func _capsule(fill: Color) -> StyleBoxFlat:
+	var b := StyleBoxFlat.new()
+	b.bg_color = fill
+	b.set_corner_radius_all(10)
+	return b

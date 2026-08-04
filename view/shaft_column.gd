@@ -94,9 +94,10 @@ func setup(index: int, coords: BoardCoords, car_floor_provider: Callable) -> voi
 	# Anchored at the TOP of the car and read against the light body. Centred
 	# vertically it collided with the seats and sat where nothing else does.
 	#
-	# DARK ink, because the body is the light mass: the terracotta car is the
-	# one warm block on a teal ground, and cream on it measures 2.14:1 -- a
-	# floor number on a moving car that you cannot read. INK_ON_LIGHT is 6.33:1.
+	# DARK ink, on a car that is now a MID-luminance teal rather than either
+	# extreme. Measured on the mockup's own car colour: cream 2.77:1, this brown
+	# 5.21:1. A pale-ink role was written for this and then deleted, because on
+	# a mid fill there is no light-ink answer that reads.
 	_car_label = Label.new()
 	_car_label.add_theme_font_size_override("font_size", HEADER_FONT)
 	_car_label.add_theme_color_override("font_color", Palette.INK_ON_LIGHT)
