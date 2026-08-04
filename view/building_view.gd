@@ -24,19 +24,23 @@ signal shaft_purchase_requested()
 ## connections, so the persistent consumer -- GameRoot -- binds to this instead.
 signal hall_floor_selected(floor_index: int)
 
-const SHAFT_AREA_X := FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH   # 240
-## Three columns across the 480-unit viewport. Five at a 96-unit pitch drew each
-## at 92 units -- 50.2pt -- which cleared the 44pt touch floor but left a car
-## 86 units wide, and four seats across that cannot hold a legible two-digit
-## floor at the 0.546 iPhone scale. At 160 the column draws at 156 (85pt) and a
-## seat is 34, which can. The cost is paging sooner: eight shafts is three pages
-## rather than two.
-const SHAFT_WIDTH := 160.0
+const SHAFT_AREA_X := FloorRow.GUTTER_WIDTH + FloorRow.STRIP_WIDTH   # 208
+## Two columns across the shaft viewport, on the DEVICE board -- not the canvas.
+## SafeArea floors both side insets at CORNER_MARGIN 16, so the board is 688
+## wide on a phone and 720 only headless; 230 gives two columns on both, with 20
+## units of slack. 240 gives two on the canvas and ONE on the device, which is
+## how a one-column board nearly shipped with a green suite.
+##
+## The column draws at 226 and the car at 220, which is what makes a two-digit
+## destination badge 13.1pt at every capacity from 4 to 12 -- see the design
+## spec's 4.3. The people strip yields 32 units to pay for it.
+const SHAFT_WIDTH := 230.0
 
-## Every floor, always. 88 units is 48pt at the 0.546 iPhone scale -- the same
-## touch floor every other control uses -- and it no longer shrinks as the
-## building grows, because the board scrolls instead of squeezing.
-const FLOOR_HEIGHT := 88.0
+## Every floor, always. 120 units is 65.5pt at the 0.546 iPhone scale, and it is
+## sized by the CAR rather than by the touch floor: a font-24 line box needs a
+## 30-unit badge, so two ranks of riders need 2 + 8 + 52 + 52 = 114, which fits
+## a 116-unit car. At 112 the badge falls to 27 and the font to 21.
+const FLOOR_HEIGHT := 120.0
 
 var _state: GameState
 var _coords: BoardCoords
@@ -361,7 +365,7 @@ func refresh() -> void:
 	if _ghost_label != null:
 		if _state.upgrades.is_maxed("floor"):
 			# 21 characters ends near x = 227 at font size 15 from LABEL_X = 38,
-			# just inside FloorRow.STRIP_RIGHT (240). A 37-character string
+			# just inside FloorRow.STRIP_RIGHT (208). A 37-character string
 			# would overrun into the shaft slot's own label.
 			_ghost_label.text = "CAP REACHED — REBUILD"
 			_ghost_label.add_theme_color_override("font_color", Palette.CAP_REACHED)

@@ -33,10 +33,10 @@ const MAX_INDIVIDUALS := 12
 const SPRITE_PITCH := 14.0
 ## People are laid out by ChipGrid -- the same square, the same packing rule as
 ## inside a car, so a passenger looks the same before and after boarding.
-const STRIP_RIGHT := GUTTER_WIDTH + STRIP_WIDTH          # 240
+const STRIP_RIGHT := GUTTER_WIDTH + STRIP_WIDTH          # 208
 
 const GUTTER_WIDTH := 64.0
-const STRIP_WIDTH := 176.0
+const STRIP_WIDTH := 144.0
 const COUNT_WIDTH := 26.0
 const BAR_X := 30.0
 const BAR_W := 4.0

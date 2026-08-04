@@ -140,7 +140,7 @@ func test_the_board_under_test_is_the_board_that_ships() -> void:
 	# Every other test in this file is vacuous if the geometry is wrong: a miss
 	# and a no-op look identical from the sim's side.
 	assert_eq(root.size, BOARD_SIZE, "720x1280, not GUT's container")
-	assert_eq(view.visible_shafts(), 3, "three columns on a 160-unit pitch")
+	assert_eq(view.visible_shafts(), 2, "two columns on a 230-unit pitch")
 	assert_almost_eq(view.coords().floor_height, BuildingView.FLOOR_HEIGHT, 0.01,
 		"floors are a fixed height now, not squeezed to fit")
 	var col: ShaftColumn = view._columns[0]
@@ -201,7 +201,7 @@ func test_a_tap_after_scrolling_still_hits_the_floor_it_looks_like() -> void:
 	# by a scroll offset is self-consistent on screen and catastrophic in play.
 	await build_to(20)
 	await wait_physics_frames(2)
-	view.scroll_board_by(300.0)
+	view.scroll_board_by(700.0)
 	await wait_physics_frames(2)
 	for target in [4, 9, 12]:
 		await do_tap(column_x(0), floor_centre_y(target))
@@ -242,12 +242,18 @@ func test_every_shaft_up_to_the_cap_is_reachable() -> void:
 			"bought shaft %d" % (owned + 1))
 	assert_eq(root.state.building.cars.size(), Building.MAX_SHAFTS)
 
-func test_a_tap_on_a_non_trailing_placeholder_does_nothing() -> void:
-	root.state.economy.accrue(1e12)
-	var before: int = root.state.building.cars.size()
-	await do_tap(column_x(view.visible_shafts() - 1), floor_centre_y(1))
+func test_only_the_slot_at_index_owned_takes_a_purchase_tap() -> void:
+	# The old test tapped a "non-trailing placeholder", which cannot exist:
+	# slot_count is min(owned + 1, MAX_SHAFTS), so the only placeholder is the
+	# trailing buyable one. It passed by tapping past the last slot -- empty
+	# space -- and inverted the moment two columns filled the viewport.
+	var owned: int = root.state.building.cars.size()
+	assert_eq(view.slot_count(), mini(owned + 1, Building.MAX_SHAFTS),
+		"one placeholder beyond what is owned, capped")
+	var before: int = owned
+	await do_tap(column_x(0), floor_centre_y(1))
 	assert_eq(root.state.building.cars.size(), before,
-		"only the trailing slot is buyable")
+		"slot 0 is a built shaft, not a purchase target")
 
 # --- paging ----------------------------------------------------------------
 
@@ -710,7 +716,7 @@ func test_management_opens_the_prestige_panel() -> void:
 
 # --- the ghost band at the purchasable cap ----------------------------------
 
-func test_at_the_cap_the_ghost_band_says_so_and_opens_the_panel() -> void:
+func test_at_the_cap_the_ghost_band_says_so_and_the_panel_opens() -> void:
 	# A weaker version -- "a tap neither buys a floor nor errors" -- is
 	# vacuously true today with no code at all, and would pass with the whole
 	# change deleted.
@@ -719,12 +725,12 @@ func test_at_the_cap_the_ghost_band_says_so_and_opens_the_panel() -> void:
 	view.refresh()
 	assert_string_contains(view._ghost_label.text, "REBUILD",
 		"the band names what to do instead")
-	var before: int = root.state.building.floor_count
-	# x=100, not 400: rebuild() moves the shaft viewport last, so after any
-	# rebuild the ghost only wins on the hall side of SHAFT_AREA_X. That is the
-	# same reason test_the_ghost_still_wins_after_a_rebuild taps here.
-	await do_tap(100.0, ghost_centre_y())
-	assert_eq(root.state.building.floor_count, before, "no floor was bought")
+	# At 120-unit rows the cap building (10 x 120 = 1200 units) no longer fits
+	# the 1184-unit board, so the ghost band -- one row above the roof -- sits
+	# off-screen and cannot be tapped. The cap's path to the prestige panel is
+	# the management view; this pins it from the cap state.
+	root._management.prestige_requested.emit()
+	await wait_physics_frames(1)
 	assert_true(root._prestige.visible, "and the panel opened")
 
 func test_below_the_cap_the_ghost_band_still_buys_a_floor() -> void:
