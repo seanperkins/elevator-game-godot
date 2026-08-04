@@ -1,7 +1,10 @@
 # People, and the car they stand in
 
-**Status:** design, not yet built. Three revisions: after a five-reviewer panel,
-after the decision to enlarge the car (§4.1), and after a second panel round.
+**Status:** design, not yet built. Reviewed by a five-seat panel over **three
+rounds**, and revised after each. Round 1 found the patience bar was invisible
+against its own track; round 2 found the back rank left the car and one tint key
+could not carry two palettes; round 3 found the board is 688 units wide on a
+phone, not 720, which is why §4.1.1 exists.
 **Supersedes parts of** `2026-08-02-ui-design.md` §3.1, §3.3, §3.5 and §3.7 — see §8.
 
 ## 1. Why
@@ -138,8 +141,13 @@ skin  = key % PERSON_SKINS.size()      # size 3
 **The coefficients and the palette sizes are load-bearing, not arbitrary**, and
 they have now failed twice, so the rule is written down rather than re-derived:
 
-> For **every** trip shape the spawner emits, the surviving coefficient sum must
-> be coprime to **both** palette sizes — that is, to 15.
+> For every trip shape the spawner emits, **each freely-varying field's
+> coefficient in the surviving key must be coprime to both palette sizes** — that
+> is, to 15.
+
+Stated as a *sum* it would be wrong: interfloor's surviving key is `13F + 7G` and
+`13 + 7 = 20`, which shares 5 with 15. The claim that holds is per varying field —
+`13` and `7` are each coprime to 15, so varying either sweeps every residue.
 
 The spawner emits exactly three shapes (`sim/traffic_spawner.gd:77-107`):
 
@@ -148,6 +156,14 @@ The spawner emits exactly three shapes (`sim/traffic_spawner.gd:77-107`):
 | inbound | `(0, F, F)` | `16F` | `F % 5` — all five | `F % 3` — all three |
 | outbound | `(F, 0, F)` | `13F` | `3F % 5` — all five | `F % 3` — all three |
 | interfloor | `(F, G, F)` | `13F + 7G` | `(3F + 2G) % 5` | `(F + G) % 3` |
+| interfloor, lobby source | `(0, G, 0)` | `7G` | `2G % 5` — all five | `G % 3` — all three |
+
+The fourth row is not a fourth shape: `sim/traffic_spawner.gd:94` sets
+`lobby_usable = lobby_tenanted and chosen.floor_index != LOBBY`, so a floor-0
+tenant's trip is interfloor with `origin = source = 0`. It is the `F = 0` case of
+row three, and it is called out because both previous key failures were exactly
+this kind of degenerate substitution — §7's spread test spans floor **0** to 20
+for that reason, not 1 to 20.
 
 Two earlier attempts are recorded because each looked right:
 
@@ -189,9 +205,26 @@ renders in `_draw()`, so `show_waiting`, `show_riding` and `recycle` must each e
 in `queue_redraw()`. But `BuildingView.refresh()` calls these on every floor and
 column **every frame** (`game/game_root.gd:638` → `view/building_view.gd:340-374`),
 so an unconditional redraw re-records ~150 canvas items at 60 Hz on the threadless
-web export this project ships. **Each setter early-outs when `(fraction, glyph,
-tint_key)` are unchanged**; patience moves at 20 Hz and riders not at all, so the
-steady-state redraw rate is near zero.
+web export this project ships. Each setter therefore early-outs when nothing that
+affects the drawing has changed. **The key is
+`(quantised_fraction, glyph, tint_key, size)` — all four:**
+
+- **`size`**, because the car cell is a function of capacity (§4.2: 40 → 36.73 →
+  30.46) and capacity changes mid-run when "Bigger Car" is bought. A rider aboard
+  across that purchase is called with byte-identical arguments; without `size` in
+  the key the setter early-outs and that rider keeps a 40-wide badge in a 30-wide
+  slot, overlapping its neighbour until delivery.
+- **`quantised_fraction`**, not the raw float. `GameState._expire` decays every
+  waiting passenger every tick (`sim/game_state.gd:413-425`), so a raw fraction
+  changes at 20 Hz and the early-out never fires for anyone waiting. The bar is 22
+  units tall, so `round(fraction * 22)` is the resolution the drawing can actually
+  show: a waiting sprite then redraws ~22 times across its whole patience life
+  instead of ~900.
+
+Riders go to zero redraws and waiting sprites drop from 60 Hz to ~22 total, which
+is what makes "the steady-state redraw rate is near zero" true. Said of the
+unquantised key it would have been false — 60 Hz to 20 Hz is an improvement, not
+a near-zero.
 
 **Pre-`call_direction`, a waiting person draws no badge at all** — not an empty
 one. `FloorRow.CALL_UNKNOWN` is the empty string today because "the chip's colour
@@ -210,18 +243,22 @@ becomes a cell `Vector2`, threaded through `columns_for`, `rows_for` and
 `position_of`.
 
 `columns_for` and `rows_for` add `GAP` internally (`view/chip_grid.gd:52-56`), so
-they take the **cell**, never the pitch. The strip is unchanged by §4.1 —
-`SHAFT_AREA_X` stays 240, so it is still `SPRITE_X = 68` to `STRIP_RIGHT = 240`,
-172 units — but the row is now 120 tall:
+they take the **cell**, never the pitch. §4.1 narrows the strip from 176 to 144 to
+buy the shafts their width, so it now runs `SPRITE_X = 68` to `STRIP_RIGHT = 208`
+— **140 units** — on a 120-unit row:
 
 ```
-columns_for(172, 20) = (172 + 4) / (20 + 4) = 7
+columns_for(140, 20) = (140 + 4) / (20 + 4) = 6
 rows_for (120, 40)   = (120 + 4) / (40 + 4) = 2
-shape(12, 7, 2)      = clamped to 6 x 2     = 12
-    rank fits: 6*20 + 5*4 = 140 <= 172      block fits: 2*40 + 1*4 = 84 <= 120
+shape(12, 6, 2)      = 6 x 2                = 12
+    rank fits: 6*20 + 5*4 = 140 <= 140      block fits: 2*40 + 1*4 = 84 <= 120
 ```
 
-**All twelve now fit**, with 36 units of vertical margin rather than 4.
+**All twelve still fit — but the rank fills the strip exactly**, 140 into 140,
+where the old 172-unit strip had 32 units to spare. That is the price of §4.1's
+width, and it is a real constraint rather than a comfortable one: **any later
+increase to the person cell or `GAP` drops the hall to five columns and ten
+people**. §7 pins the equality so the next change to either constant fails loudly.
 `MAX_INDIVIDUALS = 12` has been effectively 10 since the 30-unit square met the
 88-unit row (`columns_for(172) = 5`, `rows_for(88) = 2`, `shape(12, 5, 2)` → 5 × 2).
 The constant becomes true for the first time, on every floor. A third rank is not
@@ -239,10 +276,10 @@ units, which is font 13 and **7.1 pt** at the 0.546 iPhone scale — below the
 Both board constants move:
 
 ```
-FLOOR_HEIGHT   88 -> 120       car height  84 -> 116
-SHAFT_WIDTH   160 -> 240       car width  150 -> 230
-                               column     156 -> 236   (SHAFT_WIDTH - 4)
-                                          car = column - 6
+FLOOR_HEIGHT       88 -> 120        car height  84 -> 116
+SHAFT_WIDTH       160 -> 230        car width  150 -> 220
+FloorRow.STRIP_WIDTH 176 -> 144     column     156 -> 226   (SHAFT_WIDTH - 4)
+  => SHAFT_AREA_X   240 -> 208                 car = column - 6
 ```
 
 **Height is cheap.** The board is 1184 tall (1280 less the 96-unit HUD), so rows
@@ -254,21 +291,75 @@ and two ranks then need `2 + 8 + 52 + 52 = 114`, which fits a 116-unit car. At 1
 the car is 108, the badge falls to 27, and the font to 21 — which is the trap §4.3
 exists to avoid.
 
-**Width costs a shaft column, deliberately.** 240 exactly tiles the 480-unit shaft
-area, so `visible_shafts()` becomes `int(480/240) = 2`, down from 3. This
-**supersedes** the 160-unit decision at `2026-08-02-ui-design.md:182-183,186-192`
-rather than contradicting it: that decision chose three columns over five to make
-a two-digit seat legible, and this extends the same reasoning one step further,
-for the same reason, at the same kind of cost.
+**Width is derived from the DEVICE board, not the canvas — see §4.1.1.** The
+strip yields 32 units to the shafts so the column can be 230 and still leave two
+columns on a phone:
+
+```
+                       device (688)      headless (720)
+shaft viewport         688 - 208 = 480   720 - 208 = 512
+visible_shafts()       int(480/230) = 2  int(512/230) = 2      <- they AGREE
+slack beyond 2 columns 20 units          52 units
+```
+
+This **supersedes** the 160-unit decision at
+`2026-08-02-ui-design.md:182-183,186-192` rather than contradicting it: that
+decision chose three columns over five to make a two-digit seat legible, and this
+extends the same reasoning one step further, for the same reason, at the same kind
+of cost.
+
+### 4.1.1 The canvas is not the board, and this rule is why
+
+Three review rounds each broke on the same mistake in a new place: **a number
+derived against one surface and tested against another.** The third instance was
+the board's own width, and it is the reason the numbers above are what they are.
+
+`game/game_root.gd:290` sizes the board `size.x - _safe.x - _safe.z`, and
+`SafeArea.insets` floors **both** side insets at `CORNER_MARGIN = 16`
+(`view/safe_area.gd:21,40-44`) whenever a safe rect is reported at all — pinned by
+`tests/test_safe_area.gd:32-38` for a full-width rect. So:
+
+| | canvas | **device** |
+| --- | --- | --- |
+| board width | 720 | **688** |
+| board height | 1184 (1280 - 96 HUD) | **~1050** |
+
+`insets` returns `Vector4.ZERO` only for a zero-size window — the headless case —
+so **the suite runs on the canvas and the game runs on the board.** Two
+consequences that were wrong in earlier drafts of this spec:
+
+- **Today's board shows TWO shaft columns on a phone, not three.**
+  `int(448/160) = 2`. The UI spec's "three columns" has always been a
+  desktop-only figure, and an earlier draft of this spec priced its cost against
+  it. The real change here is 2 -> 2: **no column is lost at all.**
+- **`SHAFT_WIDTH = 240` would have shipped ONE column** (`int(448/240) = 1`),
+  leaving 212 units of viewport the pager cannot reach — while
+  `assert_eq(visible_shafts(), 2)` passed green headless. 240 tiles 480 exactly,
+  so it had no slack for any inset whatsoever.
+
+**Rule, and it applies to every number in this document:** a geometric claim is
+derived against the device board and tested against a non-zero inset. §7 adds the
+inset test that would have caught this.
+
+Vertically the same correction applies: rows on screen go `1050/88 = 11.9` to
+`1050/120 = 8.7`, so a 10-floor run plus its ghost band (11 rows) stops fitting
+without scrolling. See the cost list.
 
 The full cost list, so none of it is discovered later:
 
-- **Two shaft columns on screen instead of three**; eight shafts is four pages.
+- **The people strip narrows 176 → 144.** All twelve waiting still fit, but
+  exactly (§3) — the slack is gone.
+- **No shaft column is lost.** On device it is 2 before and 2 after (§4.1.1); the
+  "3 → 2" an earlier draft advertised was measuring the canvas. Eight shafts is
+  four pages rather than three, because `max_scroll` counts slots against visible
+  columns and the column got wider.
 - **The pager readout appears one shaft earlier.** `game/game_root.gd:574` hides
   it when `max_scroll() == 0`, and `max_scroll = min(owned+1, 8) − visible_shafts`
-  (`view/building_view.gd:312-315`), so it first appears at `owned = 2` rather
-  than `owned = 3`. Player-visible, and no test pins it today.
-- **About one more row of scrolling** at the 10-floor base cap.
+  (`view/building_view.gd:312-315`). No test pins it today.
+- **Scrolling, worst case.** At the 10-floor base cap (11 rows with the ghost) a
+  device board of ~1050 goes from fitting to needing ~2.3 rows of scroll. **At the
+  prestige ladder's 20-floor cap it is worse**: ~7.5 rows of scroll today against
+  ~11.1 after, roughly 3.6 more. §10 verifies at 20 floors, not only 10.
 
 What the two axes buy together is §4.3: **13.1 pt digits at every capacity from
 4 to 12** — the UI spec's own precedent, held rather than spent.
@@ -312,28 +403,43 @@ back rank is offset +pitch/2 from the front rank's origin
 **The cell budget must include the offset**, or the back rank leaves the car:
 
 ```
-one rank : cell <= (230 - GAP*(front-1)) / front
-two ranks: cell <= (230 - GAP*(front-1) - GAP/2) / (front + 0.5)
+one rank : cell <= (220 - GAP*(front-1)) / front
+two ranks: cell <= (220 - GAP*(front-1) - GAP/2) / (front + 0.5)
 ```
 
 Verified at every capacity — `left` and `right` are the composition's bounds
-inside the 230-unit car, and the font is height-limited at 24 throughout because
-the width-derived font never drops below 25:
+inside the 220-unit car, and `w-font` is the font the cell width alone would
+allow, shown so the height-limit claim is checkable rather than asserted:
 
-| cap | ranks | front | back | cell | left | right | font | pt |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 4 | 1 | 4 | 0 | 40.00 | 29.0 | 201.0 | 24 | 13.1 |
-| 5 | 1 | 5 | 0 | 40.00 | 7.0 | 223.0 | 24 | 13.1 |
-| 6 | 2 | 3 | 3 | 40.00 | 40.0 | 190.0 | 24 | 13.1 |
-| 7 | 2 | 4 | 3 | 40.00 | 29.0 | 201.0 | 24 | 13.1 |
-| 8 | 2 | 4 | 4 | 40.00 | 18.0 | 212.0 | 24 | 13.1 |
-| 9 | 2 | 5 | 4 | 38.55 | 10.6 | 219.4 | 24 | 13.1 |
-| 10 | 2 | 5 | 5 | 38.55 | 0.0 | 230.0 | 24 | 13.1 |
-| 11 | 2 | 6 | 5 | 32.00 | 9.0 | 221.0 | 24 | 13.1 |
-| 12 | 2 | 6 | 6 | 32.00 | 0.0 | 230.0 | 24 | 13.1 |
+| cap | ranks | front | back | cell | left | right | w-font | font | pt |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 4 | 1 | 4 | 0 | 40.00 | 24.0 | 196.0 | 32 | 24 | 13.1 |
+| 5 | 1 | 5 | 0 | 40.00 | 2.0 | 218.0 | 32 | 24 | 13.1 |
+| 6 | 2 | 3 | 3 | 40.00 | 35.0 | 185.0 | 32 | 24 | 13.1 |
+| 7 | 2 | 4 | 3 | 40.00 | 24.0 | 196.0 | 32 | 24 | 13.1 |
+| 8 | 2 | 4 | 4 | 40.00 | 13.0 | 207.0 | 32 | 24 | 13.1 |
+| 9 | 2 | 5 | 4 | 36.73 | 10.2 | 209.8 | 29 | 24 | 13.1 |
+| 10 | 2 | 5 | 5 | 36.73 | 0.0 | 220.0 | 29 | 24 | 13.1 |
+| 11 | 2 | 6 | 5 | 30.46 | 8.6 | 211.4 | 24 | 24 | 13.1 |
+| 12 | 2 | 6 | 6 | 30.46 | 0.0 | 220.0 | **24** | 24 | 13.1 |
 
 Capacities 10 and 12 touch the car edge exactly; that is inside the car, and the
 car is itself inset 3 units within its column.
+
+**Capacity 12 is the tight one and must be measured, not assumed.** Its
+width-derived font is exactly 24 — `int((30.46 − 4)/1.1) = int(24.05)` — so it
+clears by 0.05 units against a nominal 1.1-em two-digit advance. §7's measurement
+test exists for precisely this row. If a real `Font.get_string_size` disagrees,
+the stated fallback is to cut the badge's horizontal padding from 2 units a side
+to 1, which buys ~2 units; failing that, capacities 11–12 take font 23 (12.6 pt)
+and §4.3's table records it.
+
+**Odd capacities are pinned conservatively, deliberately.** At odd capacity the
+back rank is one cell shorter, so it ends *inside* the front rank and the
+composition is the front rank alone — the offset costs nothing. The budget still
+applies the two-rank formula (capacity 9 gets 36.73 where 40 would fit). Harmless,
+because the font is height-limited either way, and one formula is worth more than
+1.5 units of cell.
 
 **At capacity ≤ 5 there is one rank** and the upper band stays empty: the car looks
 emptier when it is emptier. The half-pitch offset puts a back figure between two
@@ -370,8 +476,8 @@ today across capacities 4–8, where most play happens. The honest ledger:
 | glyph contrast | `INK_ON_LIGHT` on the ramp, 5.63:1 worst | `CREAM_PALE` on `TEAL_INK`, **10.40:1** |
 
 The font is still *checked* rather than assumed: §7 measures a two-digit string
-with `Font.get_string_size` against the **narrowest** cell — 32 at capacity 12 —
-and asserts it fits with padding. If a font change breaks that, the test says so.
+with `Font.get_string_size` against the **narrowest** cell — 30.46 at capacity 12
+— and asserts it fits with padding. §4.2 states what happens if it does not.
 
 ### 4.4 The pips are the seat rack, flattened
 
@@ -387,10 +493,16 @@ answer and it fails the one job pips have: two adjacent hollows on a shared trac
 merge into one dark band, so free seats stop being individually countable.
 
 ```
-strip width = 230 - 16 = 214,  gap 3
-capacity  4 -> pip 51.25 wide
-capacity 12 -> pip 15.08 wide
+strip width = 220 - 16 = 204,  gap 3
+capacity  4 -> pip 48.75 wide
+capacity 12 -> pip 14.25 wide
 ```
+
+**Pips are `draw_rect` calls, not nodes** — two rects per pip (track, and the lit
+fill inset 1 unit) inside `PersonSprite`'s sibling `_draw()` on the car. As nodes
+they would take a car from `3 x capacity` to `4 x capacity`, which is a real
+change to §8.5's ledger; as draw calls the car's node count *falls*, because the
+seat `ColorRect`s go away entirely.
 
 Contrast, all measured with `tests/test_palette.gd`'s formula:
 
@@ -411,16 +523,34 @@ capacity** — the "Bigger Car" upgrade stops buying something invisible above 8
 
 ### 4.5 The height guard has three bands, not one
 
-`_draw_header_only` (`view/shaft_column.gd:216-238`) is kept as a guard on a
+`_draw_header_only` (`view/shaft_column.gd:216-223`; `_header_for` is `225-238`) is kept as a guard on a
 public view boundary — `set_riders` is called with whatever size the car has, and
-`tests/test_board_input.gd:449-466` forces `size.y = 18.0`. It needs **three**
+`tests/test_board_input.gd:451` and `:459` force `size.y = 18.0`. It needs **three**
 bands, because one rank and two ranks have different heights:
 
 | car height | behaviour |
 | --- | --- |
-| `< 62` | no rank at all — header line; pips still draw |
-| `62 ≤ h < 114` | **one rank**, whatever the capacity; pips carry the exact occupancy and the header carries destinations beyond the rank |
+| `< 62` | no rank at all — header line only; pips still draw |
+| `62 ≤ h < 114` | **one rank of `slots` riders** (below); the header carries the rest |
 | `≥ 114` | ranks by capacity, per §4.2 |
+
+**Band 2's rank is sized by width, not by capacity**, or it overruns: one rank of
+`capacity` cells at capacity 12 gives `cell = (220 − 44)/12 = 14.7`, narrower than
+the 14-unit figure and far under a two-digit badge. So:
+
+```
+slots = largest n <= capacity with (220 - GAP*(n-1))/n >= CELL_MIN 30
+      = 6 at CELL_MIN 30       # (220 - 20)/6 = 33.3 >= 30; 7 gives 28.9
+riders beyond `slots` are counted in the header line, exactly as today's
+_header_for already does ("7/12  3 7 7 +4")
+```
+
+**Where the header goes when pips are present.** Today it is anchored at the car's
+top (`view/shaft_column.gd:123-129`), which is where §4.2 now puts the pip strip.
+In bands 1 and 2 the header sits **below the pips**, at y 12; in band 1, if the car
+is too short for both, the pips win and the header is not drawn — occupancy is
+exact and destinations are the thing being given up. At the band's lower edge
+(exactly 62) there is no room for a header at all, which is the same rule.
 
 `62 = 2 + 8 + 52` (inset, pips, one band); `114` is §4.2's full budget. The first
 draft named only 62, which would have drawn two ranks into a box that cannot hold
@@ -507,7 +637,7 @@ it invented, then the second broke it again on the eight colours it adds.
 
 | file | change |
 | --- | --- |
-| `view/person_sprite.gd` | **new.** Replaces `passenger_sprite.gd`. One `Control` that `_draw()`s badge, figure and bar, plus the hall's triangle; one `Label` child for the car's digits. Keeps `label_text()` and `recycle()`. Setters `queue_redraw()` only on change (§2.4). |
+| `view/person_sprite.gd` | **new.** Replaces `passenger_sprite.gd`. One `Control` that `_draw()`s badge, figure and bar, plus the hall's triangle; one `Label` child for the car's digits. Keeps `label_text()` and `recycle()`. Setters `queue_redraw()` only on change (§2.4). **Exposes `parts() -> Dictionary`** (badge / figure / bar / head / torso rects) and **`redraw_count() -> int`**, which are what §7.9-7.15 assert against — `_draw()` consumes exactly those rects and nothing else. |
 | `view/car_rack.gd` | **new**, `RefCounted`, no scene tree. Given rider count, capacity and car size, returns rank slots and per-pip rects, or which guard band applies (§4.5). Pure geometry, unit-tested headlessly like `ChipGrid`. |
 | `view/chip_grid.gd` | `SIZE: float` → cell `Vector2` on `columns_for`, `rows_for`, `position_of`. The shape rule is untouched. |
 | `view/shaft_column.gd` | seat rack → pips + ranks, via `CarRack`. `SEAT_SIZE`, `SEAT_FREE`, `SEAT_FONT` deleted. Query methods keep their names. |
@@ -515,6 +645,11 @@ it invented, then the second broke it again on the eight colours it adds.
 | `view/building_view.gd` | `FLOOR_HEIGHT` 88 → 120, `SHAFT_WIDTH` 160 → 240. |
 | `game/util/palette.gd` | the roles in §5; `SEAT_FREE` removed. |
 | `view/passenger_sprite.gd` | **deleted**, with its `.uid`. |
+
+**Every live `PassengerSprite` type reference**, which becomes a *parse* error
+rather than a failing assertion when the `class_name` goes:
+`tests/test_board_input.gd:379`, `:397` (`var sprite: PassengerSprite = …`), and
+`view/shaft_column.gd:26` (`SEAT_FONT := PassengerSprite.FONT`).
 
 **Every live `ChipGrid.SIZE` reference:** `view/chip_grid.gd:27,53,56,66,67,69,70`;
 `view/passenger_sprite.gd:20,21,22` (file deleted); `view/shaft_column.gd:25`;
@@ -526,7 +661,7 @@ exact.)
 **Docstrings inside the files above that state what this change falsifies** — the
 prose is not covered by "the shape rule is untouched":
 
-- `view/floor_row.gd:20-23` — ties the one-glyph rule to "the original 14-unit pitch"
+- `view/floor_row.gd:19-23` — ties the one-glyph rule to "the original 14-unit pitch"
 - `view/floor_row.gd:34-35` — "the same square… a passenger looks the same before
   and after boarding", the invariant §4.6 drops
 - `view/floor_row.gd:99-100` — "Rows are a fixed **88** units now"
@@ -534,17 +669,48 @@ prose is not covered by "the shape rule is untouched":
   and for the car"; `:48-51` — "columns and rows of `SIZE`… a chip is 30"
 - `view/shaft_column.gd:16-24` — "The car is a rack of seats"; `:44-46` — "Opaque
   panels would hide the **seat rack**"
+- `view/building_view.gd:28-33` — the `SHAFT_WIDTH` docstring, every clause of
+  which becomes false: "Three columns across the 480-unit viewport", "At 160 the
+  column draws at 156 (85pt) and a seat is 34, which can", "eight shafts is three
+  pages rather than two". This is the single most load-bearing prose the change
+  invalidates — it is the rationale §4.1 supersedes
+- `view/building_view.gd:36-38` — the `FLOOR_HEIGHT` docstring: "88 units is 48pt
+  at the 0.546 iPhone scale — the same touch floor every other control uses". At
+  120 that is 65.5 pt
 - `view/building_view.gd:219` — "All **five** visible positions", already stale,
   becomes two
+- `view/floor_row.gd:38-39` — `STRIP_WIDTH := 176.0` and the "fixed 176 units"
+  argument at `docs/…ui-design.md:163-165`, which §4.1 revises to 144
 
 **`.uid` files:** add `view/car_rack.gd.uid`, `tests/test_car_rack.gd.uid`,
 `tests/test_person_sprite.gd.uid`; delete `view/passenger_sprite.gd.uid`. Commit
 `b9da5c6` exists because this was missed once already.
 
-**Input bounds.** `CarRack` defines behaviour for `capacity <= 0` (no pips, no
-rank), `capacity > 12` (pips stay one-per-seat; cells keep shrinking),
-`riders.size() > capacity` (lit pips clamp to the pip count), and all three height
-bands (§4.5). None may produce an out-of-range layout.
+**A testable seam, because the drawing is not observable.** `_draw()` output
+cannot be inspected headlessly and Godot exposes no "is a redraw queued" query, so
+five of §7's tests would be unwritable against a bare `_draw()`. The codebase has
+already solved this — `view/day_sparkline.gd:13` names `bar_heights()` and
+`segment_shares()` as "the testable seams; `_draw()` reads" — and `CarRack` gets
+the same treatment for the car. `parts()` and `redraw_count()` give the person it
+too. Without them §7.9-7.15 are aspirations, not tests.
+
+**Input bounds, geometrically rather than by special case.** `capacity` cannot
+exceed 12 in the shipped game (`CAPACITY_BASE 4` + `max_level 8`), but
+`set_riders(riders, capacity)` is a public view boundary and "cells keep
+shrinking" is not a guarantee — at capacity 25 the cell drops below the 14-unit
+figure, and above ~72 the pip width goes negative. So both representations
+degrade on a **measured floor** rather than on a capacity number:
+
+```
+rank draws while cell >= CELL_MIN 30      else -> header line (§4.5's band 1)
+pips draw while pip_w >= PIP_MIN 6        else -> the header's "n/capacity" count
+capacity <= 0            -> no pips, no rank
+riders.size() > capacity -> lit pips clamp to the pip count; the rank draws what fits
+```
+
+At capacity 12 both hold comfortably (`cell 30.46 >= 30`, `pip 14.25 >= 6`). The
+rule needs no upper bound because it is stated in units, not seats — which is the
+only form that stays true if capacity is ever raised.
 
 **Node budget: still inside §8.5's provision, but it does move.** A person is a
 `Control` + `Label` where it was a `ColorRect` + `Label` — flat per person — but §3
@@ -557,6 +723,20 @@ the conclusion holds and the first draft's "the budget does not move" did not.
 The gate is the whole suite green:
 `godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit`, non-zero
 exit on any failure. §10's device checks are additional, not a substitute.
+
+**New — `tests/test_board_geometry.gd`. This is the test the whole review was
+missing**, and it is listed first because it guards the class of bug that broke
+three rounds running: a number derived on the canvas and asserted on the canvas.
+
+1. `visible_shafts()` **against a non-zero safe area**. Drive `BuildingView` at
+   the device board width (720 − 2 × `SafeArea.CORNER_MARGIN` = 688), not the
+   canvas 720, and assert **2**. At `SHAFT_WIDTH = 240` this reads 1 while the
+   headless `assert_eq(…, 2)` reads green — which is exactly how the first draft
+   of §4.1 shipped a one-column board on paper.
+2. The same at the canvas width, also 2 — the two surfaces must **agree**, and
+   §4.1 chose 230 over 240 partly to make them.
+3. Rows on screen at the device board height, against §4.1's scroll claims at both
+   the 10-floor and 20-floor caps.
 
 **New — `tests/test_car_rack.gd`:**
 
@@ -572,8 +752,14 @@ exit on any failure. §10's device checks are additional, not a substitute.
    padding, measured with `Font.get_string_size`. §4.3 rests on this.
 6. Pips number exactly `capacity`; lit pips exactly `riders.size()`; each pip has
    its own track rect with a gap between (§4.4).
-7. All three height bands (§4.5), including `62 ≤ h < 114` → one rank.
-8. The bounds cases in §6.
+7. All three height bands (§4.5): `< 62` header only, `62 ≤ h < 114` one rank of
+   exactly `slots` riders with the remainder in the header, `≥ 114` by capacity.
+   Assert the band-2 **cell** too, not just "one rank" — the literal reading of an
+   earlier draft put 12 cells in 220 units and overran every badge.
+8. Header-vs-pip placement in bands 1 and 2 (§4.5): the header sits below the
+   pips, and is dropped rather than overlapping them when the car is too short.
+9. The geometric floors in §6: the rank stops at `cell < 30`, the pips at
+   `pip_w < 6`, `capacity <= 0`, and `riders.size() > capacity`.
 
 **New — `tests/test_person_sprite.gd`:**
 
@@ -581,17 +767,23 @@ exit on any failure. §10's device checks are additional, not a substitute.
 10. The figure is **centred in its figure band** in both cells — x = 1 in the hall,
     `(cell − 14)/2` in the car (§2.2).
 11. The tint key is stable for a given passenger and independent of pool slot.
-12. **Spread**: over inbound, outbound and interfloor trips across floors 1–20, all
-    five shirts and all three skins occur. This is the test that would have caught
-    both hash failures.
+12. **Spread**: over inbound, outbound and interfloor trips across floors **0**–20
+    — floor 0 included, because the lobby-source substitution `(0, G, 0)` is the
+    degenerate case and both previous hash failures were degenerate substitutions —
+    all five shirts and all three skins occur.
 13. A rider has no patience bar; a waiting passenger has one.
 14. `CALL_UNKNOWN` draws no badge at all.
 15. A setter called twice with identical arguments does not request a second
-    redraw (§2.4).
+    redraw — **and one called with a changed argument does**, including a changed
+    `size` alone (§2.4). The suppression is the risky half; testing only that it
+    suppresses is how a stale badge ships.
 
 **Changed:**
 
-16. `tests/test_chip_grid.gd` — every packing assertion kept, retargeted to the cell.
+16. `tests/test_chip_grid.gd` — every packing assertion kept, retargeted to the
+    cell. **Plus the hall equality from §3**: `6*20 + 5*4 == 140 == STRIP_RIGHT −
+    SPRITE_X`, so the next change to the cell or `GAP` fails loudly instead of
+    silently dropping the hall to ten people.
 17. `tests/test_board_input.gd` — `label_text()` reads the badge; seat assertions
     read pips; `:453` becomes the pip count (§4.5); **`:143`
     (`assert_eq(view.visible_shafts(), 3, …)`) is a hard failure and must become 2**;
@@ -601,11 +793,15 @@ exit on any failure. §10's device checks are additional, not a substitute.
 18. `tests/test_palette.gd` — add `BADGE_INK`/`BADGE_BG`; `BADGE_BG` vs `APP_BG`
     and `CAR`; the ramp vs `PERSON_BAR_TRACK` across all 21 samples; `PIP_LIT` vs
     track; track vs `CAR`; **and each shirt and skin against `APP_BG`, `CAR`, each
-    other, and skin-vs-shirt** (§5). **Delete or retarget `:114`**, which pins the
-    ramp against `INK_ON_LIGHT` because "PassengerSprite draws INK_ON_LIGHT on
-    top" — after this change no text is ever drawn on the ramp and that class is
-    deleted, so the assertion would sit green guarding a pairing that no longer
-    exists.
+    other, and skin-vs-shirt** (§5). **Two existing tests pin a pairing this change deletes**, and both must go, not
+    just the obvious one: `tests/test_palette.gd:115-123` (the ramp-carries-its-
+    label test, whose "PassengerSprite draws INK_ON_LIGHT on top" comment is at
+    `:116`), and `tests/test_palette.gd:102-111`
+    (`test_the_fill_ink_beats_the_alternative_on_every_fill_it_lands_on`), whose
+    fill list is `[CAR, PATIENCE_OK, PATIENCE_LOW]`. After this change no ink lands
+    on the ramp at all — only the `CAR` entry stays live, because the header
+    fallback still draws `INK_ON_LIGHT` there. Drop the two patience fills, keep
+    `CAR`.
 19. **Files that hard-code the row height**, which will not fail but will silently
     drift to testing a height the game no longer uses:
     `tests/test_coords_scroll.gd:10` and `tests/test_pan_gesture.gd:9`, both
@@ -634,8 +830,14 @@ Every surface that must change, file and line, verified by grep:
 | same §3.7 | 307 | "hide the seat rack" → the figures; the argument is unchanged |
 | same §8 item 7 | 565-566 | the density tier's `N >= 29` derivation, which goes with §3.5 |
 | `2026-08-01-…-design.md` §8.5 | 673-694 | see the warning below |
+| same §3.3 | 163-165 | "The people strip is a **fixed** 176 units" — §4.1 makes it 144 |
+| `2026-08-01-…-design.md` | 599 | the module inventory line `view/ building_view, shaft_column, elevator_car, passenger_sprite,` — the file this plan deletes. (§8's "clean" claim was true for the *class name* and false for the *file*.) |
 | `backlog.md` | 24 | "one square, or the seat rack stops telling the truth" |
+| same | 374 | the destination-entry entry: "already anticipated in `passenger_sprite.gd`" — the file is deleted **and** the anticipation inverts, since the hall badge now draws a triangle rather than rendering whatever string it is handed |
+| same | 376-378 | "chips would need to show a floor rather than an arrow, which is a width change the strip has to absorb" — §4.3 changes the answer for the *riding* badge |
 | same | 573 | "more than one **seat**" — freight, deferred in §9 |
+| same | 576 | "`ChipGrid` draws more than one square" |
+| `2026-08-02-call-direction-upgrade-design.md` | 88 | "`view/passenger_sprite.gd` — unchanged. `show_as(fraction, text)` already…" |
 | `codemaps/view.md` | 53, 54, 59 | `SEAT_SIZE`, `SEAT_FONT`, the `PassengerSprite` section |
 | same | 63-64 | the `ChipGrid` section: "`SIZE=30`, `GAP=4`… `columns_for(w)`, `rows_for(h)`" — §6 changes the constant *and* both signatures |
 | `codemaps/tests.md`, `codemaps/architecture.md` | — | gain `car_rack`, `test_car_rack`, `test_person_sprite` |
@@ -684,4 +886,8 @@ suite is green:
 7. **Two shafts and the pager** — §4.1's cost, including the readout now appearing
    at `owned = 2`.
 8. **A car mid-stop** — doors translucent over figures, riders still legible.
-9. **A 10-floor building** — the extra row of scrolling §4.1 accepts at the cap.
+9. **A 10-floor building, and a 20-floor one** — §4.1's scroll cost, at the base
+   cap and at the prestige ladder's cap where it is ~3.6 rows worse.
+10. **Count the shaft columns on the actual phone.** Two. This is the one check
+    that would have caught §4.1.1's CRITICAL, and no headless test can stand in
+    for it — the suite runs where the insets are zero.
