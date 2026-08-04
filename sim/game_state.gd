@@ -42,6 +42,23 @@ var _source_revision: int = -1
 const DEFAULT_ROSTER: Array[String] = ["shops", "apartments", "apartments",
 	"apartments", "apartments", "apartments"]
 
+## The size and seed a building BEGINS at. They live here rather than in
+## game_root because game/game_root.gd has no class_name (line 1 is a bare
+## `extends Control`), and sim/ must not reach into game/ regardless.
+const BASE_FLOORS := 6
+const BASE_SHAFTS := 1
+const BASE_SEED := 20260802
+
+## The persistent half of the game. GameState READS it and never writes it --
+## crediting is Prestige's job and spending is Meta.buy's.
+var meta: Meta
+
+## Kept rather than consumed and dropped, so Prestige.demolish can rebuild
+## against the same catalogs this run used instead of silently reverting to the
+## shipped ones and defeating every override.
+var _catalog_path: String = ""
+var _blueprints_path: String = ""
+
 ## Defaults to FALSE and is set true as the LAST statement of _init.
 ##
 ## Verified on Godot 4.7: a constructor that errors returns a HALF-BUILT object
@@ -57,9 +74,34 @@ var _valid: bool = false
 var _invalid_what: String = ""
 var _invalid_path: String = ""
 
+## p_meta goes AFTER catalog_path because tests/test_game_state.gd pins the
+## fourth position as the catalog path.
 func _init(floors: int, shafts: int, p_seed: int,
-		catalog_path := "res://data/tenants.json") -> void:
+		catalog_path := "res://data/tenants.json",
+		p_meta: Meta = null,
+		blueprints_path := "res://data/blueprints.json") -> void:
+	_catalog_path = catalog_path
+	_blueprints_path = blueprints_path
+
+	meta = p_meta if p_meta != null else Meta.new()
+	if p_meta == null:
+		meta.load_defs(blueprints_path)
+	# NOT conditional on p_meta. An injected Meta whose defs failed is exactly
+	# the case a `p_meta == null` guard waves through, and after the salvage
+	# rewiring no production path constructs with a null Meta at all -- so such
+	# a guard would put the only enforcement of the fatal-data rule on a branch
+	# nobody takes.
+	if not meta.is_usable():
+		_invalid_what = "blueprint catalog"
+		_invalid_path = blueprints_path
+		return
+
 	clock = SimClock.new()
+	# VERBATIM, and _init NEVER resizes: the Meta's starting size is applied by
+	# the callers that BEGIN a run (Prestige.demolish and game_root's cold
+	# boot), because on the decode path the SAVED size is the authority. Growing
+	# past saved_floors.size() here trips the codec's refusal, starts a fresh
+	# game, and lets the autosave overwrite the only copy.
 	building = Building.new(floors, shafts)
 	spawner = TrafficSpawner.new(p_seed)
 	spawner.load_curve("res://data/traffic_walkup.json")
@@ -88,6 +130,22 @@ func _init(floors: int, shafts: int, p_seed: int,
 	metrics = Metrics.new()
 	auto = AutoDispatch.new()
 
+	# Everything below is AFTER upgrades.load_defs: following the reading order
+	# above (building -> set_max_level) writes a crash on an empty _defs.
+	#
+	# The budgets are measured against the BASE size, never the current one.
+	# The other way round is a LEVEL budget measured against a FLOOR COUNT,
+	# correct only at level 0 -- and on reload the codec rebuilds at the grown
+	# size and restores the cumulative purchase count on top of it, so a player
+	# who started at 6 with a cap of 20 and bought 7 floors would come back
+	# permanently capped 7 floors below what they paid for.
+	upgrades.set_max_level("floor", meta.height_cap() - BASE_FLOORS)
+	upgrades.set_max_level("shaft", Building.MAX_SHAFTS - BASE_SHAFTS)
+	upgrades.grant_level("floor", building.floor_count - BASE_FLOORS, building)
+	upgrades.grant_level("shaft", building.cars.size() - BASE_SHAFTS, building)
+	for id in ["speed", "doors", "capacity"]:
+		upgrades.grant_level(id, meta.starting_level(id), building)
+
 	_valid = true
 
 ## RefCounted cannot fail in _init, so construction records the failure and the
@@ -104,6 +162,14 @@ func invalid_what() -> String:
 ## The path of the file that made this state invalid. Empty when valid.
 func invalid_path() -> String:
 	return _invalid_path
+
+## The catalogs this run was built against, so a demolish rebuilds against the
+## same ones rather than the shipped defaults.
+func catalog_path() -> String:
+	return _catalog_path
+
+func blueprints_path() -> String:
+	return _blueprints_path
 
 ## Buying a floor extends the board, so tenancy must grow with it.
 ##

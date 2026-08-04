@@ -6,15 +6,21 @@ extends Control
 ## Two views, one button. It reads MANAGE on the board and BOARD in management;
 ## never CLOSE, because a view is not a sheet. The sim runs in both.
 
-const START_FLOORS := 6
-const START_SHAFTS := 1
-const START_SEED := 20260802
+## The sim owns these now: a run that BEGINS is the sim's idea, and
+## Prestige.demolish starts one without going through this file.
+const START_FLOORS := GameState.BASE_FLOORS
+const START_SHAFTS := GameState.BASE_SHAFTS
+const START_SEED := GameState.BASE_SEED
 const DEFAULT_CATALOG := "res://data/tenants.json"
+const DEFAULT_BLUEPRINTS := "res://data/blueprints.json"
 
 ## Test seam: when non-empty, _ready constructs its GameState against this
 ## catalog path instead of the shipped one. Lets a test hand in a missing file
 ## and assert the boot path does the right thing.
 var catalog_path_override: String = ""
+## The same seam for the blueprint catalog, so a malformed-data test never has
+## to mutate the shipped file.
+var blueprints_path_override: String = ""
 
 var _error_label: Label = null
 
@@ -60,13 +66,18 @@ func _ready() -> void:
 	var catalog_path := catalog_path_override
 	if catalog_path.is_empty():
 		catalog_path = DEFAULT_CATALOG
+	var blueprints_path := blueprints_path_override
+	if blueprints_path.is_empty():
+		blueprints_path = DEFAULT_BLUEPRINTS
 	if override != Vector2i.ZERO:
 		_saving_enabled = false
-		state = GameState.new(floors, shafts, START_SEED, catalog_path)
+		state = GameState.new(floors, shafts, START_SEED, catalog_path, null,
+			blueprints_path)
 	else:
 		state = SaveStore.load_state()
 		if state == null:
-			state = GameState.new(floors, shafts, START_SEED, catalog_path)
+			state = GameState.new(floors, shafts, START_SEED, catalog_path, null,
+				blueprints_path)
 
 	# A malformed shipped tenants.json is a build error a player can hit. A
 	# blank board with a console message they cannot see is indistinguishable

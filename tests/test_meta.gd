@@ -297,3 +297,98 @@ func test_a_negative_blueprints_clamps_to_zero() -> void:
 	assert_true(m.restore({"blueprints": -5, "spent": {"height": -3}}), "restores")
 	assert_eq(m.blueprints, 0, "floored")
 	assert_eq(m.level_of("height"), 0, "and so is the level")
+
+# --- what a run built against a Meta actually starts with --------------------
+
+func test_the_base_shafts_agree_across_modules() -> void:
+	# Meta cannot reference GameState (GameState reads Meta, never the
+	# reverse), so the agreement needs pinning rather than deriving.
+	assert_eq(Meta.BASE_STARTING_SHAFTS, GameState.BASE_SHAFTS, "one number, two files")
+
+func test_a_fresh_run_caps_at_ten_floors() -> void:
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1)
+	assert_true(s.is_valid(), "valid")
+	for i in range(20):
+		s.economy.cash = 1_000_000.0
+		s.buy("floor")
+	assert_eq(s.building.floor_count, 10, "run one stops at the ladder's first rung")
+
+func test_a_meta_with_height_raises_the_run_cap() -> void:
+	var m := loaded()
+	m.blueprints = 100
+	var u := upgrades()
+	assert_true(m.buy("height", u), "L1")
+	assert_true(m.buy("height", u), "L2")
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1, "res://data/tenants.json", m)
+	for i in range(30):
+		s.economy.cash = 1_000_000.0
+		s.buy("floor")
+	assert_eq(s.building.floor_count, 20, "the ladder's top rung")
+
+func test_a_run_starts_with_the_granted_shafts_and_synced_cars() -> void:
+	var m := loaded()
+	m.blueprints = 100
+	var u := upgrades()
+	assert_true(m.buy("shafts", u), "shafts")
+	assert_true(m.buy("motor", u), "motor L1")
+	assert_true(m.buy("motor", u), "motor L2")
+	var s := GameState.new(GameState.BASE_FLOORS, m.starting_shafts(), 1,
+		"res://data/tenants.json", m)
+	assert_eq(s.building.cars.size(), 2, "the granted shaft is there")
+	assert_eq(s.upgrades.level_of("speed"), 2, "and the granted motor level")
+	assert_almost_eq(s.building.cars[0].floors_per_tick,
+		s.upgrades.effect_value("speed", 2), 1e-9,
+		"the cars are SYNCED, not merely counted")
+
+func test_init_never_resizes_the_building() -> void:
+	# The saved size is the authority. Expanding here past saved_floors.size()
+	# trips the codec's refusal, decode returns null, the boot path starts a
+	# fresh game, and the autosave overwrites the only copy.
+	var m := loaded()
+	m.blueprints = 100
+	assert_true(m.buy("shafts", upgrades()), "shafts L1")
+	var s := GameState.new(8, 1, 1, "res://data/tenants.json", m)
+	assert_eq(s.building.floor_count, 8, "floors as handed")
+	assert_eq(s.building.cars.size(), 1, "shafts as handed, despite shafts L1")
+
+func test_a_malformed_blueprint_catalog_is_fatal() -> void:
+	# There is no "skip the tree and play anyway" fallback: Blueprints gate the
+	# cap and the second run.
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1, "res://data/tenants.json",
+		null, "res://data/does_not_exist.json")
+	assert_false(s.is_valid(), "fatal")
+	assert_eq(s.invalid_what(), "blueprint catalog", "and it names itself")
+	assert_eq(s.invalid_path(), "res://data/does_not_exist.json", "by path")
+
+func test_an_injected_meta_whose_defs_failed_is_still_fatal() -> void:
+	# The check is NOT conditional on p_meta. After the salvage rewiring no
+	# production path constructs with a null Meta, so a `p_meta == null` guard
+	# would put the only enforcement of the fatal-data rule on a branch nobody
+	# takes.
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1, "res://data/tenants.json",
+		Meta.new())
+	assert_false(s.is_valid(), "a bare Meta.new() has no defs")
+
+func test_the_cap_budget_is_measured_against_the_base_size() -> void:
+	# Against the CURRENT size it is a level budget measured against a floor
+	# count -- correct only at level 0. A player who started at 6 with a cap of
+	# 20 and bought 7 floors would reload permanently capped 7 floors below
+	# what they paid for, with the ghost band silently no-opping.
+	var m := loaded()
+	m.blueprints = 100
+	var u := upgrades()
+	assert_true(m.buy("height", u), "L1")
+	assert_true(m.buy("height", u), "L2")
+	var s := GameState.new(13, 1, 1, "res://data/tenants.json", m)
+	s.upgrades.restore_levels({"floor": 7})
+	for i in range(20):
+		s.economy.cash = 1_000_000.0
+		s.buy("floor")
+	assert_eq(s.building.floor_count, 20, "still reachable after a reload")
+
+func test_the_run_keeps_the_paths_it_was_built_against() -> void:
+	# Without them a demolish silently rebuilds against the shipped catalogs
+	# and defeats every override.
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1)
+	assert_eq(s.catalog_path(), "res://data/tenants.json", "catalog")
+	assert_eq(s.blueprints_path(), "res://data/blueprints.json", "blueprints")

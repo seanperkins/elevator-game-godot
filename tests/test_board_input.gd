@@ -108,6 +108,32 @@ func do_tap(x: float, y: float) -> void:
 	release_at(x, y)
 	await wait_physics_frames(2)
 
+## Raises the running state's floor cap through the Meta, then builds to n
+## floors.
+##
+## A fresh run caps at 10 floors, so the tests that need a taller-than-screen
+## board have to buy the `height` levels first. Those tests are about the SCROLL
+## TRANSFORM; their twenty floors are incidental, which is why this is a fixture
+## rather than a rewrite of what they assert.
+##
+## It grants height on the state the scene ALREADY built rather than
+## constructing a replacement, because the scene reads its state in _ready.
+## Buying through meta.buy() rather than poking _spent keeps the helper honest:
+## if the ladder's costs move, this goes red rather than quietly diverging from
+## what a player can reach.
+func build_to(n: int) -> void:
+	var meta: Meta = root.state.meta
+	meta.blueprints = 1000
+	while meta.height_cap() < n and not meta.is_maxed("height"):
+		assert_true(meta.buy("height", root.state.upgrades), "height level")
+	root.state.upgrades.set_max_level("floor",
+		meta.height_cap() - GameState.BASE_FLOORS)
+	root.state.economy.accrue(1e9)
+	while root.state.building.floor_count < n:
+		assert_true(root.state.buy("floor"),
+			"floor %d" % root.state.building.floor_count)
+	await wait_physics_frames(2)
+
 # --- the harness must actually be touching the board -----------------------
 
 func test_the_board_under_test_is_the_board_that_ships() -> void:
@@ -127,9 +153,7 @@ func test_the_board_under_test_is_the_board_that_ships() -> void:
 func test_a_drag_pans_the_board_and_dispatches_nothing() -> void:
 	# The verb swap: looking around is not commanding. A drag that used to send
 	# a car now moves the window.
-	root.state.economy.accrue(1e9)
-	for i in range(14):
-		root.state.buy("floor")           # taller than the screen, so it can scroll
+	await build_to(20)                    # taller than the screen, so it can scroll
 	await wait_physics_frames(2)
 	var target: int = root.state.building.cars[0].target_floor
 	var before: float = view.board_scroll_offset()
@@ -141,9 +165,7 @@ func test_a_drag_pans_the_board_and_dispatches_nothing() -> void:
 		"and the car did not")
 
 func test_the_board_cannot_be_panned_off_either_end() -> void:
-	root.state.economy.accrue(1e9)
-	for i in range(14):
-		root.state.buy("floor")
+	await build_to(20)
 	await wait_physics_frames(2)
 	await do_drag(column_x(0), floor_centre_y(12), floor_centre_y(12) + 5000.0)
 	assert_almost_eq(view.board_scroll_offset(), 0.0, 0.01, "not past the ground")
@@ -177,9 +199,7 @@ func test_the_car_renders_at_the_floor_it_is_on() -> void:
 func test_a_tap_after_scrolling_still_hits_the_floor_it_looks_like() -> void:
 	# THE mirrored-board check, now with an offset in it. A board that is wrong
 	# by a scroll offset is self-consistent on screen and catastrophic in play.
-	root.state.economy.accrue(1e9)
-	for i in range(14):
-		root.state.buy("floor")
+	await build_to(20)
 	await wait_physics_frames(2)
 	view.scroll_board_by(300.0)
 	await wait_physics_frames(2)
@@ -272,9 +292,7 @@ func vacate(floor_index: int) -> void:
 func test_a_tap_on_the_hall_selects_the_floor_it_looks_like_after_scrolling() -> void:
 	# THE mirrored-board check for the hall: a board wrong by a scroll offset is
 	# self-consistent on screen and catastrophic in play.
-	root.state.economy.accrue(1e9)
-	for i in range(14):
-		root.state.buy("floor")
+	await build_to(20)
 	await wait_physics_frames(2)
 	var target := 12
 	view.pan_board_by(Vector2(0, 300))
@@ -284,9 +302,7 @@ func test_a_tap_on_the_hall_selects_the_floor_it_looks_like_after_scrolling() ->
 	assert_eq(root.last_selected_floor, target)
 
 func test_a_drag_on_the_hall_pans_and_does_not_select() -> void:
-	root.state.economy.accrue(1e9)
-	for i in range(14):
-		root.state.buy("floor")
+	await build_to(20)
 	await wait_physics_frames(2)
 	root.last_selected_floor = -1
 	var before: float = view.board_scroll_offset()
