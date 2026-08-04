@@ -22,11 +22,14 @@ signal node_purchase_requested(id: String)
 signal demolish_requested()
 
 const BUTTON_HEIGHT := 88.0        # 48pt at the 0.546 iPhone scale
+## Breathing room inside the safe area, so the tree does not run to the glass.
+const EDGE_MARGIN := 16.0
 
 var _state: GameState
 var _armed: bool = false
 
 var _box: VBoxContainer
+var _scroll: ScrollContainer
 var _yield_label: Label
 var _rows: Dictionary = {}          # node id -> Button
 var _rebuild_button: Button
@@ -51,15 +54,15 @@ func bind(state: GameState) -> void:
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(bg)
 
-	var scroll := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(scroll)
+	_scroll = ScrollContainer.new()
+	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(_scroll)
 
 	_box = VBoxContainer.new()
 	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_box.add_theme_constant_override("separation", 6)
-	scroll.add_child(_box)
+	_scroll.add_child(_box)
 
 	# The projection IS the confirmation: the number being decided on is on
 	# screen before the button is reachable. With a $1,000 gate this line does
@@ -105,6 +108,18 @@ func bind(state: GameState) -> void:
 		_armed = false
 		refresh())
 	refresh()
+
+## Insets the hardware has already claimed. This panel covers the WHOLE screen,
+## including the HUD's band, so it is the only surface here that has to inset
+## itself -- everything else is laid out inside a board that game_root has
+## already inset. Without it the yield line sits under the Dynamic Island.
+func set_insets(safe: Vector4) -> void:
+	if _scroll == null:
+		return
+	_scroll.offset_left = safe.x + EDGE_MARGIN
+	_scroll.offset_top = safe.y + EDGE_MARGIN
+	_scroll.offset_right = -(safe.z + EDGE_MARGIN)
+	_scroll.offset_bottom = -(safe.w + EDGE_MARGIN)
 
 func open(state: GameState) -> void:
 	_state = state

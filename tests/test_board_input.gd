@@ -841,17 +841,44 @@ func test_manage_is_still_tappable_after_a_demolish() -> void:
 	# appends the panels LAST, and their full-rect MOUSE_FILTER_STOP scrims
 	# would then win input against MANAGE for the rest of the session.
 	await demolish_now()
+	# FloorPanel is a bottom SHEET: the sim runs behind it and the HUD stays
+	# reachable, so MANAGE must be a LATER sibling than its full-rect scrim.
 	assert_gt(root.get_children().find(root._view_button),
-		root.get_children().find(root._prestige),
-		"the button is a later sibling than the panel scrim")
+		root.get_children().find(root.panel),
+		"MANAGE is a later sibling than the floor sheet's scrim")
 	# And the consequence, through real hit-testing rather than pressed.emit(),
-	# which bypasses it: with a floor panel OPEN its full-rect scrim is exactly
-	# what would swallow this tap if the order were wrong.
+	# which bypasses it.
 	root.panel.show_floor(root.state, 1)
 	await wait_physics_frames(1)
-	assert_true(root.panel.visible, "a panel is open over the board")
+	assert_true(root.panel.visible, "a sheet is open over the board")
 	await do_tap(612.0, 48.0)
 	assert_true(root._management.visible, "MANAGE is still reachable through it")
+
+func test_the_prestige_panel_covers_the_hud_it_overlays() -> void:
+	# The opposite answer to the test above, and the bug that shipped: the
+	# prestige panel is a full-screen OVERLAY, not a sheet. Left among the views
+	# it draws underneath the pager and MANAGE, which then sit on top of the
+	# tech tree -- and the board bleeds through wherever the panel is not.
+	await demolish_now()
+	var kids := root.get_children()
+	assert_gt(kids.find(root._prestige), kids.find(root._view_button),
+		"the overlay is above MANAGE")
+	assert_gt(kids.find(root._prestige), kids.find(root._prev_shaft),
+		"and above the shaft pager")
+	assert_eq(kids.find(root._prestige), kids.size() - 1,
+		"in fact above everything, so nothing can draw through it")
+
+func test_the_prestige_panel_insets_itself_from_the_hardware() -> void:
+	# It is the one surface that covers the HUD band, so it cannot rely on the
+	# board's inset. Without this the yield line sits under the Dynamic Island.
+	root._prestige.set_insets(Vector4(5.0, 60.0, 5.0, 30.0))
+	root._prestige.open(root.state)
+	await wait_physics_frames(1)
+	var r: Rect2 = root._prestige._scroll.get_global_rect()
+	assert_almost_eq(r.position.y, 60.0 + PrestigePanel.EDGE_MARGIN, 0.5,
+		"clear of the top inset")
+	assert_almost_eq(r.position.x, 5.0 + PrestigePanel.EDGE_MARGIN, 0.5,
+		"and the left one")
 
 func test_a_demolish_that_cannot_be_saved_changes_nothing() -> void:
 	# The failure is INDUCED, not stubbed: SaveStore.save is static and

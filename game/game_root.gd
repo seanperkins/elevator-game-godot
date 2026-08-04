@@ -265,17 +265,28 @@ func _rebuild_views() -> void:
 	_prestige.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_prestige)
 	_prestige.bind(state)
+	# It covers the whole screen, HUD band included, so it is the one surface
+	# that has to inset itself rather than living inside an already-inset board.
+	_prestige.set_insets(_safe)
 	_prestige.node_purchase_requested.connect(_on_node_purchase)
 	_prestige.demolish_requested.connect(_on_demolish)
 
-	# Sibling order decides input. _ready builds the views BEFORE the pager and
-	# _view_button, so those are later siblings and win against the panels'
-	# full-rect MOUSE_FILTER_STOP scrims. A remove_child + add_child rebuild
-	# appends the views LAST, which would put the scrims above MANAGE for the
-	# rest of the session.
+	# Sibling order decides both drawing and input, and the two panels want
+	# OPPOSITE answers.
+	#
+	# FloorPanel is a bottom SHEET: the sim runs behind it and the HUD must stay
+	# reachable, so the pager and MANAGE sit above it. _ready builds the views
+	# first and the HUD after, which gets that right on the initial build; a
+	# remove_child + add_child rebuild appends the views last and would put the
+	# sheet's full-rect scrim above MANAGE for the rest of the session.
 	for later in [_prev_shaft, _next_shaft, _pager_label, _view_button]:
 		if later != null:
 			move_child(later, get_child_count() - 1)
+	# PrestigePanel is a full-screen OVERLAY, so it goes above the HUD as well.
+	# Left among the views it draws underneath the pager and MANAGE, which then
+	# sit on top of the tech tree -- and nothing else is above it, so this is
+	# also what stops the board bleeding through.
+	move_child(_prestige, get_child_count() - 1)
 
 func _on_prestige_requested() -> void:
 	_prestige.open(state)
