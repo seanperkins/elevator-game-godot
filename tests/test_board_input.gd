@@ -448,15 +448,17 @@ func test_no_occupancy_count_is_printed_while_the_seats_are_drawn() -> void:
 func test_seats_carry_the_floor_now_that_the_column_is_wide_enough() -> void:
 	board_riders([12, 7])
 	assert_eq(view._columns[0].rider_destinations(),
-		PackedStringArray(["12", "7"]), "two digits fit on a 34-unit seat")
+		PackedStringArray(["12", "7"]), "two digits fit a standing rider's badge")
 
 func test_the_count_returns_when_the_row_is_too_short_for_seats() -> void:
-	# At the 40-floor cap a car is 25.6 units tall: no rank of seats fits, the
-	# picture is gone, and the number is all there is.
+	# Below CarRack's ONE_RANK_MIN no rank of figures fits, the picture is gone,
+	# and the number is all there is -- but the pips keep drawing.
 	var col: ShaftColumn = view._columns[0]
 	col._car_rect.size.y = 18.0
 	col.set_riders([Passenger.new(0, 5, 900, 4.0, 0)], 4)
-	assert_eq(col.free_slots_shown(), 0, "no seats drawn")
+	assert_eq(col.free_slots_shown(), 3,
+		"the picture is gone but occupancy is not -- pips draw in every band "
+		+ "(one of four is lit)")
 	assert_string_contains(col.car_text(), "1/4", "so the count comes back")
 	assert_string_contains(col.car_text(), "5", "with the floors it can fit")
 
@@ -470,7 +472,7 @@ func test_the_fallback_line_collapses_rather_than_overflowing() -> void:
 	var text: String = col.car_text()
 	assert_string_contains(text, "6/12", "the count is never dropped")
 	assert_string_contains(text, "+", "and the remainder is counted, not clipped")
-	assert_lt(text.length(), 20, "the line stays inside the column")
+	assert_lt(text.length(), 20, "the line stays inside the 220-unit car")
 
 func test_seats_show_taken_and_free_at_a_glance() -> void:
 	board_riders([5, 2])
@@ -500,6 +502,25 @@ func test_raising_capacity_adds_visible_seats() -> void:
 	view.refresh()
 	assert_eq(view._columns[0].free_slots_shown(), 7,
 		"the capacity upgrade is only legible if the seats appear")
+
+func test_the_pips_count_the_seats_and_light_for_riders() -> void:
+	board_riders([5, 2])
+	var col: ShaftColumn = view._columns[0]
+	assert_eq(col.seats_taken(), 2, "two lit")
+	assert_eq(col.free_slots_shown(), 2, "two hollow of a four-seat car")
+
+func test_capacity_is_legible_above_eight_where_the_rack_gave_up() -> void:
+	# The seat rack fell back to a text line at capacity 9, so "Bigger Car"
+	# bought something invisible. The pip strip does not.
+	root.state.building.cars[0].capacity = 12
+	view.refresh()
+	assert_eq(view._columns[0].free_slots_shown(), 12,
+		"all twelve pips, where the rack drew none")
+
+func test_riders_stand_in_ranks_and_still_say_where_they_are_going() -> void:
+	board_riders([12, 7])
+	assert_eq(view._columns[0].rider_destinations(),
+		PackedStringArray(["12", "7"]), "two digits on a standing figure")
 
 
 # --- what a real thumb delivers -------------------------------------------

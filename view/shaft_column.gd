@@ -13,23 +13,23 @@ signal dispatch_requested(shaft_index: int, floor_index: int)
 signal surge_requested(shaft_index: int)
 signal pan_requested(delta: Vector2)
 
-## The car is a rack of seats. Each one is the same little square the passenger
-## was in the hall, now showing the floor they pressed instead of a call arrow:
-## the destination is learned by picking someone up.
+## Riders stand on the car's floor in ranks, and a strip of pips across the top
+## shows how full the car is. The destination is learned by picking someone up,
+## exactly as the seat rack taught it.
 ##
-## There is NO occupancy count while the rack is drawn. Four filled squares of
-## four is the count -- printing "4/4" beside it says the same thing twice and
-## spends the only line of type the car has. The count returns only when the floor
-## is too short to draw seats at all, which is the one case where the picture is
-## gone and the number is all there is.
-const SEAT_SIZE := Vector2(30, 30)
-const SEAT_FONT := 24
+## There is NO occupancy count while the pips are drawn: lit-versus-hollow IS
+## the count. The header line returns only when the car is too short for even
+## one rank of figures -- the one case where the picture is gone and the number
+## is all there is. The pips keep drawing in every band.
 const HEADER_HEIGHT := 20.0
 const HEADER_FONT := 16
 ## Characters that fit across the car at HEADER_FONT, in the no-room fallback.
+## Sized for the 220-unit car.
 const HEADER_BUDGET := 16
 
-const SEAT_FREE := Palette.PERSON_BAR_TRACK  # removed in the pips task
+## Today's PassengerSprite.FONT, kept: a font-24 line box is what the 30-unit
+## badge was sized for, and it is 13.1pt at the 0.546 iPhone scale.
+const CAR_FONT := 24
 
 ## The doors, as the player sees them: two panels that part over the car.
 ##
@@ -41,7 +41,7 @@ const SEAT_FREE := Palette.PERSON_BAR_TRACK  # removed in the pips task
 ## the mapping is pinned to the rule by test: the panels are wide open exactly
 ## when, and only when, the car will accept someone.
 ##
-## They are translucent on purpose. Opaque panels would hide the seat rack for
+## They are translucent on purpose. Opaque panels would hide the figures for
 ## the ~95% of the time a car is shut, which is most of when the player needs to
 ## read who is aboard and where they are going.
 const DOOR_COLOUR := Palette.DOOR
@@ -73,7 +73,8 @@ var _car_rect: ColorRect
 var _car_label: Label
 var _door_left: ColorRect
 var _door_right: ColorRect
-var _seats: Array[ColorRect] = []
+var _pips: Array[Rect2] = []
+var _lit: int = 0
 var _chips: Array[PersonSprite] = []
 var _listed: PackedStringArray = PackedStringArray()
 var _car_floor_provider: Callable
@@ -112,9 +113,10 @@ func setup(index: int, coords: BoardCoords, car_floor_provider: Callable) -> voi
 	_car_rect.color = Palette.CAR
 	_car_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_car_rect)
+	_car_rect.draw.connect(_draw_pips)
 
-	# Anchored at the TOP of the car and read against the light body. Centred
-	# vertically it collided with the seats and sat where nothing else does.
+	# Anchored at the TOP of the car and read against the light body. In the
+	# header bands it sits below the pip strip; in the rank bands it is cleared.
 	#
 	# DARK ink, on a car that is now a MID-luminance teal rather than either
 	# extreme. Measured on the mockup's own car colour: cream 2.77:1, this brown
@@ -174,53 +176,53 @@ func set_car_position(position_floor: float) -> void:
 	_car_rect.size = Vector2(size.x - 6.0, _coords.floor_height - 4.0)
 	_car_label.size = _car_rect.size
 
-## What is aboard, where it is going, and how much room is left -- as a picture
-## when there is room to draw one, and as a line of text when there is not.
+## What is aboard, where it is going, and how much room is left.
 ##
-## Capacity starts at FOUR, so a car is routinely full and "is there room"
-## decides whether dispatching here does anything at all. Hollow seats answer
-## that at a glance; a subtraction does not.
+## The pips are the seat rack flattened: one per seat, lit for a rider, hollow
+## for a free one. Capacity is 4 to 12 -- small and discrete -- so lit-vs-hollow
+## answers "does one more fit" EXACTLY, which a needle could not. They draw at
+## every capacity and in every guard band, so occupancy survives even when the
+## figures do not.
 func set_riders(riders: Array, capacity: int) -> void:
 	var area := _car_rect.size
-	var grid := ChipGrid.shape(capacity,
-		ChipGrid.columns_for(area.x, SEAT_SIZE.x), ChipGrid.rows_for(area.y, SEAT_SIZE.y))
-	# Every seat or none: a rack that shows six of eight answers "how many more
-	# fit" with a lie, which is the one question it exists to answer.
-	if ChipGrid.fits(grid) < capacity:
+	_pips = CarRack.pips(capacity, area.x)
+	_lit = mini(riders.size(), capacity)
+	var slots := CarRack.slots(capacity, area.x, area.y)
+	_car_rect.queue_redraw()
+
+	if slots.is_empty():
 		_draw_header_only(riders, capacity)
 		return
 
+	var cell := CarRack.cell_width(capacity, area.x, CarRack.ranks_for(capacity, area.y))
 	_car_label.text = ""
-	_grow_pools(capacity)
+	_grow_pools(slots.size())
 	_listed = PackedStringArray()
-	for i in range(_seats.size()):
-		if i >= capacity:
-			_seats[i].visible = false
+	for i in range(_chips.size()):
+		if i >= slots.size() or i >= riders.size():
 			_chips[i].recycle()
 			continue
-		var at := ChipGrid.position_of(i, capacity, grid, area, SEAT_SIZE)
-		if i < riders.size():
-			_seats[i].visible = false
-			var p: Passenger = riders[i]
-			_chips[i].position = at
-			_chips[i].show_riding(str(p.destination_floor),
-				PersonSprite.key_for(p.origin_floor, p.destination_floor, p.source_floor))
-			_listed.append(str(p.destination_floor))
-		else:
-			_chips[i].recycle()
-			_seats[i].visible = true
-			_seats[i].position = at
+		var p: Passenger = riders[i]
+		_chips[i].set_cell(Vector2(cell, CarRack.BAND), CarRack.BADGE_H, CAR_FONT)
+		_chips[i].position = slots[i].position
+		_chips[i].show_riding(str(p.destination_floor),
+			PersonSprite.key_for(p.origin_floor, p.destination_floor, p.source_floor))
+		_listed.append(str(p.destination_floor))
+	# Riders past the drawable rank are counted, not dropped -- the short-car
+	# band shows fewer figures than the car holds.
+	if riders.size() > slots.size():
+		_car_label.text = "+%d" % (riders.size() - slots.size())
+		_car_label.position = Vector2(0, CarRack.INSET + CarRack.PIP_H)
+		_car_label.size = Vector2(area.x, HEADER_HEIGHT)
 
-## The floor is too short for even one rank of seats -- at the 40-floor cap the
-## car is 25.6 units tall. The picture is gone, so the count comes back, with as
-## many destinations as the line can hold.
+## The car is too short for even one rank of figures -- below CarRack's
+## ONE_RANK_MIN. The picture is gone, so the count comes back, with as many
+## destinations as the line can hold. The pips keep drawing.
 func _draw_header_only(riders: Array, capacity: int) -> void:
-	for seat in _seats:
-		seat.visible = false
 	for chip in _chips:
 		chip.recycle()
 	_car_label.text = _header_for(riders, capacity)
-	_car_label.position = Vector2(0, 1)
+	_car_label.position = Vector2(0, CarRack.INSET + CarRack.PIP_H)
 	_car_label.size = Vector2(_car_rect.size.x, HEADER_HEIGHT)
 
 func _header_for(riders: Array, capacity: int) -> String:
@@ -238,39 +240,34 @@ func _header_for(riders: Array, capacity: int) -> String:
 		tail += "+%d" % (riders.size() - _listed.size())
 	return head + tail
 
-func _grow_pools(capacity: int) -> void:
-	while _seats.size() < capacity:
-		var seat := ColorRect.new()
-		seat.color = SEAT_FREE
-		seat.size = SEAT_SIZE
-		seat.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_car_rect.add_child(seat)
-		_seats.append(seat)
-
+func _grow_pools(count: int) -> void:
+	while _chips.size() < count:
 		var chip := PersonSprite.new()
 		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_car_rect.add_child(chip)
-		chip.set_cell(SEAT_SIZE, SEAT_SIZE.y, SEAT_FONT)
 		chip.recycle()
 		_chips.append(chip)
+
+## Two rects per pip: its own track, and a lit fill inset inside it. The track
+## is PER PIP rather than one bar behind them all -- two adjacent hollows on a
+## shared track merge into a single dark band, and counting free seats is the
+## one job the strip has.
+func _draw_pips() -> void:
+	for i in _pips.size():
+		_car_rect.draw_rect(_pips[i], Palette.PERSON_BAR_TRACK)
+		if i < _lit:
+			_car_rect.draw_rect((_pips[i] as Rect2).grow(-1.0), Palette.PIP_LIT)
 
 ## Destinations the car is actually showing, in boarding order.
 func rider_destinations() -> PackedStringArray:
 	return _listed
 
+## Pips, not seats -- but the question is the same one, so the names are.
 func seats_taken() -> int:
-	var n := 0
-	for chip in _chips:
-		if chip.visible:
-			n += 1
-	return n
+	return _lit
 
 func free_slots_shown() -> int:
-	var n := 0
-	for seat in _seats:
-		if seat.visible:
-			n += 1
-	return n
+	return maxi(_pips.size() - _lit, 0)
 
 func car_text() -> String:
 	return _car_label.text if _car_label != null else ""
