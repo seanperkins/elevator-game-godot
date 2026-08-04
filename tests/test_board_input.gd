@@ -707,3 +707,37 @@ func test_management_opens_the_prestige_panel() -> void:
 	root._management.prestige_requested.emit()
 	await wait_physics_frames(1)
 	assert_true(root._prestige.visible, "and the heading opens it")
+
+# --- the ghost band at the purchasable cap ----------------------------------
+
+func test_at_the_cap_the_ghost_band_says_so_and_opens_the_panel() -> void:
+	# A weaker version -- "a tap neither buys a floor nor errors" -- is
+	# vacuously true today with no code at all, and would pass with the whole
+	# change deleted.
+	await build_to(10)
+	assert_eq(root.state.building.floor_count, 10, "at the cap")
+	view.refresh()
+	assert_string_contains(view._ghost_label.text, "REBUILD",
+		"the band names what to do instead")
+	var before: int = root.state.building.floor_count
+	# x=100, not 400: rebuild() moves the shaft viewport last, so after any
+	# rebuild the ghost only wins on the hall side of SHAFT_AREA_X. That is the
+	# same reason test_the_ghost_still_wins_after_a_rebuild taps here.
+	await do_tap(100.0, ghost_centre_y())
+	assert_eq(root.state.building.floor_count, before, "no floor was bought")
+	assert_true(root._prestige.visible, "and the panel opened")
+
+func test_below_the_cap_the_ghost_band_still_buys_a_floor() -> void:
+	root.state.economy.accrue(1e9)
+	var before: int = root.state.building.floor_count
+	await do_tap(400.0, ghost_centre_y())
+	assert_eq(root.state.building.floor_count, before + 1, "still the primary verb")
+	assert_false(root._prestige.visible, "and no panel")
+
+func test_the_ghost_band_survives_at_the_cap_so_the_pan_strip_does() -> void:
+	# Line 97 gates CONSTRUCTION on the structural cap, and _on_ghost_input is
+	# also the pan handler. Deleting the band at the purchasable cap would kill
+	# the 88-unit pan strip on precisely the tallest buildings.
+	await build_to(10)
+	view.refresh()
+	assert_not_null(view._ghost_floor, "the band is still there")

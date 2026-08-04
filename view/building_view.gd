@@ -15,6 +15,9 @@ extends Control
 ## a column's local y can be handed straight to y_to_floor.
 
 signal floor_purchase_requested()
+## At the purchasable cap the ghost band stops selling a floor and starts
+## offering the only thing that raises it.
+signal prestige_requested()
 signal shaft_purchase_requested()
 ## Re-broadcast of the (recreated) HallColumn's floor_selected. hall_column is
 ## rebuilt whenever the board grows, and a fresh instance carries no
@@ -204,7 +207,14 @@ func _on_ghost_input(event: InputEvent) -> void:
 				pan_board_by(delta)
 	elif PointerEvents.is_release(event):
 		if _ghost_gesture.release() == Gesture.Result.TAP:
-			floor_purchase_requested.emit()
+			# Giving the tap a destination removes the silent no-op rather than
+			# merely labelling it: Upgrades.purchase refuses at is_maxed and
+			# game_root discards the result, so at the cap this band was
+			# inviting a tap that did nothing at all.
+			if _state.upgrades.is_maxed("floor"):
+				prestige_requested.emit()
+			else:
+				floor_purchase_requested.emit()
 
 ## All five visible positions draw a placeholder so the early board reads as
 ## room to grow. Only the TRAILING one -- index `owned` -- is priced and takes
@@ -346,8 +356,16 @@ func refresh() -> void:
 		_floors[i].set_waiting(waiting,
 			_state.upgrades.is_installed("call_direction"))
 	if _ghost_label != null:
-		var floor_cost := _state.upgrades.cost_of("floor")
-		_ghost_label.text = "+ BUILD FLOOR  $%s" % NumberFormat.compact(floor_cost)
-		_ghost_label.add_theme_color_override("font_color",
-			Color("4ade80") if _state.economy.can_afford(floor_cost) else Color("4a5563"))
+		if _state.upgrades.is_maxed("floor"):
+			# 21 characters ends near x = 227 at font size 15 from LABEL_X = 38,
+			# just inside FloorRow.STRIP_RIGHT (240). A 37-character string
+			# would overrun into the shaft slot's own label.
+			_ghost_label.text = "CAP REACHED — REBUILD"
+			_ghost_label.add_theme_color_override("font_color", Color("f0b429"))
+		else:
+			var floor_cost := _state.upgrades.cost_of("floor")
+			_ghost_label.text = "+ BUILD FLOOR  $%s" % NumberFormat.compact(floor_cost)
+			_ghost_label.add_theme_color_override("font_color",
+				Color("4ade80") if _state.economy.can_afford(floor_cost) \
+				else Color("4a5563"))
 	_position_slots(_state.building.cars.size())

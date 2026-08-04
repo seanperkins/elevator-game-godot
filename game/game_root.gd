@@ -145,6 +145,7 @@ func _ready() -> void:
 	_view.floor_purchase_requested.connect(func() -> void: state.buy("floor"))
 	_view.shaft_purchase_requested.connect(_on_buy_shaft)
 	_view.hall_floor_selected.connect(_on_hall_floor_selected)
+	_view.prestige_requested.connect(_on_prestige_requested)
 
 	_management = ManagementView.new()
 	_management.position = Vector2(_safe.x, HUD_HEIGHT + _safe.y)
