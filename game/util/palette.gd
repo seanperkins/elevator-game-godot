@@ -62,6 +62,20 @@ const VERMILION := Color("c4462c")
 const BROWN_DARK := Color("2b1a0c")
 const BROWN_FAINT := Color("bda67e")
 
+## The people. EIGHT pigments on eight distinct luminance rungs, spaced 1.25
+## apart and dodging the APP_BG and CAR bands -- because contrast is luminance
+## only, so eight colours that merely differ in hue would fail their own test.
+## A first attempt at plausible mid-century colours failed six constraints; this
+## ladder was solved rather than picked, and the tightest pair measures 1.24.
+const SHIRT_TEAL := Color("193337")
+const SHIRT_PLUM := Color("5a3144")
+const SHIRT_SLATE := Color("404d5f")
+const SHIRT_RUST := Color("8e4630")
+const SHIRT_GOLD := Color("907538")
+const SKIN_DEEP := Color("8e5e3c")
+const SKIN_MID := Color("d09562")
+const SKIN_PALE := Color("ceb092")
+
 # ---------------------------------------------------------------- surfaces --
 # A ladder from the page FORWARD. On a light theme each layer that comes
 # forward sits a step DARKER, the opposite of the dark palette -- but the
@@ -124,9 +138,7 @@ const INK_ON_LIGHT := BROWN_DARK
 const CAR := TEAL
 ## The band across the car -- the doors' seam, pale against the body.
 const CAR_BAND := CREAM_PALE
-## An empty seat in the rack.
-const SEAT_FREE := TEAL_DARK
-## The doors, translucent so the seat rack stays readable while shut -- see
+## The doors, translucent so the figures stay readable while shut -- see
 ## ShaftColumn.DOOR_COLOUR's docstring for why that matters.
 const DOOR := Color("306b65", 0.55)
 
@@ -156,6 +168,34 @@ const PATIENCE_OK := Color("9ec46f")
 const PATIENCE_LOW := Color("e07a52")
 ## Nobody waiting: present but inert, so it sits just off its own track.
 const PATIENCE_IDLE := Color("ab9670")
+
+# ---------------------------------------------------------------- people --
+
+## A person's shirt and skin, chosen by PersonSprite from the passenger's own
+## trip. FIVE and THREE, not four and three: the sizes are coprime to the tint
+## key's surviving coefficients, which is what stops a whole traffic class
+## wearing one colour -- see the design spec's 2.3.
+const PERSON_SHIRTS: Array[Color] = [
+	SHIRT_TEAL, SHIRT_PLUM, SHIRT_SLATE, SHIRT_RUST, SHIRT_GOLD]
+const PERSON_SKINS: Array[Color] = [SKIN_DEEP, SKIN_MID, SKIN_PALE]
+const PERSON_LEGS := BROWN_DARK
+
+## The badge above a person's head. It lands on TWO grounds -- cream in the hall
+## and mid teal in the car -- so it is measured against both: 9.87:1 and 3.57:1.
+const BADGE_BG := TEAL_INK
+const BADGE_INK := CREAM_PALE
+
+## The track under a person's patience bar, and under each pip.
+##
+## NOT BAR_TRACK, which the gutter's tenant bar uses. The patience ramp measures
+## 1.09:1 against BAR_TRACK at full green -- quieter than PATIENCE_IDLE, the
+## colour that means nobody is here. The tenant bar survives that pairing because
+## it drains by HEIGHT in a fixed position; a person's bar is 4x22 and its
+## fill/track boundary IS the encoding. On this track the ramp is 5.63:1 at red
+## and 8.42:1 at green.
+const PERSON_BAR_TRACK := BROWN_DARK
+## A pip with a rider in it. 15.19:1 on the track.
+const PIP_LIT := CREAM_PALE
 
 # ---------------------------------------------------------------- traffic --
 # DaySparkline's three series. They separate by HUE, not lightness -- they are

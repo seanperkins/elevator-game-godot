@@ -106,21 +106,13 @@ func test_the_fill_ink_beats_the_alternative_on_every_fill_it_lands_on() -> void
 	# than from the fill. Pin the comparison instead of the conclusion: whatever
 	# INK_ON_LIGHT is, it must beat the ground colour used as ink on the same
 	# fill -- otherwise the palette is choosing the losing option.
-	for fill in [Palette.CAR, Palette.PATIENCE_OK, Palette.PATIENCE_LOW]:
+	# The patience fills were dropped from the list: no ink lands on the ramp any
+	# more, so only the car stays live.
+	for fill in [Palette.CAR]:
 		assert_gt(_contrast(Palette.INK_ON_LIGHT, fill), _contrast(Palette.APP_BG, fill),
 			"INK_ON_LIGHT must out-read the page colour on every fill it sits on")
 
 # -------------------------------------------------------------- patience --
-
-func test_the_patience_ramp_carries_its_label_at_every_point() -> void:
-	# PassengerSprite lerps LOW -> OK and draws INK_ON_LIGHT on top, so it is
-	# not enough for the two ENDS to work. A ramp between two individually-fine
-	# colours can still pass through a midpoint that swallows the label.
-	for i in range(21):
-		var t := float(i) / 20.0
-		var body := Palette.PATIENCE_LOW.lerp(Palette.PATIENCE_OK, t)
-		assert_gt(_contrast(Palette.INK_ON_LIGHT, body), 3.5,
-			"ink must read on the patience ramp at t=%.2f" % t)
 
 func test_the_idle_bar_is_present_but_inert() -> void:
 	# A vacant floor's bar is not information, it is absence of it. It has to be
@@ -179,3 +171,62 @@ func test_the_three_traffic_series_are_three_colours() -> void:
 func test_every_traffic_series_reads_on_the_panel() -> void:
 	for c in [Palette.TRAFFIC_IN, Palette.TRAFFIC_OUT, Palette.TRAFFIC_INTER]:
 		assert_gt(_contrast(c, Palette.PANEL_BG), 4.5, "traffic series on PANEL_BG")
+
+# ------------------------------------------------------------------ people --
+
+## Every figure lands on TWO grounds -- cream in the hall, mid teal in the car --
+## so each pigment is measured against both. 1.2 rather than 3:1 because these
+## are decorative fills, not information: it is the same floor the idle tenant
+## bar already uses. A stated requirement with no test is what put AFFORD_OFF on
+## screen at 1.29:1 with a green suite.
+const DECOR_MIN := 1.2
+
+func test_shirts_separate_from_each_other() -> void:
+	for i in Palette.PERSON_SHIRTS.size():
+		for j in range(i + 1, Palette.PERSON_SHIRTS.size()):
+			assert_gt(_contrast(Palette.PERSON_SHIRTS[i], Palette.PERSON_SHIRTS[j]),
+				DECOR_MIN, "shirts %d and %d read as one colour" % [i, j])
+
+func test_skins_separate_from_each_other() -> void:
+	for i in Palette.PERSON_SKINS.size():
+		for j in range(i + 1, Palette.PERSON_SKINS.size()):
+			assert_gt(_contrast(Palette.PERSON_SKINS[i], Palette.PERSON_SKINS[j]),
+				DECOR_MIN, "skins %d and %d read as one colour" % [i, j])
+
+func test_every_shirt_separates_from_every_skin() -> void:
+	# The torso/head boundary is an edge inside a 14x22 figure.
+	for shirt in Palette.PERSON_SHIRTS:
+		for skin in Palette.PERSON_SKINS:
+			assert_gt(_contrast(shirt, skin), DECOR_MIN, "head vanishes into torso")
+
+func test_every_shirt_separates_from_the_legs() -> void:
+	for shirt in Palette.PERSON_SHIRTS:
+		assert_gt(_contrast(shirt, Palette.PERSON_LEGS), DECOR_MIN)
+
+func test_every_person_pigment_reads_on_both_grounds() -> void:
+	# The hall is cream and the car is mid teal. A pigment tuned against one and
+	# drawn on the other is the AFFORD_OFF story.
+	for c in Palette.PERSON_SHIRTS + Palette.PERSON_SKINS:
+		assert_gt(_contrast(c, Palette.APP_BG), DECOR_MIN, "lost on the page")
+		assert_gt(_contrast(c, Palette.CAR), DECOR_MIN, "lost on the car")
+
+func test_the_badge_reads_on_both_grounds_and_carries_its_glyph() -> void:
+	assert_gt(_contrast(Palette.BADGE_BG, Palette.APP_BG), 3.0, "badge on the page")
+	assert_gt(_contrast(Palette.BADGE_BG, Palette.CAR), 3.0, "badge on the car")
+	assert_gt(_contrast(Palette.BADGE_INK, Palette.BADGE_BG), 4.5, "the glyph")
+
+func test_the_patience_ramp_reads_on_the_person_bar_track_at_every_point() -> void:
+	# The ramp on BAR_TRACK measures 1.09:1 at full green -- quieter than
+	# PATIENCE_IDLE, which is the colour that means nobody is here. The person's
+	# bar is the only patience signal a stranger carries, so it gets its own
+	# dark track and the WHOLE lerp is checked, not just the ends.
+	for i in range(21):
+		var t := float(i) / 20.0
+		var fill := Palette.PATIENCE_LOW.lerp(Palette.PATIENCE_OK, t)
+		assert_gt(_contrast(fill, Palette.PERSON_BAR_TRACK), 3.0,
+			"patience is invisible at t=%.2f" % t)
+
+func test_a_pip_reads_lit_hollow_and_against_the_car() -> void:
+	assert_gt(_contrast(Palette.PIP_LIT, Palette.PERSON_BAR_TRACK), 3.0, "lit vs hollow")
+	assert_gt(_contrast(Palette.PERSON_BAR_TRACK, Palette.CAR), 3.0,
+		"a hollow pip against the car body")

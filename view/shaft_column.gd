@@ -29,7 +29,7 @@ const HEADER_FONT := 16
 ## Characters that fit across the car at HEADER_FONT, in the no-room fallback.
 const HEADER_BUDGET := 16
 
-const SEAT_FREE := Palette.SEAT_FREE
+const SEAT_FREE := Palette.PERSON_BAR_TRACK  # removed in the pips task
 
 ## The doors, as the player sees them: two panels that part over the car.
 ##
