@@ -21,8 +21,9 @@ godot --headless --export-release "Web" build/web/index.html   # web build
 godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit   # run the whole GUT suite
 ```
 
-- **Run a single test file:** `godot --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests/test_tenancy.gd -gexit`
-- **Run one named test:** add `-ginclude="test_name"` (GUT test-name filter).
+- **Run a single test file:** `godot --headless -s addons/gut/gut_cmdln.gd -gtest=res://tests/test_tenancy.gd -gexit` — **`-gdir` takes a directory, not a file.**
+- **Run one named test:** add `-gunit_test_name=test_name`. There is no `-ginclude`.
+- The `-gdir=<file>` / `-ginclude` forms print `[GUT ERROR] Nothing was run` and **exit 0** — a false green before a commit. Measured 2026-08-03 on GUT 9.7.1.
 - **CI** (`.github/workflows/deploy.yml`): on push to `main` — install Godot 4.7 → run GUT → assert threadless export → build → deploy to Pages. Local GUT must pass before merging.
 - **Dev-only override:** `godot -- --board=40x8` starts an oversized board for screenshots. Do not let this pattern into a shipped default.
 

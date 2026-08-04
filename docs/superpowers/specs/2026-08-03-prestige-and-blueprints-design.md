@@ -2224,5 +2224,9 @@ all, and would pass with the entire §10 change deleted.
    are `-gtest=res://tests/test_x.gd` and `-gunit_test_name=test_name`.
    **[r2]** The premise is verified — `grep ginclude addons/gut/gut_cmdln.gd`
    returns nothing and `codemaps/tests.md:10-11` says so explicitly — but the
-   *"and exits 0"* half was asserted without running Godot. Re-check it before
-   quoting it as fact; the defect stands either way.
+   *"and exits 0"* half was asserted without running Godot.
+   **Measured 2026-08-03 on Godot 4.7.stable / GUT 9.7.1: it is true.**
+   `-gdir=res://tests/test_tenancy.gd` prints
+   `[GUT ERROR] The path [...] does not exist.` then `[GUT ERROR] Nothing was run.`
+   and returns **exit status 0** — a false green before a commit, exactly as
+   claimed. `CLAUDE.md` is corrected and now states the measured exit code.

@@ -73,9 +73,12 @@ Read before starting; this plan is a build order, not a replacement for them.
   - one test: `-gunit_test_name=test_name` — **`-ginclude` does not exist**
     (confirmed: `grep ginclude addons/gut/gut_cmdln.gd` returns nothing)
 - Run `godot --headless --import` after adding any file with a new `class_name`.
-- **The sandbox blocks Godot's user data dir.** Every `godot` invocation fails
-  with "Could not create directory: ~/Library/Application Support/Godot/…" then
-  signal 11. Re-run with `dangerouslyDisableSandbox: true`.
+- **The sandbox does NOT block Godot** — corrected 2026-08-03 while executing
+  Task 1. The handoff claimed every `godot` invocation dies on
+  "Could not create directory: ~/Library/Application Support/Godot/…" plus
+  signal 11; in this checkout the user data directory already exists and the
+  whole suite runs sandboxed. Run normally, and only reach for
+  `dangerouslyDisableSandbox: true` on actual evidence of a sandbox refusal.
 - **GUT fails a test on unhandled engine errors** (`addons/gut/error_tracker.gd:35`,
   raised at `gut.gd:624-625`). This is what makes the "returns null **without
   throwing**" assertions real.
