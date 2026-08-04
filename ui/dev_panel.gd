@@ -7,7 +7,7 @@ extends Control
 ##
 ## Shaped like PrestigePanel and for the same reasons: a full-screen overlay
 ## wrapping a ScrollContainer, the topmost child so nothing draws through it,
-## inset from the safe area, dismissed by the scrim.
+## inset from the safe area, dismissed by an explicit BACK control.
 ##
 ## It EMITS, it does not mutate. Several of these actions touch persistent state
 ## and have to be written immediately, and game_root owns the save.
@@ -31,6 +31,7 @@ const GRANT_BLUEPRINTS := 5
 
 var _state: GameState
 var _scroll: ScrollContainer
+var _close_button: Button
 var _box: VBoxContainer
 var _speed_buttons: Dictionary = {}     # multiplier -> Button
 var _speed: int = 1
@@ -40,12 +41,13 @@ func bind(state: GameState) -> void:
 	visible = false
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
-	var scrim := ColorRect.new()
-	scrim.color = Color("05080c", 0.62)
-	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(scrim)
-	scrim.gui_input.connect(func(_e: InputEvent) -> void: close())
+	# NO SCRIM. This is a full-screen OPAQUE overlay, so there is no visible
+	# 'outside' to tap -- the scrim was copied from FloorPanel, which is a
+	# bottom sheet where the scrim IS the visible outside. Worse, it was
+	# added first and then buried under the opaque bg below, so its
+	# gui_input never fired and close() was unreachable: opening this panel
+	# trapped the player until they force-quit. An explicit control does
+	# the job the scrim only appeared to.
 
 	var bg := ColorRect.new()
 	bg.color = Color("101418")
@@ -62,6 +64,9 @@ func bind(state: GameState) -> void:
 	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_box.add_theme_constant_override("separation", 6)
 	_scroll.add_child(_box)
+
+	# First row: leaving must not require scrolling past every cheat.
+	_close_button = _action("← BACK", func() -> void: close())
 
 	_box.add_child(_heading("MONEY"))
 	# The two money rows are separate ON PURPOSE and must not be merged.
@@ -102,10 +107,7 @@ func bind(state: GameState) -> void:
 func set_insets(safe: Vector4) -> void:
 	if _scroll == null:
 		return
-	_scroll.offset_left = safe.x + EDGE_MARGIN
-	_scroll.offset_top = safe.y + EDGE_MARGIN
-	_scroll.offset_right = -(safe.z + EDGE_MARGIN)
-	_scroll.offset_bottom = -(safe.w + EDGE_MARGIN)
+	SafeArea.box_overlay(_scroll, safe, EDGE_MARGIN)
 
 func open(state: GameState) -> void:
 	_state = state
@@ -127,7 +129,7 @@ func refresh() -> void:
 		var b: Button = _speed_buttons[n]
 		b.disabled = (n == _speed)
 
-func _heading(text: String) -> Control:
+func _heading(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_size_override("font_size", 11)

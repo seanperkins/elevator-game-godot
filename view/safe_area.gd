@@ -49,3 +49,18 @@ static func current(canvas: Vector2) -> Vector4:
 	var window := DisplayServer.window_get_size()
 	var safe := DisplayServer.get_display_safe_area()
 	return insets(window, safe, canvas)
+
+## Boxes a full-screen overlay's content inside the hardware insets, plus a
+## margin so it does not run to the glass.
+##
+## Shared because there are two of these surfaces now (the prestige tree and the
+## dev panel) and they MUST stay in lockstep: they are the same kind of thing --
+## a Control that covers the HUD's own band and therefore cannot inherit the
+## board's inset the way every other control does.
+static func box_overlay(content: Control, safe: Vector4, margin: float) -> void:
+	if content == null:
+		return
+	content.offset_left = safe.x + margin
+	content.offset_top = safe.y + margin
+	content.offset_right = -(safe.z + margin)
+	content.offset_bottom = -(safe.w + margin)

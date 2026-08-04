@@ -30,6 +30,7 @@ var _armed: bool = false
 
 var _box: VBoxContainer
 var _scroll: ScrollContainer
+var _close_button: Button
 var _yield_label: Label
 var _rows: Dictionary = {}          # node id -> Button
 var _rebuild_button: Button
@@ -41,12 +42,13 @@ func bind(state: GameState) -> void:
 	visible = false
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
-	var scrim := ColorRect.new()
-	scrim.color = Color("05080c", 0.62)
-	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(scrim)
-	scrim.gui_input.connect(func(_e: InputEvent) -> void: close())
+	# NO SCRIM. This is a full-screen OPAQUE overlay, so there is no visible
+	# 'outside' to tap -- the scrim was copied from FloorPanel, which is a
+	# bottom sheet where the scrim IS the visible outside. Worse, it was
+	# added first and then buried under the opaque bg below, so its
+	# gui_input never fired and close() was unreachable: opening this panel
+	# trapped the player until they force-quit. An explicit control does
+	# the job the scrim only appeared to.
 
 	var bg := ColorRect.new()
 	bg.color = Color("101418")
@@ -63,6 +65,11 @@ func bind(state: GameState) -> void:
 	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_box.add_theme_constant_override("separation", 6)
 	_scroll.add_child(_box)
+
+	# First row, so leaving is always one reach away without scrolling past the
+	# tree. A full-screen overlay that can only be left by committing to the
+	# irreversible action at the bottom is a trap.
+	_close_button = _action("← BACK", func() -> void: close())
 
 	# The projection IS the confirmation: the number being decided on is on
 	# screen before the button is reachable. With a $1,000 gate this line does
@@ -116,10 +123,7 @@ func bind(state: GameState) -> void:
 func set_insets(safe: Vector4) -> void:
 	if _scroll == null:
 		return
-	_scroll.offset_left = safe.x + EDGE_MARGIN
-	_scroll.offset_top = safe.y + EDGE_MARGIN
-	_scroll.offset_right = -(safe.z + EDGE_MARGIN)
-	_scroll.offset_bottom = -(safe.w + EDGE_MARGIN)
+	SafeArea.box_overlay(_scroll, safe, EDGE_MARGIN)
 
 func open(state: GameState) -> void:
 	_state = state

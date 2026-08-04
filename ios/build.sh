@@ -46,7 +46,12 @@ echo "bundle: $BUNDLE"
 if [ "${1:-}" = "--launch" ]; then
   # A locked phone refuses the launch (FBSOpenApplicationErrorDomain 7) even
   # though the install succeeded, so say which it was.
-  xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE" \
-    || echo "installed, but could not launch -- is the phone unlocked?"
+  if ! xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE"; then
+    # The install succeeded and the launch did not -- a locked phone refuses it
+    # with FBSOpenApplicationErrorDomain 7. Say so on stderr and exit non-zero:
+    # a caller cannot otherwise tell "installed and launched" from "installed".
+    echo "installed, but could not launch -- is the phone unlocked?" >&2
+    exit 3
+  fi
 fi
 echo "done"

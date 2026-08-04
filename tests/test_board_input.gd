@@ -1037,3 +1037,52 @@ func test_the_overlays_are_stacked_correctly_on_the_very_first_boot() -> void:
 		"and so is the dev overlay")
 	assert_gt(kids.find(root._view_button), kids.find(root.panel),
 		"while MANAGE stays above the floor SHEET")
+
+# --- the overlays must be escapable ----------------------------------------
+
+func button_centre(b: Button) -> Vector2:
+	var r: Rect2 = b.get_global_rect()
+	return r.position + r.size * 0.5
+
+func test_the_prestige_panel_can_be_closed_by_a_real_tap() -> void:
+	# The scrim cannot do this job: bind() adds scrim, THEN an opaque full-rect
+	# bg, THEN the scroll -- so the scrim is buried under two later siblings and
+	# its gui_input never fires. A full-screen panel has no visible "outside" to
+	# tap anyway, so it needs an explicit control.
+	root._prestige.open(root.state)
+	await wait_physics_frames(1)
+	assert_true(root._prestige.visible, "open")
+	var c := button_centre(root._prestige._close_button)
+	await do_tap(c.x, c.y)
+	assert_false(root._prestige.visible, "and a real tap closes it")
+
+func test_the_dev_panel_can_be_closed_by_a_real_tap() -> void:
+	await tap_cash(7)
+	root._dev.open(root.state)
+	await wait_physics_frames(1)
+	assert_true(root._dev.visible, "open")
+	var c := button_centre(root._dev._close_button)
+	await do_tap(c.x, c.y)
+	assert_false(root._dev.visible, "and a real tap closes it")
+
+func test_closing_the_prestige_panel_disarms_it() -> void:
+	root.state.economy.accrue(Prestige.DEMOLITION_FLOOR + 1600.0)
+	root._prestige.open(root.state)
+	root._prestige._rebuild_button.pressed.emit()
+	assert_true(root._prestige.is_armed(), "armed")
+	var c := button_centre(root._prestige._close_button)
+	await do_tap(c.x, c.y)
+	assert_false(root._prestige.is_armed(),
+		"leaving must not leave a live Confirm waiting for the next visit")
+
+func test_a_dev_reset_does_not_immediately_rewrite_the_save() -> void:
+	# _since_save is not reset by a plain state swap, so if the autosave timer
+	# was already past AUTOSAVE_SECONDS the very next frame writes the fresh
+	# state back out -- "Reset save" that leaves a save behind.
+	root.save_now()
+	assert_true(SaveStore.has_save(), "a save to clear")
+	root._since_save = root.AUTOSAVE_SECONDS + 1.0
+	root._on_dev_reset()
+	await wait_physics_frames(2)
+	assert_false(SaveStore.has_save(),
+		"the autosave timer must not fire straight after a reset")

@@ -124,7 +124,7 @@ func _ready() -> void:
 		return
 
 	var bg := ColorRect.new()
-	bg.color = Color("101418")
+	bg.color = Color("1f3a3d")
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
@@ -154,7 +154,7 @@ func _ready() -> void:
 	# the player acts on.
 	_clock_label = Label.new()
 	_clock_label.add_theme_font_size_override("font_size", 16)
-	_clock_label.add_theme_color_override("font_color", Color("7c8899"))
+	_clock_label.add_theme_color_override("font_color", Color("e5d9b5"))
 	_clock_label.position = Vector2(16 + _safe.x, 72 + _safe.y)
 	add_child(_clock_label)
 
@@ -173,7 +173,7 @@ func _ready() -> void:
 	# cannot tell you that.
 	_pager_label = Label.new()
 	_pager_label.add_theme_font_size_override("font_size", 14)
-	_pager_label.add_theme_color_override("font_color", Color("7c8899"))
+	_pager_label.add_theme_color_override("font_color", Color("e5d9b5"))
 	_pager_label.position = Vector2(328 + _safe.x, 38 + _safe.y)
 	_pager_label.size = Vector2(88, 20)
 	_pager_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -407,6 +407,11 @@ func _on_dev_reset() -> void:
 	var catalog := state.catalog_path()
 	var blueprints := state.blueprints_path()
 	SaveStore.clear()
+	# Reset the autosave timer too. Without it, a reset that lands with
+	# _since_save already past AUTOSAVE_SECONDS is undone on the very next
+	# frame: _physics_process fires save_now() and writes the fresh state
+	# straight back out, so "Reset save" leaves a save behind.
+	_since_save = 0.0
 	_speed = 1
 	state = GameState.new(GameState.BASE_FLOORS, GameState.BASE_SHAFTS,
 		GameState.BASE_SEED, catalog, null, blueprints)
@@ -477,7 +482,7 @@ func _on_upgrade_requested(floor_index: int) -> void:
 ## catalog" would announce every one of them under the wrong name.
 func _show_error_screen(what: String, path: String) -> void:
 	var bg := ColorRect.new()
-	bg.color = Color("101418")
+	bg.color = Color("1f3a3d")
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
