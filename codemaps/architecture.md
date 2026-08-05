@@ -1,4 +1,4 @@
-> Generated: 2026-08-03 | Token-lean format for LLM context
+> Generated: 2026-08-05 | Token-lean format for LLM context
 
 # Elevator Incremental — Architecture
 
@@ -61,10 +61,12 @@ Meta via `SaveCodec.salvage_meta`.
 
 ```
 metrics.advance -> spawn -> move/doors -> deliver -> auto-dispatch
-  -> expire -> tenancy.accrue -> note_ticks
+  -> expire -> tenancy.accrue -> market.step -> note_ticks
 ```
 Order is player-visible: **deliver BEFORE expire** → a passenger at exactly 0
-patience when the doors open pays and extends the combo.
+patience when the doors open pays and extends the combo. **Market AFTER
+tenancy.accrue** → a floor vacated this tick starts its fill countdown this
+tick (vacant tower floors refill via `sim/market.gd`, 600 ticks, free).
 
 ## Build / run
 

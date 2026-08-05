@@ -73,6 +73,13 @@ shaft per level, which made the cash price stop mattering as the tree grew; it
 now buys ROOM, and every run still opens with one shaft and re-earns the rest.
 Floors already worked this way (`height_cap`); shafts were the outlier.
 
+**The tenant market (2026-08-05).** Players no longer pick tenants: a vacant
+tower floor refills itself 30 s later with a class-weighted market draw
+(`sim/market.gd`, own rng — never the spawner's), and upgrading an occupied
+floor prices its tenant out through an uncancellable move-out. `lease()` is
+basement-only (parking). The old free-below-two-tenants rule is gone; the
+market refilling for free IS the no-fail guarantee now.
+
 Two numbers worth knowing before you touch the balance: run 1 yields **13
 Blueprints**, measured on the real sim, because `combo` multiplies
 `lifetime_earnings` — the field the conversion consumes — by ~7.6× on a

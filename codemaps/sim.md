@@ -1,4 +1,4 @@
-> Generated: 2026-08-03 | Token-lean format for LLM context
+> Generated: 2026-08-05 | Token-lean format for LLM context
 
 # sim/ — pure logic layer (all `class_name`, `extends RefCounted`)
 
@@ -10,12 +10,16 @@ No scene tree. Talks to the view by **signal** only (emitted by `GameState`).
 Signals: `passenger_spawned(p)`,
 `passenger_delivered(p, paid)`, `passenger_expired(p)`, `car_arrived(shaft_index, floor_index)`.
 
-Owns: `clock, building, spawner, economy, tenancy, fitout, catalog, upgrades, metrics, auto, meta`.
+Owns: `clock, building, spawner, economy, tenancy, fitout, catalog, upgrades, metrics, auto, market, meta`.
 Keeps `catalog_path()` / `blueprints_path()` so a demolish rebuilds against the
 same catalogs (otherwise overrides are silently defeated).
 
-API: `buy(id)`, `lease(floor_index, kind_id)`, `lease_cost(floor_index, kind_id)`,
-`available_kinds(floor_index)`, `class_upgrade_cost(floor_index)`, `upgrade_class(floor_index)`,
+API: `buy(id)`, `lease(floor_index, kind_id)` (**basement-only** — tower floors
+are the market's), `lease_cost(floor_index, kind_id)` (flat `k.lease_cost`; the
+free-below-two-tenants rule died with the picker),
+`available_kinds(floor_index)`, `class_upgrade_cost(floor_index)`,
+`upgrade_class(floor_index)` (**prices the sitting tenant out** via
+`tenancy.begin_move_out`),
 `set_policy(shaft, preset)`, `is_preset_available(preset)`, `auto_licences()` (= `upgrades.level_of("auto")`),
 `dispatch(shaft, floor_index)`, `tick(n)`, `is_valid()`, `invalid_what()`, `invalid_path()`.
 
@@ -106,9 +110,16 @@ States `IDLE/MOVING/DOORS`. `dispatch_to(f, express)`, `launch_to(f)`, `step(n)`
 * **TrafficSource** (`traffic_source.gd`) — one tenanted floor as the spawner sees it: `floor_index, kind, fare_multiplier`. Knows nothing of Tenancy or Fitout.
 
 ## Tenancy (`tenancy.gd`)
-Per-floor tenants. `MOVE_OUT_THRESHOLD=0.2`, `MOVE_OUT_TICKS=1200`, `_DELIVERY_GAIN=0.02`, `_EXPIRY_LOSS=0.05`, `MIN_FLOORS_FOR_TRAFFIC=2`.
-`floors()`, `add_floor()`, `revision()`, `restore_floor(...)`, `kind_at(f)`, `set_kind(f, id)`, `lease(f, kind_id)`, `note_delivery(f)`, `note_expiry(f)`, `accrue_for_tick()` → floors that vacated, `satisfaction_at(f)`, `occupied_floors()`, `is_vacant(f)`, `is_moving_out(f)`, `move_out_ticks_left(f)`, `tenanted_count()`.
-**No-fail guarantee**: leasing is free while fewer than `MIN_FLOORS_FOR_TRAFFIC` floors are tenanted.
+Per-floor tenants. `MOVE_OUT_THRESHOLD=0.2`, `MOVE_OUT_TICKS=1200`, `_DELIVERY_GAIN=0.02`, `_EXPIRY_LOSS=0.05`.
+`floors()`, `add_floor()`, `revision()`, `restore_floor(f, sat, vacant, move_out_left, kind := "", priced_out := false)`, `kind_at(f)`, `set_kind(f, id)`, `lease(f, kind_id)`, `note_delivery(f)`, `note_expiry(f)`, `accrue_for_tick()` → floors that vacated, `satisfaction_at(f)`, `occupied_floors()`, `is_vacant(f)`, `is_moving_out(f)`, `move_out_ticks_left(f)`, `tenanted_count()`, **`begin_move_out(f)`** (renovation evicts: starts the clock regardless of satisfaction, uncancellable by deliveries — the `_priced_out` flag is why `note_delivery`'s cancel is conditional), **`is_priced_out(f)`**.
+**No-fail guarantee is structural now**: the market refills vacant tower floors for free (`market.gd`); the free-cheapest-lease rule and `MIN_FLOORS_FOR_TRAFFIC` are gone.
+
+## Market (`market.gd`)
+Who moves in. `FILL_TICKS=600` (30 s, half the move-out clock), `SEED_OFFSET=7919`, `TIER_WEIGHT_BASE=3.0`.
+`Market.new(p_seed)` — **own rng** (`p_seed + SEED_OFFSET`), never the spawner's: one extra shared draw would shift the whole traffic sequence.
+`step(tenancy, fitout, catalog, floor_count)` — scans TOWER floors each tick; a vacant floor's first sighting arms `FILL_TICKS`, later ticks decrement, 0 → `draw_kind` + `tenancy.lease`. Occupied floors drop stale countdowns (self-healing; a save missing the field just restarts the clock). Runs in the tick right after `tenancy.accrue_for_tick`.
+`draw_kind(tier, catalog)` — pool = `available_for_class(tier, TOWER)` minus entrances; weight `3^(requires_class-1)` (~69% top tier on class 3). Tier read at FILL time, so upgrading mid-countdown improves the pending draw.
+`fill_ticks_left(f)`, `restore_floor(f, ticks)`. Countdowns keyed by FLOOR (dig-stable). rng state not persisted — re-seeds on decode, spawner precedent.
 
 ## Fitout (`fitout.gd`)
 Per-floor **class** (tier), separate from Tenancy so a class purchase is not a tenancy event. `BASE_TIER=1`. `floors()`, `add_floor()`, `tier_at(f)`, `set_tier(f, tier)`, `revision()`.
@@ -164,6 +175,9 @@ Bounds: `MAX_MONEY=1e15`, `MAX_CAPACITY=CAPACITY_BASE+8`,
 
 **v4 adds a `meta` block** (`{blueprints, runs, spent}`) — it rides in the same
 file as the run because a demolish must persist both in ONE write.
+**Still-v4 additions (2026-08-05), optional-with-default per floor:**
+`fill_left` (market countdown, clamped [0, FILL_TICKS], absent → 0 = re-arm) and
+`priced_out` (TYPE_BOOL-guarded like `vacant`, absent/malformed → false).
 
 Decode order: `_preflight → _migrate_to_v3 → _migrate_to_v4 → _is_usable →
 build the Meta → GameState.new → levels → cars → floors → policies`.

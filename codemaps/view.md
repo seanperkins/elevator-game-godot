@@ -1,4 +1,4 @@
-> Generated: 2026-08-03 | Token-lean format for LLM context
+> Generated: 2026-08-05 | Token-lean format for LLM context
 
 # view/ + ui/ — render layer (`extends Control`, scene-tree only)
 
@@ -109,5 +109,9 @@ bg — so opening either panel trapped the player until they force-quit. A
 full-screen opaque overlay has no visible "outside" for a scrim to be.
 
 ## ui/floor_panel.gd — the per-floor sheet
-Replaced `relet_confirm.gd`. Opens on a floor tap: lease a kind, upgrade the floor class, and compare kinds via `DaySparkline`.
+Replaced `relet_confirm.gd`. Opens on a floor tap: upgrade the floor class and
+compare kinds via `DaySparkline`. The lease picker is **basement-only**
+(parking); a vacant TOWER floor shows `NEW TENANT IN Ns` instead — the market
+fills it (`_fill_label`, refreshed per `show_floor`, not per frame, like the
+LEAVING label). `picker_visible()` / `is_locked()` are the input-test seams.
 Fonts: header 18, upgrade 16, buttons 15.

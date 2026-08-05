@@ -1,4 +1,4 @@
-> Generated: 2026-08-03 | Token-lean format for LLM context
+> Generated: 2026-08-05 | Token-lean format for LLM context
 
 # tests/ — GUT suite (headless, run in CI and locally). 662 tests, 32 scripts.
 
@@ -23,9 +23,10 @@ CI (`deploy.yml`) runs the whole suite before building. Local GUT must pass befo
 | test_traffic_spawner.gd | draw count independent of source count, lobby collapse, fare from kind+class, **spawn threshold is one bucket not one real minute** |
 | test_tenant_catalog.gd | kind/class parse, bad-catalog refusal, saturation headroom vs TICKS_PER_SIM_MINUTE |
 | test_fitout.gd | per-floor class tier, revision |
-| test_tenancy.gd | satisfaction, move-out, lease, no-fail guarantee |
+| test_tenancy.gd | satisfaction, move-out, lease, priced-out evictions (uncancellable, restore round-trip) |
+| test_market.gd | fill-after-exactly-FILL_TICKS, tier weighting (seeded), basement exclusion, tier-at-fill-time, countdown resume |
 | test_economy.gd | delivery/combo, expiry + streak, stairs penalty, no-negative-cash |
-| test_game_state.gd | tick order, **deliver-beats-expiry at 0**, dispatch bounds, buy/lease/policy gating, source rebuild on revision |
+| test_game_state.gd | tick order, **deliver-beats-expiry at 0**, dispatch bounds, buy/policy gating, tower-lease refusal, market fill + determinism + spawner-rng isolation, renovation-evicts, source rebuild on revision |
 | test_save_codec.gd | round-trip, refusals, v1 migration, **v2→v3 floor rename migration** (fixture is a REAL device save), v4 meta block, legacy grandfathering, salvage, decode-side clamps, **recursive poison sweep** |
 | test_meta.gd | defs validation (negative/overflow base, duplicate id, partial load), cost/buy/zero-delta, ladder + clamps, to_dict/restore, id↔derivation agreement, GameState integration |
 | test_prestige.gd | `yield_for` boundaries + NAN + clamp, gate refusal, §3's reset table row by row, clone-not-live credit, seed derivation, **two demolishes do not pay twice** |
