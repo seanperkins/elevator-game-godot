@@ -1,0 +1,9 @@
+app_identifier "com.seanperkins.shafted"
+apple_id ENV.fetch("FASTLANE_APPLE_ID", "sean@mobility-labs.com")
+
+# "sean-personal" App Store Connect — the account App Store Connect API key
+# 4XBH56T7RS belongs to. Unlike apple-tv-visualizer there is no second account
+# in play here: the iOS export preset already signs development builds with
+# this same team, so dev deploys (ios/build.sh) and TestFlight share it.
+team_id "HH3SJBAS42"
+itc_team_id "HH3SJBAS42"

@@ -18,3 +18,7 @@ export_credentials.cfg
 
 # Multi-model review scratch (/debate). Reviewer output and a copy of the diff.
 .tmp/
+
+# fastlane artifacts
+fastlane/report.xml
+fastlane/README.md
