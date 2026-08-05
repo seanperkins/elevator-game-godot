@@ -799,3 +799,55 @@ func test_a_v4_save_carries_the_dev_flag() -> void:
 	var after := SaveCodec.decode(data)
 	assert_not_null(after, "decodes")
 	assert_true(after.meta.dev_unlocked, "and the flag survived the round trip")
+
+
+# --- the basement -----------------------------------------------------------
+
+func _dug_state() -> GameState:
+	var s := played_state()
+	s.economy.cash = 1e9
+	assert_true(s.buy("dig"), "dig one")
+	assert_true(s.lease(-1, "parking"), "and lease it")
+	return s
+
+func test_depth_survives_a_round_trip() -> void:
+	var s := _dug_state()
+	var after := SaveCodec.decode(SaveCodec.encode(s))
+	assert_not_null(after)
+	assert_eq(after.building.depth, 1)
+	assert_eq(after.tenancy.kind_at(-1), "parking", "the basement's lease too")
+	assert_eq(after.fitout.tier_at(-1), s.fitout.tier_at(-1), "and its class")
+
+func test_a_save_without_the_key_decodes_to_no_basement() -> void:
+	# Every save written before this feature. It is not depth 0 by luck -- it
+	# was written by a build that could not dig.
+	var s := played_state()
+	var d: Dictionary = SaveCodec.encode(s)
+	d.erase("depth")
+	var after := SaveCodec.decode(d)
+	assert_not_null(after, "an older save still loads")
+	assert_eq(after.building.depth, 0)
+
+func test_an_absurd_depth_is_bounded_to_the_ladder() -> void:
+	var s := _dug_state()
+	var d: Dictionary = SaveCodec.encode(s)
+	d["depth"] = 99
+	var after := SaveCodec.decode(d)
+	if after != null:
+		assert_lte(after.building.depth, Meta.MAX_DEPTH_CAP,
+			"a hand-written save cannot mint a 40-deep basement")
+
+func test_a_floors_array_that_disagrees_with_the_depth_is_refused() -> void:
+	# floor_count and the floors array length used to be the same number. They
+	# are not any more, so their agreement is a new thing to check.
+	var s := _dug_state()
+	var d: Dictionary = SaveCodec.encode(s)
+	var floors: Array = d["floors"]
+	floors.remove_at(0)
+	d["floors"] = floors
+	assert_null(SaveCodec.decode(d), "length must equal floor_count + depth")
+
+func test_the_version_is_still_four() -> void:
+	# The additive-within-v4 claim, pinned: depth rides in the same version.
+	assert_eq(SaveCodec.VERSION, 4)
+	assert_eq(int(SaveCodec.encode(_dug_state())["version"]), 4)

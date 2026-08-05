@@ -33,13 +33,24 @@ const BASE_SHAFT_CAP := 2
 const SHAFT_PER_LEVEL := 2
 const MAX_SHAFT_CAP := 8
 ## The depth ceiling a first run plays under, and what each level of `depth`
-## adds: 2 -> 4 -> 6 -> 8, landing exactly on MAX_DEPTH_CAP.
-const BASE_DEPTH_CAP := 2
+## adds: 1 -> 3 -> 5 -> 7, landing exactly on MAX_DEPTH_CAP.
+##
+## ONE on a first run, not two, and this is measured, not felt. On the real sim
+## (10 floors, NEAREST_CALL, 3 seeds x 3 days) depth 1 at two shafts is
+## near-neutral -- 11,464 vs 11,758 earnings, +10% riders -- but depth 2 at two
+## shafts COLLAPSES to 7,310 with 229 expiries against 0, because the added
+## arrivals tip the rush hours past saturation and the expiries shred combo.
+## The same depth 2 at THREE shafts earns 16,168, the best configuration
+## measured. Depth pays exactly when it is paired with shaft investment, which
+## is the design working; a base cap of 2 was an invitation to drown on run 1.
+const BASE_DEPTH_CAP := 1
 const DEPTH_PER_LEVEL := 2
 ## This release's ladder top going down. NOT Building.MAX_DEPTH -- the engine
 ## keeps its own floor, and a tampered save must land HERE, for the same reason
-## height_cap clamps to MAX_HEIGHT_CAP and not MAX_FLOORS.
-const MAX_DEPTH_CAP := 8
+## height_cap clamps to MAX_HEIGHT_CAP and not MAX_FLOORS. (Depth 4 at three
+## shafts measured 542 earnings and 352 expiries -- the ladder's top half is
+## unreachable without the speed and capacity nodes, deliberately.)
+const MAX_DEPTH_CAP := 7
 
 const MAX_NODES := 64
 const MAX_BASE := 1_000_000

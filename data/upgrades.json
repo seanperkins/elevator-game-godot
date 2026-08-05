@@ -97,7 +97,7 @@
       "name": "Dig Down",
       "base": 400.0,
       "growth": 1.35,
-      "max_level": 8
+      "max_level": 7
     }
   ]
 }

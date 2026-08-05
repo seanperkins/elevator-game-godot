@@ -521,30 +521,40 @@ inside v4 on exactly this argument.
 
 ---
 
-## 9. The one number that must be measured
+## 9. The measurement (run 2026-08-04, during implementation)
 
-`PARK_BONUS = 0.15` is a guess, and this spec says so rather than presenting it
-as derived. It must be measured on the real sim before it ships, the way the
-13-Blueprint first-run yield was.
+`PARK_BONUS = 0.15` began as a guess; it is now measured. Method: the real sim,
+10 tower floors fully leased, `NEAREST_CALL` on every shaft, 3 seeds × 3 sim
+days after a warm-up day. `lifetime_earnings` and expiry counts:
 
-The reason it is risky in *this* release specifically: run 1 now caps at **two
-shafts** (2026-08-04), and depth 2 is available from run 1 with no tree spend.
-So a first run's traffic can rise ~30% against the tightest shaft budget the
-game has ever had. The failure mode is not "digging is weak" — it is "digging is
-a trap a new player takes and then drowns in".
+| depth | shafts | earnings | served | expired |
+| --- | --- | --- | --- | --- |
+| 0 | 2 | 11,758 | 731 | 0 |
+| **1** | **2** | **11,464** | 805 | 5 |
+| 2 | 2 | 7,310 | 625 | **229** |
+| **2** | **3** | **16,168** | 926 | 3 |
+| 4 | 3 | 542 | 103 | 352 |
 
-What to measure, on a well-played 10-floor run at 2 shafts:
+Findings, and what each one changed:
 
-1. Expiry rate at depth 0 vs depth 2 leased. If depth 2 more than doubles
-   expiries, `PARK_BONUS` is too high or `BASE_DEPTH_CAP` should be 1.
-2. Net `lifetime_earnings` at depth 0 vs depth 2. Digging must be *positive* at
-   run 1's shaft budget or nobody will ever dig twice.
-3. Whether the trip-length tax is perceptible at depth 2. Two floors is a small
-   tax; if depth 2 is a free +30%, the brake does not engage until depths the
-   tree gates anyway, and the ceiling is doing all the work.
-4. Whether the garage's own satisfaction ever falls enough to move out. If it
-   cannot, §4's feedback loop is decorative and the entrance should instead
-   scale its share by satisfaction directly.
+1. **Depth 2 at two shafts collapses** — the added arrivals tip the rush hours
+   past saturation, the expiries shred combo, and earnings fall 29% even though
+   riders rose. This was the spec's named failure mode, and its named remedy
+   applied: **`BASE_DEPTH_CAP` is 1**, not 2.
+2. **Depth 2 at three shafts is the best configuration measured** (+37% over
+   never digging). Depth pays exactly when paired with shaft investment, which
+   is the two-gate design doing its job rather than a defect.
+3. **`PARK_BONUS` is not the balance lever.** Sweeping it 0.06–0.15 moved
+   earnings a few percent; the shaft pairing moved them by a third. 0.15 stands.
+4. **The brake is saturation, not the trip-length tax.** Under `EVERY_FLOOR`
+   the dominant cost is the longer sweep itself; under call-driven policies it
+   is congestion collapse past a threshold. Either way the elevators are the
+   brake, as designed — it simply bites harder and more suddenly than the spec
+   guessed.
+5. **Not yet measured:** whether a garage's own satisfaction ever falls enough
+   to move out in real play. Worth watching on the device; if it cannot, §4's
+   feedback loop is decorative and the entrance share should scale with
+   satisfaction directly.
 
 ---
 

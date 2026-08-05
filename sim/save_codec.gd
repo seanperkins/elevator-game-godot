@@ -259,7 +259,9 @@ static func encode(state: GameState) -> Dictionary:
 	# rent is scaled by, and a vacancy the player has not paid to re-lease is a
 	# debt they would otherwise reload their way out of.
 	var floors := []
-	for floor_index in range(state.building.floor_count):
+	# EVERY floor: the array grows DOWNWARD, entry i is floor i + bottom_floor.
+	# `depth` is decoded before this is read, so the mapping is unambiguous.
+	for floor_index in range(state.building.bottom_floor(), state.building.floor_count):
 		floors.append({
 			"satisfaction": state.tenancy.satisfaction_at(floor_index),
 			"vacant": state.tenancy.is_vacant(floor_index),
@@ -283,6 +285,7 @@ static func encode(state: GameState) -> Dictionary:
 		"streak": state.economy.streak,
 		"riders_served": state.economy.riders_served,
 		"floor_count": state.building.floor_count,
+		"depth": state.building.depth,
 		"cars": cars,
 		"levels": levels,
 		"policies": policies,
@@ -337,6 +340,21 @@ static func decode(p_data: Dictionary,
 		_bounded_int(data["seed"], 0, 1 << 60, 0), catalog_path, meta, blueprints_path)
 	if not state.is_valid():
 		return null
+
+	# Bounded against the LADDER top, not MAX_FLOORS or MAX_DEPTH: a hand-written
+	# save must not mint a deeper basement than any legitimate tree reaches. Read
+	# with .get because a save written before digging existed has no such key --
+	# the same additive argument that let Meta.dev_unlocked into v4 without a
+	# version bump.
+	var depth: int = _bounded_int(data.get("depth", 0), 0, Meta.MAX_DEPTH_CAP, 0)
+	for i in range(depth):
+		if not state.building.dig():
+			return null
+		state.tenancy.dig()
+		state.fitout.dig()
+	# Re-granted AFTER the dig: _init granted at depth 0, and the counter is what
+	# prices the next level and answers is_maxed.
+	state.upgrades.grant_level("dig", state.building.depth, state.building)
 
 	state.clock.ticks_executed = _bounded_int(data["ticks"], 0, 1 << 60, 0)
 	state.economy.cash = _bounded(data["cash"], 0.0, MAX_MONEY, 0.0)
@@ -406,11 +424,19 @@ static func decode(p_data: Dictionary,
 	# covering current saves the moment VERSION moved.
 	if version >= 2 and saved_floors.size() < state.building.floor_count:
 		return null
+	# floor_count and the floors length used to be the same number; with a
+	# basement they are not, and their agreement is a genuinely new check. v4
+	# only: older versions cannot carry depth and keep their looser guards.
+	if version >= 4 and saved_floors.size() != state.building.total_floors():
+		return null
 
-	for floor_index in range(mini(saved_floors.size(), state.building.floor_count)):
-		if typeof(saved_floors[floor_index]) != TYPE_DICTIONARY:
+	for i in range(mini(saved_floors.size(), state.building.total_floors())):
+		# Entry i is floor i + bottom_floor. At depth 0 -- every pre-basement
+		# save -- this is the identity, which is what keeps v1-v3 decoding.
+		var floor_index := i + state.building.bottom_floor()
+		if typeof(saved_floors[i]) != TYPE_DICTIONARY:
 			return null
-		var r: Dictionary = saved_floors[floor_index]
+		var r: Dictionary = saved_floors[i]
 		if version >= 2 and not (r.has("kind") and r.has("class")):
 			return null
 		# bool() has NO Variant constructor for String, Dictionary or Array, so

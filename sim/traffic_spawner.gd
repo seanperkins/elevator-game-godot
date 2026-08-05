@@ -46,10 +46,12 @@ func load_curve(path: String) -> bool:
 ## Extra inbound arrivals per LEASED entrance floor, as a fraction of the
 ## building's base rate.
 ##
-## THIS NUMBER IS A GUESS. It has not been measured on the real sim and must be
-## before it ships -- see the design spec's §9. Run 1 caps at two shafts and may
-## dig 2 with no tree spend, so a wrong value here is not "digging is weak", it
-## is "digging is a trap a new player takes and then drowns in".
+## MEASURED 2026-08-04 (10 floors, NEAREST_CALL, 3 seeds x 3 sim days): at this
+## value depth 1 on a two-shaft run is near-neutral, depth 2 on a THREE-shaft
+## run earns +37% over never digging, and depth 2 on two shafts collapses --
+## which is why Meta.BASE_DEPTH_CAP is 1. The lever that decides whether
+## digging pays is the shaft count, not this number: sweeping it 0.06-0.15
+## moved earnings a few percent while the shaft pairing moved them by a third.
 const PARK_BONUS := 0.15
 
 ## One Bernoulli trial per tick against the SUMMED rate, then a weighted pick
