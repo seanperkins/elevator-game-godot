@@ -236,49 +236,13 @@ func vacate(state: GameState, floor_index: int) -> void:
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
 		state.tenancy.accrue_for_tick()
 
-func test_leasing_charges_the_kinds_price_and_sets_the_kind() -> void:
+func test_a_tower_floor_cannot_be_leased_by_hand() -> void:
 	gs.economy.accrue(1000.0)
 	gs.tenancy.restore_floor(3, 1.0, true, 0)
 	var before := gs.economy.cash
-	assert_true(gs.lease(3, "apartments"))
-	assert_false(gs.tenancy.is_vacant(3))
-	assert_eq(gs.tenancy.kind_at(3), "apartments")
-	assert_almost_eq(gs.economy.cash, before - 60.0, 1e-6)
-
-func test_a_kind_above_the_floors_class_is_refused() -> void:
-	gs.economy.accrue(1e6)
-	gs.tenancy.restore_floor(3, 1.0, true, 0)
-	assert_false(gs.lease(3, "law_firm"), "class 1 cannot take a tier-3 tenant")
+	assert_false(gs.lease(3, "apartments"), "tower floors are the market's")
 	assert_true(gs.tenancy.is_vacant(3))
-
-func test_only_the_cheapest_eligible_kind_is_free_below_two_tenants() -> void:
-	# The guarantee must be exact -- a $0 player can always recover -- without
-	# rewarding collapse. An already-upgraded floor would otherwise hand out a
-	# free premium tenant.
-	for floor_index in range(1, 6):
-		gs.tenancy.restore_floor(floor_index, 1.0, true, 0)
-	gs.fitout.set_tier(3, 3)
-	gs.economy.cash = 0.0
-	assert_false(gs.lease(3, "law_firm"), "the expensive one is not free")
-	assert_true(gs.lease(3, "apartments"), "the cheapest eligible one is")
-
-func test_leasing_is_free_when_nothing_is_tenanted() -> void:
-	for floor_index in range(gs.building.floor_count):
-		vacate(gs, floor_index)
-	assert_eq(gs.tenancy.tenanted_count(), 0)
-	var before := gs.economy.cash
-	assert_true(gs.lease(0, "apartments"), "the no-fail guarantee")
-	assert_almost_eq(gs.economy.cash, before, 1e-6)
-
-func test_leasing_is_refused_when_unaffordable_and_charges_nothing() -> void:
-	# Row 0 vacated but floors 1-5 stay tenanted, so a full $60 apartments lease
-	# applies -- and a $0 player cannot take it.
-	vacate(gs, 0)
-	assert_lt(gs.economy.cash, 60.0, "apartments lease $60 while traffic earns")
-	var before := gs.economy.cash
-	assert_false(gs.lease(0, "apartments"))
-	assert_true(gs.tenancy.is_vacant(0), "still vacant")
-	assert_almost_eq(gs.economy.cash, before, 1e-6)
+	assert_almost_eq(gs.economy.cash, before, 1e-6, "and refusal charges nothing")
 
 func test_leasing_is_refused_on_a_tenanted_row() -> void:
 	gs.economy.accrue(1000.0)
@@ -290,16 +254,6 @@ func test_leasing_is_refused_outside_the_building() -> void:
 	gs.economy.accrue(1000.0)
 	assert_false(gs.lease(-1, "apartments"))
 	assert_false(gs.lease(99, "apartments"))
-
-func test_lease_reads_the_cost_before_mutating_tenancy() -> void:
-	# Cost derives from tenanted_count(), which leasing increments, so the
-	# order decides whether the last floor costs nothing or full price.
-	for floor_index in range(1, 6):
-		gs.tenancy.restore_floor(floor_index, 1.0, true, 0)
-	gs.economy.cash = 0.0
-	var before := gs.economy.cash
-	assert_true(gs.lease(3, "apartments"))
-	assert_almost_eq(gs.economy.cash, before, 1e-6, "free, not $60")
 
 const BUCKET_SLACK := 40   # one bucket either side of the boundary
 
@@ -380,7 +334,9 @@ func test_a_new_tenant_on_a_class_three_floor_is_charged_the_multiplier() -> voi
 	gs.upgrade_class(3)
 	gs.upgrade_class(3)
 	gs.tenancy.restore_floor(3, 1.0, true, 0)
-	assert_true(gs.lease(3, "law_firm"))
+	# Installed directly: the market draws tenants now, and lease() is
+	# basement-only. What this test pins is the multiplier, not the arrival.
+	gs.tenancy.lease(3, "law_firm")
 	for s in gs._sources():
 		if s.floor_index == 3:
 			assert_almost_eq(s.kind.base_fare * s.fare_multiplier, 9.0 * 1.8, 1e-5)
@@ -425,11 +381,10 @@ func test_a_move_out_removes_that_floors_waiting_passengers_from_every_queue() -
 			left.append(p)
 	for p in left:
 		assert_ne(p.source_floor, 4, "no passenger from the vacated floor remains")
-	var survivors := 0
-	for p in left:
-		if p.source_floor == 2:
-			survivors += 1
-	assert_eq(survivors, 1, "another floor's lobby queue is untouched")
+	# By IDENTITY, not by source count: the market refills the hand-silenced
+	# floors ~600 ticks into the window, and a refilled floor 2 can spawn its
+	# own source-2 passengers. What this test pins is that THIS one survived.
+	assert_true(left.has(theirs), "another floor's lobby queue is untouched")
 	assert_gte(gs.economy.cash, cash_before,
 		"removal is not an expiry -- the failure was already charged")
 
@@ -580,3 +535,40 @@ func test_the_basement_picker_offers_parking_and_the_tower_picker_does_not() -> 
 		basement_ids.append(k.id)
 	assert_eq(basement_ids, PackedStringArray(["parking"]),
 		"the basement picker offers exactly the garage")
+
+# --- the tenant market -------------------------------------------------------
+
+func test_the_market_fills_a_vacated_floor_for_free() -> void:
+	gs.tenancy.restore_floor(3, 1.0, true, 0)
+	var cash := gs.economy.cash
+	gs.tick(Market.FILL_TICKS + 2)
+	assert_false(gs.tenancy.is_vacant(3), "the no-fail guarantee, structural now")
+	assert_true(gs.economy.cash >= cash, "move-in charges nothing (fares may add)")
+
+func test_upgrading_an_occupied_floor_prices_the_tenant_out() -> void:
+	gs.economy.accrue(10000.0)
+	assert_true(gs.upgrade_class(3))
+	assert_true(gs.tenancy.is_moving_out(3), "renovation evicts")
+	assert_true(gs.tenancy.is_priced_out(3))
+
+func test_upgrading_a_vacant_floor_evicts_nobody() -> void:
+	gs.economy.accrue(10000.0)
+	gs.tenancy.restore_floor(3, 1.0, true, 0)
+	assert_true(gs.upgrade_class(3))
+	assert_false(gs.tenancy.is_moving_out(3))
+	assert_true(gs.tenancy.is_vacant(3))
+
+func test_same_seed_draws_the_same_tenant() -> void:
+	var a := GameState.new(6, 1, 999)
+	var b := GameState.new(6, 1, 999)
+	for s in [a, b]:
+		s.tenancy.restore_floor(3, 1.0, true, 0)
+		s.tick(Market.FILL_TICKS + 2)
+	assert_ne(a.tenancy.kind_at(3), "")
+	assert_eq(a.tenancy.kind_at(3), b.tenancy.kind_at(3))
+
+func test_market_draws_do_not_touch_the_spawner_rng() -> void:
+	var before: int = gs.spawner.rng.state
+	for i in range(50):
+		gs.market.draw_kind(3, gs.catalog)
+	assert_eq(gs.spawner.rng.state, before, "one shared draw shifts all traffic")

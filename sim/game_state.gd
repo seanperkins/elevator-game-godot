@@ -8,7 +8,7 @@ extends RefCounted
 ## expires and breaks it.
 ##
 ##   advance metrics -> spawn -> move/doors -> deliver -> auto-dispatch
-##     -> expire -> advance tenancy -> update combo
+##     -> expire -> advance tenancy -> market -> update combo
 ##
 ## Metrics advances FIRST so the bucket a tick's events land in is the bucket
 ## that tick just rolled into, and no event is written to a bucket about to be
@@ -31,6 +31,7 @@ var catalog: TenantCatalog
 var upgrades: Upgrades
 var metrics: Metrics
 var auto: AutoDispatch
+var market: Market
 
 var _source_cache: Array[TrafficSource] = []
 var _entrance_cache: PackedInt32Array = PackedInt32Array()
@@ -131,6 +132,7 @@ func _init(floors: int, shafts: int, p_seed: int,
 	# sim/floor_index.gd: a duplicated offset makes a desync silent.
 	tenancy = Tenancy.new(building.index, prefix)
 	fitout = Fitout.new(building.index)
+	market = Market.new(p_seed)
 	for floor_index in range(prefix):
 		tenancy.set_kind(floor_index, DEFAULT_ROSTER[floor_index])
 
@@ -215,15 +217,14 @@ func _grow_per_floor_containers(downward := false) -> void:
 		else:
 			fitout.add_floor()
 
-## Lease a vacant floor to a chosen kind.
-##
-## The cost is read BEFORE tenancy is mutated: it derives from tenanted_count(),
-## which leasing increments, so the order decides whether the last floor costs
-## nothing or full price.
+## Lease a vacant BASEMENT floor to a chosen kind. Tower floors are the
+## market's: they refill themselves, and nobody hand-picks their tenants.
 ##
 ## Refused here rather than merely greyed in the view, because a disabled
 ## button is bypassed by two taps queued during a stalled frame.
 func lease(floor_index: int, kind_id: String) -> bool:
+	if floor_index >= 0:
+		return false
 	if not building.has_floor(floor_index):
 		return false
 	if not tenancy.is_vacant(floor_index):
@@ -241,18 +242,12 @@ func lease(floor_index: int, kind_id: String) -> bool:
 	tenancy.lease(floor_index, kind_id)
 	return true
 
-## Below two tenants the CHEAPEST ELIGIBLE kind is free. Making every kind free
-## would hand a floor already upgraded to class 3 a free Law Firm, which is a
-## strategy rather than a safety net.
-func lease_cost(floor_index: int, kind_id: String) -> float:
+## The free-below-two-tenants rule died with the lease picker: the market
+## refilling tower floors for free IS the no-fail guarantee now, so the only
+## thing left to price is the basement.
+func lease_cost(_floor_index: int, kind_id: String) -> float:
 	var k := catalog.kind(kind_id)
-	if k == null:
-		return INF
-	if tenancy.tenanted_count() >= Tenancy.MIN_FLOORS_FOR_TRAFFIC:
-		return k.lease_cost
-	var cheapest := catalog.cheapest_for_class(fitout.tier_at(floor_index),
-		_half_of(floor_index))
-	return 0.0 if cheapest != null and cheapest.id == kind_id else k.lease_cost
+	return INF if k == null else k.lease_cost
 
 func available_kinds(floor_index: int) -> Array[TenantKind]:
 	return catalog.available_for_class(fitout.tier_at(floor_index),
@@ -267,6 +262,11 @@ func _half_of(floor_index: int) -> TenantKind.Where:
 ## gates leasing and leasing only happens on vacancy, so a purchase with no
 ## live effect would pay nothing until the tenant left -- a button you
 ## rationally never press except in a crisis.
+##
+## And since the tenant market, it is not inert in a second way: upgrading an
+## OCCUPIED floor prices the sitting tenant out (they are below the new class
+## by construction), so the real cost of a renovation is the sticker price
+## plus ~90 s of that floor's traffic while the market finds someone better.
 func class_upgrade_cost(floor_index: int) -> float:
 	var next := fitout.tier_at(floor_index) + 1
 	if next > catalog.max_tier():
@@ -283,6 +283,7 @@ func upgrade_class(floor_index: int) -> bool:
 	if not economy.spend(cost):
 		return false
 	fitout.set_tier(floor_index, next)
+	tenancy.begin_move_out(floor_index)
 	return true
 
 ## Turning a sweep on needs a LICENCE: the Auto-Dispatch upgrade's level is how
@@ -382,6 +383,10 @@ func _tick_once() -> void:
 	# and charging again would double-penalise one failure.
 	for floor_index in tenancy.accrue_for_tick():
 		building.remove_waiting_from_source(floor_index)
+	# The market moves in AFTER move-outs vacate, so a floor emptied this
+	# tick starts its fill countdown this tick. Tower floors only -- the
+	# basement stays a deliberate purchase.
+	market.step(tenancy, fitout, catalog, building.floor_count)
 	# update combo -- handled inside Economy on each delivery/expiry
 	clock.note_ticks(1)
 

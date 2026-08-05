@@ -12,11 +12,10 @@ extends RefCounted
 ## loses that floor's fares -- and it means the game pays nothing at all for
 ## doing nothing until automation is bought.
 ##
-## NO FAIL STATE, guaranteed by ONE rule: the cheapest tenant eligible for a
-## floor is FREE whenever the player cannot generate traffic. The pricing
-## itself lives in GameState.lease_cost, which only charges while
-## tenanted_count() >= MIN_FLOORS_FOR_TRAFFIC; Tenancy owns the threshold and
-## the kind the lease writes.
+## NO FAIL STATE, structural since the tenant market: a vacant tower floor
+## refills itself for free (sim/market.gd), so there is always traffic coming
+## back. This replaced the free-cheapest-tenant lease rule, which died with
+## the lease picker.
 ##
 ## Any floor, including the lobby, may vacate. A second rule ("the lobby never
 ## vacates") would make this guard unreachable and the recovery test unwritable,
@@ -179,12 +178,6 @@ func tenanted_count() -> int:
 		if not _vacant[slot]:
 			n += 1
 	return n
-
-## Free while the player cannot earn. Under directional traffic a lone tenant
-## COULD generate lobby trips, so this is now a deliberate policy guard rather
-## than arithmetic -- but the guarantee it protects is unchanged: there must
-## always be something a $0 player can take.
-const MIN_FLOORS_FOR_TRAFFIC := 2
 
 func lease(floor_index: int, kind_id: String) -> void:
 	if not _valid(floor_index):
