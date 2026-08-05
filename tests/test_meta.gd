@@ -30,7 +30,8 @@ func ok_node(overrides: Dictionary = {}) -> Dictionary:
 func test_the_shipped_catalog_loads_and_is_usable() -> void:
 	var m := loaded()
 	assert_true(m.is_usable(), "usable")
-	assert_eq(Array(m.ids()), ["height", "shafts", "motor", "gearing", "cabin"],
+	assert_eq(Array(m.ids()),
+		["height", "shafts", "motor", "gearing", "cabin", "depth"],
 		"every node, in file order")
 
 func test_a_missing_file_is_refused() -> void:
@@ -228,7 +229,7 @@ func test_every_id_is_consumed_by_a_derivation_and_every_target_exists() -> void
 	var m := loaded()
 	var upgrade_ids := Array(upgrades().ids())
 	for id in m.ids():
-		var structural := id == "height" or id == "shafts"
+		var structural := id == "height" or id == "shafts" or id == "depth"
 		var mechanical := Meta.NODE_TO_UPGRADE.has(id)
 		assert_true(structural or mechanical, "%s is read by some derivation" % id)
 		if mechanical:
@@ -462,3 +463,65 @@ func test_a_non_bool_dev_restores_false_without_throwing() -> void:
 		var m := loaded()
 		assert_true(m.restore({"dev": bad}), "%s does not refuse" % [bad])
 		assert_false(m.dev_unlocked, "%s must not unlock the panel" % [bad])
+
+
+# --- the depth ceiling ------------------------------------------------------
+
+func test_the_depth_ceiling_walks_two_to_eight() -> void:
+	var m := loaded()
+	m.blueprints = 1000
+	var u := upgrades()
+	assert_eq(m.depth_cap(), Meta.BASE_DEPTH_CAP, "run one digs two")
+	for i in range(3):
+		assert_true(m.buy("depth", u), "depth level %d" % i)
+		assert_eq(m.depth_cap(),
+			Meta.BASE_DEPTH_CAP + Meta.DEPTH_PER_LEVEL * (i + 1), "level %d" % (i + 1))
+	assert_eq(m.depth_cap(), Meta.MAX_DEPTH_CAP,
+		"a maxed node lands exactly on the ladder top")
+	assert_lte(Meta.MAX_DEPTH_CAP, Building.MAX_DEPTH,
+		"and the ladder never advertises what the engine cannot build")
+
+func test_the_depth_clamp_is_not_vacuous() -> void:
+	var m := Meta.new()
+	assert_true(m.load_defs(write_defs([ok_node({"id": "depth", "max_level": 64})])))
+	assert_true(m.restore({"spent": {"depth": 64}}))
+	assert_eq(m.level_of("depth"), 64, "the level is real")
+	assert_eq(m.depth_cap(), Meta.MAX_DEPTH_CAP, "bounded by this release's ladder")
+
+func test_a_run_may_dig_to_the_ceiling_and_no_further() -> void:
+	var m := loaded()
+	m.blueprints = 1000
+	var u := upgrades()
+	assert_true(m.buy("depth", u), "one level")
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1,
+		"res://data/tenants.json", m)
+	s.economy.cash = 1_000_000.0
+	while not s.upgrades.is_maxed("dig"):
+		assert_true(s.buy("dig"), "dig %d" % s.building.depth)
+	assert_eq(s.building.depth, m.depth_cap(), "dug to the ceiling")
+	assert_false(s.buy("dig"), "the sim refuses, not merely the view")
+
+func test_digging_yields_a_vacant_floor_with_grown_containers() -> void:
+	var m := loaded()
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1,
+		"res://data/tenants.json", m)
+	s.economy.cash = 1_000_000.0
+	assert_true(s.buy("dig"))
+	assert_true(s.tenancy.is_vacant(-1), "excavation is not a lease")
+	assert_eq(s.tenancy.floors(), s.building.total_floors(),
+		"tenancy grew with the building")
+	assert_eq(s.fitout.tier_at(-1), Fitout.BASE_TIER, "fitout too")
+
+func test_a_run_deeper_than_the_tree_pays_for_keeps_its_basement() -> void:
+	# The live-save case, as for shafts. grant_level clamps the COUNTER to the
+	# new budget, which looks like it should fill the hole back in. It does not.
+	var m := loaded()
+	var s := GameState.new(GameState.BASE_FLOORS, 1, 1,
+		"res://data/tenants.json", m)
+	s.economy.cash = 1_000_000.0
+	for i in range(Meta.BASE_DEPTH_CAP):
+		assert_true(s.buy("dig"))
+	assert_eq(s.building.depth, Meta.BASE_DEPTH_CAP)
+	assert_true(s.upgrades.is_maxed("dig"), "and no more are for sale")
+	assert_false(s.buy("dig"))
+	assert_eq(s.building.depth, Meta.BASE_DEPTH_CAP, "nothing was filled in")

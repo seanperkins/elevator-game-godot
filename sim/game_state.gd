@@ -150,8 +150,12 @@ func _init(floors: int, shafts: int, p_seed: int,
 	# permanently capped 7 floors below what they paid for.
 	upgrades.set_max_level("floor", meta.height_cap() - BASE_FLOORS)
 	upgrades.set_max_level("shaft", meta.shaft_cap() - BASE_SHAFTS)
+	# No base subtraction, unlike floor and shaft: a building starts at depth 0,
+	# so every level of `dig` is a purchase.
+	upgrades.set_max_level("dig", meta.depth_cap())
 	upgrades.grant_level("floor", building.floor_count - BASE_FLOORS, building)
 	upgrades.grant_level("shaft", building.cars.size() - BASE_SHAFTS, building)
+	upgrades.grant_level("dig", building.depth, building)
 	for id in ["speed", "doors", "capacity"]:
 		upgrades.grant_level(id, meta.starting_level(id), building)
 
@@ -188,7 +192,7 @@ func blueprints_path() -> String:
 func buy(id: String) -> bool:
 	var ok := upgrades.purchase(id, economy, building)
 	if ok:
-		_grow_per_floor_containers()
+		_grow_per_floor_containers(id == "dig")
 		_resync_policies()
 	return ok
 
@@ -196,11 +200,20 @@ func buy(id: String) -> bool:
 ## container gets forgotten; the historic desync this replaces is pinned by
 ## test_buying_a_row_grows_every_per_floor_container, and Spec B adds a third
 ## container to this function rather than a third loop beside it.
-func _grow_per_floor_containers() -> void:
-	while tenancy.floors() < building.floor_count:
-		tenancy.add_floor()
-	while fitout.floors() < building.floor_count:
-		fitout.add_floor()
+## `downward` says WHICH END grew: a dig inserts at the front, a floor appends.
+## The comparison is against total_floors() -- floor_count alone stopped being
+## the container size the day the first basement was dug.
+func _grow_per_floor_containers(downward := false) -> void:
+	while tenancy.floors() < building.total_floors():
+		if downward:
+			tenancy.dig()
+		else:
+			tenancy.add_floor()
+	while fitout.floors() < building.total_floors():
+		if downward:
+			fitout.dig()
+		else:
+			fitout.add_floor()
 
 ## Lease a vacant floor to a chosen kind.
 ##

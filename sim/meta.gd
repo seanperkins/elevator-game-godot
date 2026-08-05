@@ -32,6 +32,14 @@ const BASE_STARTING_SHAFTS := 1
 const BASE_SHAFT_CAP := 2
 const SHAFT_PER_LEVEL := 2
 const MAX_SHAFT_CAP := 8
+## The depth ceiling a first run plays under, and what each level of `depth`
+## adds: 2 -> 4 -> 6 -> 8, landing exactly on MAX_DEPTH_CAP.
+const BASE_DEPTH_CAP := 2
+const DEPTH_PER_LEVEL := 2
+## This release's ladder top going down. NOT Building.MAX_DEPTH -- the engine
+## keeps its own floor, and a tampered save must land HERE, for the same reason
+## height_cap clamps to MAX_HEIGHT_CAP and not MAX_FLOORS.
+const MAX_DEPTH_CAP := 8
 
 const MAX_NODES := 64
 const MAX_BASE := 1_000_000
@@ -288,6 +296,11 @@ func shaft_cap() -> int:
 ## Unchanged by the tree: every run opens with one shaft and buys the rest.
 func starting_shafts() -> int:
 	return mini(BASE_STARTING_SHAFTS, shaft_cap())
+
+## How deep a run may dig. The `depth` node moves this, the same shape as
+## height_cap and shaft_cap: a per-run cash price under a permanent ceiling.
+func depth_cap() -> int:
+	return mini(BASE_DEPTH_CAP + DEPTH_PER_LEVEL * level_of("depth"), MAX_DEPTH_CAP)
 
 ## The level an upgrade BEGINS a run at. Takes an Upgrades id, not a node id.
 func starting_level(upgrade_id: String) -> int:

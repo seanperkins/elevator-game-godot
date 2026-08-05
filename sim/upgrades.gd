@@ -114,6 +114,8 @@ func _apply(id: String, building: Building) -> bool:
 			return true
 		"floor":
 			return building.add_floor()
+		"dig":
+			return building.dig()
 		"auto":
 			return true          # licences a shaft; nothing on a car changes
 		"hall_buttons", "car_buttons", "load_sensor", "lobby_parking", \
