@@ -417,10 +417,10 @@ func test_the_lease_picker_is_hidden_while_the_floor_is_tenanted() -> void:
 	root.panel.show_floor(root.state, 3)
 	assert_false(root.panel.picker_visible(), "you choose who moves in, not out")
 
-func test_the_lease_picker_appears_when_the_floor_is_vacant() -> void:
+func test_a_vacant_tower_floor_shows_no_picker_the_market_fills_it() -> void:
 	root.state.tenancy.restore_floor(3, 1.0, true, 0)
 	root.panel.show_floor(root.state, 3)
-	assert_true(root.panel.picker_visible())
+	assert_false(root.panel.picker_visible(), "you don't choose who moves in either")
 
 func test_a_floor_counting_down_to_move_out_still_counts_as_tenanted() -> void:
 	while root.state.tenancy.satisfaction_at(3) > Tenancy.MOVE_OUT_THRESHOLD:

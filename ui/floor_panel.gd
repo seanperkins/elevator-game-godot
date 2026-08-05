@@ -8,10 +8,11 @@ extends Control
 ## modal: the sim keeps running behind it, and dismissing it (tap the scrim) is
 ## a close, never a view change.
 ##
-## The lease picker is hidden while a tenant sits there, including while a
-## move-out countdown runs. You choose who moves in, not who moves out, so
-## tenant churn stays driven by satisfaction and the move-out clock keeps its
-## teeth.
+## The lease picker is BASEMENT-only now: the market fills vacant tower
+## floors on its own clock, so a tower vacancy shows the arrival countdown
+## instead of a menu. You choose neither who moves in nor who moves out --
+## the player's levers are the class upgrade and the floors they buy. Parking
+## stays a deliberate purchase, so basement floors keep the picker.
 ##
 ## Purchases are REFUSED by the sim, not merely greyed here (§12): the buttons
 ## are informative, the refusal is authoritative. picker_visible() and
@@ -38,6 +39,7 @@ var _header: Label
 var _bar: ProgressBar
 var _sparkline: DaySparkline
 var _upgrade: Button
+var _fill_label: Label
 var _picker: VBoxContainer
 var _lease_buttons: Array[Button] = []
 
@@ -94,6 +96,10 @@ func bind(state: GameState) -> void:
 	_upgrade.pressed.connect(_on_upgrade)
 	_box.add_child(_upgrade)
 
+	_fill_label = Label.new()
+	_fill_label.add_theme_font_size_override("font_size", 20)
+	_box.add_child(_fill_label)
+
 	_picker = VBoxContainer.new()
 	_picker.add_theme_constant_override("separation", 6)
 	_box.add_child(_picker)
@@ -128,7 +134,17 @@ func show_floor(state: GameState, floor_index: int) -> void:
 	_upgrade.text = "UPGRADE CLASS  $%s" % NumberFormat.compact(cost)
 	_upgrade.disabled = not is_finite(cost) or not _state.economy.can_afford(cost)
 
-	_rebuild_picker(vacant)
+	# Tower vacancies are the market's: no picker, just the arrival clock.
+	# The basement keeps the picker -- parking is a purchase, not a tenant.
+	var market_floor := vacant and _floor >= 0
+	_fill_label.visible = market_floor
+	if market_floor:
+		var left := _state.market.fill_ticks_left(_floor)
+		if left <= 0:
+			left = Market.FILL_TICKS   # vacated this tick; the scan arms it next tick
+		# Like the LEAVING label: refreshed per show, not per frame.
+		_fill_label.text = "NEW TENANT IN %ds" % int(ceil(float(left) * SimClock.TICK_SECONDS))
+	_rebuild_picker(vacant and _floor < 0)
 	visible = true
 
 func _sat_fraction(vacant: bool) -> float:
