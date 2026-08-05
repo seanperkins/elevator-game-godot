@@ -64,14 +64,59 @@ Four arrays are per-floor and all of them now span the basement:
 `Tenancy._move_out_left`, and `Fitout._tier`. Every one stays **dense and
 zero-based from the BOTTOM floor**, with exactly one translation per owner:
 
+### ONE depth, shared by reference — and why `Fitout`'s docstring must change
+
+`sim/fitout.gd:12-16` says it indexes its array directly and that **a shared
+index object was considered and rejected**:
+
+> *in a building whose bottom floor is always 0 the mapping is the identity, so
+> it earns nothing, and it converts a container-size desync from a loud
+> out-of-range access into a silent valid-but-wrong index that an "the containers
+> agree" test would pass through.*
+
+The first half of that argument is a **precondition this spec deletes** — the
+bottom floor is no longer always 0, so the mapping stops being the identity and
+starts earning its keep.
+
+The second half survives and is the real hazard. With `f + _depth` copied into
+`Tenancy` and `Fitout`, a `_depth` that is stale by one maps floor −1 onto floor
+−2's slot: in range, wrong answer, and an "arrays are the same length" test
+passes straight through it.
+
+So the resolution is not to copy the offset into three owners. It is to have
+**one**, shared by reference:
+
 ```gdscript
-## Dense from the bottom floor, so the basement occupies the front of the array.
-## One translation, in one place: every other consumer passes a FLOOR.
-func _slot(f: int) -> int: return f + _depth
+class_name FloorIndex
+extends RefCounted
+
+## Which array slot a FLOOR occupies. There is exactly one of these per building
+## and Tenancy, Fitout and Building share the same instance by reference, so a
+## desync is not a bug to test for -- it is unrepresentable.
+##
+## Fitout's docstring rejected this, correctly, while the bottom floor was always
+## 0: the mapping was the identity and earned nothing. Digging deletes that
+## precondition. What the rejection got right and still applies is that a COPIED
+## offset turns a desync into a silent wrong answer, which is exactly why this is
+## shared rather than duplicated.
+var bottom: int = 0        ## the lowest floor: -depth
+var above: int = 1         ## one past the top: floor_count
+
+func slot(f: int) -> int:   return f - bottom
+func holds(f: int) -> bool: return f >= bottom and f < above
+func size() -> int:         return above - bottom
+func dig() -> void:         bottom -= 1
+func grow_up() -> void:     above += 1
 ```
 
-`Tenancy` and `Fitout` therefore need to know the depth. They are handed it at
-construction and on `dig()`, the same way they are already handed a floor count.
+`Building` constructs it and passes the same instance to `Tenancy` and `Fitout`.
+Every per-floor accessor becomes `_array[_index.slot(f)]` guarded by
+`_index.holds(f)`, so an out-of-building floor is refused rather than wrapped.
+
+**`Fitout`'s docstring must be rewritten as part of this work**, not left
+contradicting the code. A comment that argues against what the file now does is
+worse than no comment, and this one is load-bearing enough that the next reader
+will believe it.
 
 `dig()` inserts at the front of each array and increments depth; `add_floor()`
 appends, as it does today. Front insertion is O(n) on at most 48 entries and
@@ -79,10 +124,24 @@ happens once per purchase.
 
 ### THE HAZARD THIS SECTION EXISTS FOR
 
-**13 sites loop `range(floor_count)`.** Every one of them is currently correct
-*because* floors start at 0. Once a basement exists, each is one of two things
-and they must be separated deliberately, not by whichever the implementer
-touched first:
+**Nine sites loop `range(floor_count)`**, and here they are, because a number
+without a list is a number nobody checks:
+
+| site | what it means |
+| --- | --- |
+| `sim/building.gd:23` | building `waiting` at construction — **every floor** |
+| `sim/tenancy.gd:46` | sizing the tenancy arrays — **every floor** |
+| `sim/game_state.gd:369` | building the `TrafficSource` list — **every floor** |
+| `sim/game_state.gd:443` | (audit at implementation) |
+| `sim/save_codec.gd:262` | encoding `floors` — **every floor** |
+| `sim/save_codec.gd:410` | decoding `floors` — **every floor** |
+| `sim/auto_dispatch.gd:88` | sweep targets — **every floor** |
+| `sim/dispatch_policy.gd:65` | scanning for calls — **every floor** |
+| `view/building_view.gd:198` | building `FloorRow`s — **every floor** |
+
+Every one is currently correct *because* floors start at 0. Once a basement
+exists each is one of two things, and they must be separated deliberately rather
+than by whichever the implementer touched first:
 
 - **"every floor in the building"** — must become
   `range(bottom_floor(), floor_count)`. Refreshing rows, building the traffic
