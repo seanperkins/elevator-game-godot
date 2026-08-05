@@ -146,7 +146,7 @@ func _init(floors: int, shafts: int, p_seed: int,
 	# who started at 6 with a cap of 20 and bought 7 floors would come back
 	# permanently capped 7 floors below what they paid for.
 	upgrades.set_max_level("floor", meta.height_cap() - BASE_FLOORS)
-	upgrades.set_max_level("shaft", Building.MAX_SHAFTS - BASE_SHAFTS)
+	upgrades.set_max_level("shaft", meta.shaft_cap() - BASE_SHAFTS)
 	upgrades.grant_level("floor", building.floor_count - BASE_FLOORS, building)
 	upgrades.grant_level("shaft", building.cars.size() - BASE_SHAFTS, building)
 	for id in ["speed", "doors", "capacity"]:

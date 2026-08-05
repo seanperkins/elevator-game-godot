@@ -108,6 +108,7 @@ func test_a_successful_demolish_resets_every_row_of_the_table() -> void:
 	assert_eq(next.economy.riders_served, 0, "riders")
 	assert_eq(next.building.floor_count, GameState.BASE_FLOORS, "floors")
 	assert_eq(next.building.cars.size(), next.meta.starting_shafts(), "cars")
+	assert_eq(next.building.cars.size(), 1, "and that is one, at every tree level")
 	assert_eq(next.upgrades.level_of("floor"), 0, "upgrade levels")
 	assert_false(next.tenancy.is_vacant(0), "tenancy rebuilt from the roster")
 	assert_eq(next.fitout.tier_at(0), Fitout.BASE_TIER,
@@ -174,7 +175,11 @@ func test_the_next_run_starts_with_what_the_tree_bought() -> void:
 	assert_true(s.meta.buy("motor", s.upgrades), "motor")
 	var next := Prestige.demolish(s)
 	assert_not_null(next, "allowed")
-	assert_eq(next.building.cars.size(), 2, "the granted shaft")
+	# NOT a granted shaft -- the node buys a ceiling, and shafts are re-earned
+	# with cash every run. What the demolish carries over is the ROOM for them.
+	assert_eq(next.building.cars.size(), 1, "still one shaft to start")
+	assert_eq(next.meta.shaft_cap(), Meta.BASE_SHAFT_CAP + Meta.SHAFT_PER_LEVEL,
+		"and room for three more")
 	assert_eq(next.upgrades.level_of("speed"), 1, "the granted motor level")
 	assert_almost_eq(next.building.cars[0].floors_per_tick,
 		next.upgrades.effect_value("speed", 1), 1e-9, "and the cars are synced")

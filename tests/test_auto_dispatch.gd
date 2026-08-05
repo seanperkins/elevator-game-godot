@@ -158,6 +158,11 @@ func test_a_new_floor_joins_the_sweep() -> void:
 
 func test_a_new_shaft_starts_manual() -> void:
 	gs.economy.accrue(1e9)
+	# gs opens with 2, which is a first run's whole ceiling now, so the tree has
+	# to buy the room before the cash can buy the shaft.
+	gs.meta.blueprints = 1000
+	assert_true(gs.meta.buy("shafts", gs.upgrades), "raise the ceiling")
+	gs.upgrades.set_max_level("shaft", gs.meta.shaft_cap() - GameState.BASE_SHAFTS)
 	assert_true(gs.buy("shaft"))
 	var fresh := gs.building.cars.size() - 1
 	assert_false(gs.auto.is_enabled(fresh),

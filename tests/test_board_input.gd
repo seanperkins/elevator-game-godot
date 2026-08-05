@@ -235,6 +235,16 @@ func test_a_tap_in_the_ghost_band_does_not_dispatch() -> void:
 func test_every_shaft_up_to_the_cap_is_reachable() -> void:
 	# With five visible slots and no ghost slot, five owned shafts fill every
 	# position and shafts 6-8 are unbuyable forever.
+	#
+	# This is about REACHING a slot with a thumb, so it needs the ceiling out of
+	# the way first -- a first run stops at two shafts for reasons that have
+	# nothing to do with whether the eighth slot can be scrolled to.
+	var meta: Meta = root.state.meta
+	meta.blueprints = 1000
+	while not meta.is_maxed("shafts"):
+		assert_true(meta.buy("shafts", root.state.upgrades), "shaft ceiling")
+	root.state.upgrades.set_max_level("shaft",
+		meta.shaft_cap() - GameState.BASE_SHAFTS)
 	root.state.economy.accrue(1e12)
 	for owned in range(1, Building.MAX_SHAFTS):
 		var slot_index := owned - view.first_visible_shaft()

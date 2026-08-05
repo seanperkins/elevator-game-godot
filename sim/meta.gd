@@ -19,7 +19,19 @@ const MAX_HEIGHT_CAP := 20
 ## fail its own decode on the next load. Pinned by a test.
 const MAX_BLUEPRINTS := 1_000_000_000
 const MAX_RUNS := 1_000_000
+## How many shafts a run BEGINS with, at every tree level. It does not ladder:
+## the `shafts` node raises the CEILING, and the shafts themselves are still
+## bought with cash inside the run. Two gates on one resource is the point --
+## the price is what makes a shaft a decision, and the ceiling is what makes a
+## demolish change how a run is shaped rather than only how fast it starts.
 const BASE_STARTING_SHAFTS := 1
+## The ceiling a first run plays under, and what each level of `shafts` adds.
+## 2 -> 4 -> 6 -> 8 over the node's three levels, landing exactly on the hard
+## cap, which a test pins -- a ladder that overshot would let a maxed tree
+## advertise a cap the Building cannot build.
+const BASE_SHAFT_CAP := 2
+const SHAFT_PER_LEVEL := 2
+const MAX_SHAFT_CAP := 8
 
 const MAX_NODES := 64
 const MAX_BASE := 1_000_000
@@ -29,8 +41,7 @@ const MAX_NODE_LEVEL := 64
 ## in THIS direction, and it is the thing an implementer gets wrong:
 ## Upgrades.has_effect is false for `motor`, `gearing` and `cabin`, which are
 ## not Upgrades ids at all. The Structure nodes are deliberately absent -- they
-## map to no upgrade and are read by height_cap() and starting_shafts()
-## instead.
+## map to no upgrade and are read by height_cap() and shaft_cap() instead.
 const NODE_TO_UPGRADE := {"motor": "speed", "gearing": "doors", "cabin": "capacity"}
 
 var blueprints: int = 0
@@ -264,8 +275,19 @@ func restore(data: Variant) -> bool:
 func height_cap() -> int:
 	return mini(BASE_HEIGHT_CAP + HEIGHT_PER_LEVEL * level_of("height"), MAX_HEIGHT_CAP)
 
+## How many shafts a run may reach. The `shafts` node moves THIS, not the number
+## you begin with -- it used to grant a free starting shaft per level, which made
+## the shaft price stop mattering as the tree grew.
+##
+## MAX_SHAFT_CAP rather than Building.MAX_SHAFTS for the same reason height_cap
+## clamps to MAX_HEIGHT_CAP and not MAX_FLOORS: a tampered save with an absurd
+## node level must land on this release's ladder top, not on the engine's.
+func shaft_cap() -> int:
+	return mini(BASE_SHAFT_CAP + SHAFT_PER_LEVEL * level_of("shafts"), MAX_SHAFT_CAP)
+
+## Unchanged by the tree: every run opens with one shaft and buys the rest.
 func starting_shafts() -> int:
-	return mini(BASE_STARTING_SHAFTS + level_of("shafts"), Building.MAX_SHAFTS)
+	return mini(BASE_STARTING_SHAFTS, shaft_cap())
 
 ## The level an upgrade BEGINS a run at. Takes an Upgrades id, not a node id.
 func starting_level(upgrade_id: String) -> int:

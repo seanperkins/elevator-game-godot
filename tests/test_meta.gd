@@ -167,14 +167,32 @@ func test_the_ladder_walks_ten_to_twenty() -> void:
 	m.buy("height", u)
 	assert_eq(m.height_cap(), 20, "L2")
 
-func test_shafts_walk_one_to_four() -> void:
+func test_the_shaft_ceiling_walks_two_to_eight() -> void:
+	# The node moves the CEILING, not the number of shafts a run opens with.
+	# 2 -> 4 -> 6 -> 8, landing exactly on the hard cap.
 	var m := loaded()
 	m.blueprints = 100
 	var u := upgrades()
-	assert_eq(m.starting_shafts(), Meta.BASE_STARTING_SHAFTS, "run one")
+	assert_eq(m.shaft_cap(), Meta.BASE_SHAFT_CAP, "run one plays under the base cap")
 	for i in range(3):
 		assert_true(m.buy("shafts", u), "shafts level %d" % i)
-	assert_eq(m.starting_shafts(), 4, "three levels")
+		assert_eq(m.shaft_cap(), Meta.BASE_SHAFT_CAP + Meta.SHAFT_PER_LEVEL * (i + 1),
+			"level %d" % (i + 1))
+	assert_eq(m.shaft_cap(), Building.MAX_SHAFTS,
+		"a maxed node reaches the hard cap exactly -- no unreachable shafts, and "
+		+ "none advertised that Building cannot build")
+
+func test_every_run_still_opens_with_one_shaft() -> void:
+	# The whole point of the ceiling: shafts are re-earned with CASH every run.
+	# If the tree also handed them over, the price would stop mattering as the
+	# tree grew, which is what the node used to do.
+	var m := loaded()
+	m.blueprints = 100
+	var u := upgrades()
+	for i in range(3):
+		assert_true(m.buy("shafts", u), "shafts level %d" % i)
+	assert_eq(m.starting_shafts(), Meta.BASE_STARTING_SHAFTS,
+		"a maxed tree still starts you with one")
 
 func test_the_height_clamp_is_not_vacuous() -> void:
 	# Asserting height_cap() <= 20 against a 2-level ladder passes with the
@@ -190,7 +208,8 @@ func test_the_shaft_clamp_is_not_vacuous() -> void:
 	assert_true(m.load_defs(write_defs([ok_node({"id": "shafts", "max_level": 64})])),
 		"loads")
 	assert_true(m.restore({"spent": {"shafts": 64}}), "restores")
-	assert_eq(m.starting_shafts(), Building.MAX_SHAFTS, "bounded by the hard cap")
+	assert_eq(m.level_of("shafts"), 64, "the level is real")
+	assert_eq(m.shaft_cap(), Meta.MAX_SHAFT_CAP, "bounded by this release's ladder")
 
 func test_starting_levels_map_node_ids_to_upgrade_ids() -> void:
 	var m := loaded()
@@ -325,7 +344,7 @@ func test_a_meta_with_height_raises_the_run_cap() -> void:
 		s.buy("floor")
 	assert_eq(s.building.floor_count, 20, "the ladder's top rung")
 
-func test_a_run_starts_with_the_granted_shafts_and_synced_cars() -> void:
+func test_a_run_starts_with_one_shaft_and_the_ceiling_it_paid_for() -> void:
 	var m := loaded()
 	m.blueprints = 100
 	var u := upgrades()
@@ -334,11 +353,34 @@ func test_a_run_starts_with_the_granted_shafts_and_synced_cars() -> void:
 	assert_true(m.buy("motor", u), "motor L2")
 	var s := GameState.new(GameState.BASE_FLOORS, m.starting_shafts(), 1,
 		"res://data/tenants.json", m)
-	assert_eq(s.building.cars.size(), 2, "the granted shaft is there")
+	assert_eq(s.building.cars.size(), 1, "you still open with one shaft")
+	# The ceiling is enforced on PURCHASE. Buy until the run refuses and count
+	# what was actually built -- a getter would only restate the assignment.
+	s.economy.cash = 1_000_000.0
+	while not s.upgrades.is_maxed("shaft"):
+		assert_true(s.buy("shaft"), "shaft %d" % s.building.cars.size())
+	assert_eq(s.building.cars.size(), m.shaft_cap(),
+		"the run may buy up to the ceiling the tree bought, and no further")
+	assert_eq(m.shaft_cap(), Meta.BASE_SHAFT_CAP + Meta.SHAFT_PER_LEVEL,
+		"which at one level is four")
 	assert_eq(s.upgrades.level_of("speed"), 2, "and the granted motor level")
 	assert_almost_eq(s.building.cars[0].floors_per_tick,
 		s.upgrades.effect_value("speed", 2), 1e-9,
 		"the cars are SYNCED, not merely counted")
+
+func test_a_run_that_already_exceeds_the_ceiling_keeps_its_shafts() -> void:
+	# THE LIVE-SAVE CASE. A building from before the ceiling existed can hold six
+	# cars on a tree that pays for two. grant_level clamps the upgrade COUNTER to
+	# the new budget, and the worry is that this reads as "you own one shaft" and
+	# takes five away. It does not: the codec rebuilds the Building at its saved
+	# size and the counter only prices what is still for sale.
+	var m := loaded()
+	var s := GameState.new(GameState.BASE_FLOORS, 6, 1, "res://data/tenants.json", m)
+	assert_eq(s.building.cars.size(), 6, "the cars the save had are still there")
+	assert_true(s.upgrades.is_maxed("shaft"), "and no more are for sale")
+	s.economy.cash = 1_000_000.0
+	assert_false(s.buy("shaft"), "the sim refuses, not merely the view")
+	assert_eq(s.building.cars.size(), 6, "and nothing was taken away")
 
 func test_init_never_resizes_the_building() -> void:
 	# The saved size is the authority. Expanding here past saved_floors.size()

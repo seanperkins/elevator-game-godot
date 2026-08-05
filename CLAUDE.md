@@ -66,6 +66,13 @@ wiping the live one. Save format is **v4**: the tree rides in the same file as
 the run, because a demolish must persist both in one write. `data/blueprints.json`
 is fatal-if-malformed, exactly like `data/tenants.json`.
 
+**Shafts are gated twice, on purpose (2026-08-04).** They are bought with cash
+inside a run *and* bounded by `Meta.shaft_cap()` — 2 on a first run, laddering
+2/4/6/8 through the `shafts` node. The node used to grant a free *starting*
+shaft per level, which made the cash price stop mattering as the tree grew; it
+now buys ROOM, and every run still opens with one shaft and re-earns the rest.
+Floors already worked this way (`height_cap`); shafts were the outlier.
+
 Two numbers worth knowing before you touch the balance: run 1 yields **13
 Blueprints**, measured on the real sim, because `combo` multiplies
 `lifetime_earnings` — the field the conversion consumes — by ~7.6× on a

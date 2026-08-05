@@ -4,7 +4,7 @@
     { "id": "height",  "name": "Taller Foundations", "branch": "structure",
       "base": 6, "max_level": 2, "note": "+5 floors you may build" },
     { "id": "shafts",  "name": "Sunk Shafts",        "branch": "structure",
-      "base": 15, "max_level": 3, "note": "start with one more shaft" },
+      "base": 15, "max_level": 3, "note": "+2 shafts you may build" },
     { "id": "motor",   "name": "Standard Motor",     "branch": "mechanical",
       "base": 6, "max_level": 4, "note": "start with Stronger Motor fitted" },
     { "id": "gearing", "name": "Standard Gearing",   "branch": "mechanical",
