@@ -105,8 +105,9 @@ tick (vacant tower floors refill via `sim/market.gd`, 600 ticks, free).
 ## Status
 
 Milestones 1–3, the board/management UI, the cost-curve work, Spec A (tenant
-kinds + floor class), **S5 (prestige)** and the **people-and-car** pass are built
-and tested. 662 GUT tests.
+kinds + floor class), **S5 (prestige)**, the **people-and-car** pass and the
+**tenant market** (market-drawn tenants, renovation evicts, basement-only
+lease) are built and tested. 786 GUT tests.
 
 S5: a run caps at **10 floors** and ladders to 20 via the `height` node.
 `sim/meta.gd` owns the persistent tree, `sim/prestige.gd` the demolish (which
