@@ -134,3 +134,25 @@ func test_the_curve_wraps_around_the_day() -> void:
 		"the same hour a day later is the same bucket")
 	assert_almost_eq(apt.rate_at(0), apt.rate_at(-24), 1e-9,
 		"and posmod handles a negative index")
+
+func test_an_inbound_trip_is_flagged_not_encoded_as_floor_minus_one() -> void:
+	# _destination_for returned -1 to mean "inbound, swap the endpoints". That
+	# was safe only while floors started at 0. The FIRST floor dug is -1, so the
+	# sentinel becomes a real destination and inbound traffic silently starts
+	# delivering people INTO the basement. The flag is separate now.
+	var sp := TrafficSpawner.new(1)
+	assert_true(sp.load_curve("res://data/traffic_walkup.json"), "curve loads")
+	var cat := TenantCatalog.new()
+	assert_true(cat.load_from("res://data/tenants.json"), "catalog loads")
+	var sources: Array[TrafficSource] = [
+		TrafficSource.new(0, cat.kind("shops"), 1.0),
+		TrafficSource.new(4, cat.kind("office"), 1.0),
+	]
+	var saw_inbound := false
+	for minute in range(0, 48):
+		var d := sp._destination_for(sources[1], sources, minute, true)
+		assert_between(d.y, 0, 1, "the flag is a flag")
+		if d.y == 1:
+			saw_inbound = true
+			assert_ne(d.x, -1, "an inbound trip must not encode itself as floor -1")
+	assert_true(saw_inbound, "the office takes inbound trips at some hour")
