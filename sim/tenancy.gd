@@ -36,6 +36,8 @@ var _satisfaction: PackedFloat32Array = PackedFloat32Array()
 var _vacant: Array[bool] = []
 var _move_out_left: PackedInt32Array = PackedInt32Array()
 var _kind: PackedStringArray = PackedStringArray()
+## A move-out that good service cannot cancel -- see begin_move_out.
+var _priced_out: Array[bool] = []
 var _revision: int = 0
 
 ## `tenanted_prefix` is how many LEADING floors start with a tenant. Everything
@@ -61,6 +63,7 @@ func dig() -> void:
 	_vacant.insert(0, true)
 	_move_out_left.insert(0, 0)
 	_kind.insert(0, "")
+	_priced_out.insert(0, false)
 	_revision += 1
 
 func _append_floor() -> void:
@@ -68,6 +71,7 @@ func _append_floor() -> void:
 	_vacant.append(false)
 	_move_out_left.append(0)
 	_kind.append("")
+	_priced_out.append(false)
 
 func add_floor() -> void:
 	_append_floor()
@@ -88,13 +92,14 @@ func revision() -> int:
 ## Restores one floor from a save. Satisfaction scales rent and a vacancy is a
 ## debt, so neither can be inferred from anything else in the file.
 func restore_floor(floor_index: int, satisfaction: float, vacant: bool, move_out_left: int,
-		kind := "") -> void:
+		kind := "", priced_out := false) -> void:
 	if not _valid(floor_index):
 		return
 	_satisfaction[_index.slot(floor_index)] = clampf(satisfaction, 0.0, 1.0)
 	_vacant[_index.slot(floor_index)] = vacant
 	_move_out_left[_index.slot(floor_index)] = maxi(move_out_left, 0)
 	_kind[_index.slot(floor_index)] = "" if vacant else kind
+	_priced_out[_index.slot(floor_index)] = priced_out and not vacant
 	_revision += 1
 
 func kind_at(floor_index: int) -> String:
@@ -110,7 +115,8 @@ func note_delivery(floor_index: int) -> void:
 	if not _valid(floor_index) or _vacant[_index.slot(floor_index)]:
 		return
 	_satisfaction[_index.slot(floor_index)] = clampf(_satisfaction[_index.slot(floor_index)] + _DELIVERY_GAIN, 0.0, 1.0)
-	if _satisfaction[_index.slot(floor_index)] > MOVE_OUT_THRESHOLD:
+	if _satisfaction[_index.slot(floor_index)] > MOVE_OUT_THRESHOLD \
+			and not _priced_out[_index.slot(floor_index)]:
 		_move_out_left[_index.slot(floor_index)] = 0
 
 func note_expiry(floor_index: int) -> void:
@@ -140,6 +146,7 @@ func accrue_for_tick() -> PackedInt32Array:
 			if _move_out_left[slot] <= 0:
 				_vacant[slot] = true
 				_kind[slot] = ""
+				_priced_out[slot] = false
 				_revision += 1
 				vacated.append(_index.bottom + slot)
 	return vacated
@@ -186,7 +193,24 @@ func lease(floor_index: int, kind_id: String) -> void:
 	_satisfaction[_index.slot(floor_index)] = 1.0
 	_move_out_left[_index.slot(floor_index)] = 0
 	_kind[_index.slot(floor_index)] = kind_id
+	_priced_out[_index.slot(floor_index)] = false
 	_revision += 1
+
+## Renovation evicts: the upgraded floor's new class outranks the sitting
+## tenant by construction, so their move-out starts regardless of
+## satisfaction and note_delivery cannot cancel it -- good service does
+## not lower the rent. A floor already moving out keeps its clock (and
+## becomes uncancellable).
+func begin_move_out(floor_index: int) -> void:
+	if not _valid(floor_index) or _vacant[_index.slot(floor_index)]:
+		return
+	var slot := _index.slot(floor_index)
+	_priced_out[slot] = true
+	if _move_out_left[slot] <= 0:
+		_move_out_left[slot] = MOVE_OUT_TICKS
+
+func is_priced_out(floor_index: int) -> bool:
+	return _valid(floor_index) and _priced_out[_index.slot(floor_index)]
 
 ## The BUILDING's floor range, not the array's bounds. Checking the array would
 ## accept floor 0 on a two-deep building and hand back floor -2's slot: in

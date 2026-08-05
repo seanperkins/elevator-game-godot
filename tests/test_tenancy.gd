@@ -230,3 +230,50 @@ func test_a_vacating_basement_reports_its_floor_not_its_slot() -> void:
 	var vacated := t.accrue_for_tick()
 	assert_eq(vacated.size(), 1, "the garage gave up")
 	assert_eq(vacated[0], -1, "reported as floor -1")
+
+func test_pricing_out_starts_the_move_out_clock() -> void:
+	t.begin_move_out(0)
+	assert_true(t.is_moving_out(0))
+	assert_eq(t.move_out_ticks_left(0), Tenancy.MOVE_OUT_TICKS)
+
+func test_a_priced_out_move_out_cannot_be_cancelled_by_good_service() -> void:
+	t.begin_move_out(0)
+	for i in range(100):
+		t.note_delivery(0)
+	assert_true(t.is_moving_out(0), "good service does not lower the rent")
+	for i in range(Tenancy.MOVE_OUT_TICKS):
+		t.accrue_for_tick()
+	assert_true(t.is_vacant(0))
+
+func test_pricing_out_a_floor_already_moving_out_keeps_its_clock() -> void:
+	while t.satisfaction_at(0) > Tenancy.MOVE_OUT_THRESHOLD:
+		t.note_expiry(0)
+	for i in range(100):
+		t.accrue_for_tick()
+	var left := t.move_out_ticks_left(0)
+	t.begin_move_out(0)
+	assert_eq(t.move_out_ticks_left(0), left, "no clock reset")
+	assert_true(t.is_priced_out(0), "but the eviction is now uncancellable")
+
+func test_pricing_out_a_vacant_floor_does_nothing() -> void:
+	t.restore_floor(0, 1.0, true, 0)
+	t.begin_move_out(0)
+	assert_false(t.is_moving_out(0))
+	assert_false(t.is_priced_out(0))
+
+func test_vacating_clears_the_priced_out_flag_and_a_new_tenant_starts_clean() -> void:
+	t.begin_move_out(0)
+	for i in range(Tenancy.MOVE_OUT_TICKS):
+		t.accrue_for_tick()
+	assert_false(t.is_priced_out(0))
+	t.lease(0, "shops")
+	assert_false(t.is_priced_out(0))
+
+func test_restore_floor_round_trips_the_priced_out_flag() -> void:
+	t.restore_floor(0, 1.0, false, 600, "shops", true)
+	assert_true(t.is_priced_out(0))
+	for i in range(50):
+		t.note_delivery(0)
+	assert_true(t.is_moving_out(0), "a reloaded eviction stays uncancellable")
+	t.restore_floor(1, 1.0, true, 0, "", true)
+	assert_false(t.is_priced_out(1), "a vacant floor cannot be priced out")
