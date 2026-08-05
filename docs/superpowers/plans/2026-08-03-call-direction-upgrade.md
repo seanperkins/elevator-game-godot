@@ -189,12 +189,15 @@ In `view/floor_row.gd`, line 97 becomes:
 func set_waiting(passengers: Array, show_direction: bool) -> void:
 ```
 
-and the `show_as` call at line 118 becomes:
+and the sprite call becomes (`show_as` when this was written; the live method
+is `show_waiting`, which also carries the tint key):
 
 ```gdscript
-			_sprites[i].show_as(p.patience_fraction(),
+			_sprites[i].show_waiting(p.patience_fraction(),
 				(CALL_DOWN if p.direction() < 0 else CALL_UP) if show_direction
-				else CALL_UNKNOWN)
+				else CALL_UNKNOWN,
+				PersonSprite.key_for(p.origin_floor, p.destination_floor,
+					p.source_floor))
 ```
 
 The parameter is required rather than defaulted to `true`. A default would let a

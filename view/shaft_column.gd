@@ -27,9 +27,11 @@ const HEADER_FONT := 16
 ## Sized for the 220-unit car.
 const HEADER_BUDGET := 16
 
-## Today's PassengerSprite.FONT, kept: a font-24 line box is what the 30-unit
-## badge was sized for, and it is 13.1pt at the 0.546 iPhone scale.
-const CAR_FONT := 24
+## A font-24 line box is what the 30-unit badge was sized for, and it is 13.1pt
+## at the 0.546 iPhone scale. It lives on PersonSprite now, beside the badge it
+## sizes; this alias is kept because the header measurements below read it.
+## (It was inherited from PassengerSprite.FONT, a class that no longer exists.)
+const CAR_FONT := PersonSprite.CAR_FONT
 
 ## The doors, as the player sees them: two panels that part over the car.
 ##
@@ -75,6 +77,9 @@ var _door_left: ColorRect
 var _door_right: ColorRect
 var _pips: Array[Rect2] = []
 var _lit: int = 0
+## What the pip strip last DREW. Compared against, never read for meaning.
+var _pip_key: String = ""
+var _pip_redraws: int = 0
 var _chips: Array[PersonSprite] = []
 var _listed: PackedStringArray = PackedStringArray()
 var _car_floor_provider: Callable
@@ -202,7 +207,14 @@ func set_riders(riders: Array, capacity: int) -> void:
 	_pips = CarRack.pips(capacity, area.x)
 	_lit = mini(riders.size(), capacity)
 	var slots := CarRack.slots(capacity, area.x, area.y)
-	_car_rect.queue_redraw()
+	# GATED, for the same reason PersonSprite gates its own. _draw_pips emits up
+	# to 2 x capacity draw_rect calls per car per frame -- ~192 across eight cars
+	# at capacity 12 -- and the picture only changes when the lit count or the
+	# pip geometry does. Occupancy changes on a delivery, not on a frame.
+	var fingerprint := "%d/%d/%.2f" % [_lit, _pips.size(), area.x]
+	if fingerprint != _pip_key:
+		_pip_key = fingerprint
+		_car_rect.queue_redraw()
 
 	if slots.is_empty():
 		_draw_header_only(riders, capacity)
@@ -217,7 +229,7 @@ func set_riders(riders: Array, capacity: int) -> void:
 			_chips[i].recycle()
 			continue
 		var p: Passenger = riders[i]
-		_chips[i].set_cell(Vector2(cell, CarRack.BAND), CarRack.BADGE_H, CAR_FONT)
+		_chips[i].set_cell(Vector2(cell, CarRack.BAND))
 		_chips[i].position = slots[i].position
 		_chips[i].show_riding(str(p.destination_floor),
 			PersonSprite.key_for(p.origin_floor, p.destination_floor, p.source_floor))
@@ -266,11 +278,18 @@ func _grow_pools(count: int) -> void:
 	if grew:
 		_raise_doors()
 
+## Counts what the strip actually RE-RECORDED, the same seam PersonSprite
+## exposes. Without it set_riders' gate can only be tested by asserting its own
+## assignment back to itself.
+func pip_redraw_count() -> int:
+	return _pip_redraws
+
 ## Two rects per pip: its own track, and a lit fill inset inside it. The track
 ## is PER PIP rather than one bar behind them all -- two adjacent hollows on a
 ## shared track merge into a single dark band, and counting free seats is the
 ## one job the strip has.
 func _draw_pips() -> void:
+	_pip_redraws += 1
 	for i in _pips.size():
 		_car_rect.draw_rect(_pips[i], Palette.PERSON_BAR_TRACK)
 		if i < _lit:

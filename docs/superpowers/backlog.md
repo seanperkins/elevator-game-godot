@@ -649,104 +649,49 @@ by tests.
 
 ---
 
-## From the people-and-car review (2026-08-04)
+## From the people-and-car review (2026-08-04) — CLEARED 2026-08-04
 
 Issues found by a nine-seat review panel over the shipped people-and-car
-changeset, plus my own verification against the current tree. Items already
-fixed by later commits are omitted; these all still reproduce.
+changeset. **All nine are fixed.** Kept as a record of what they were, because
+three of them were classes of problem rather than one-off slips.
 
-### The design spec says 240, the code ships 230
+### The two that were real bugs
 
-`2026-08-04-passenger-and-car-design.md:645` (§6 code-shape table) reads
-`SHAFT_WIDTH 160 → 240`, but `view/building_view.gd:37` is `230.0`. The
-spec's own §4.1.1 explains why 230 (240 would drop the device board to one
-column), so the table is stale, not the code. Fix the row and re-read the
-spec for any other `240` left over from an earlier draft. *(auditor, cartographer)*
+**The ghost band could not be reached on a tall building.** It sits at
+`floor_to_y(top) - FLOOR_HEIGHT`, and scrolling clamped at 0, so on any building
+taller than the window the band was above every legal offset. At the run's floor
+cap that band stops selling a floor and starts offering PRESTIGE — so the
+board's only route to demolishing vanished exactly when it became the thing you
+wanted. `BoardCoords.headroom` widens the lower clamp to `-FLOOR_HEIGHT`, and a
+maxed building (no band to reach) asks for none.
 
-### `PIP_FREE` is a phantom role
+**Two per-frame redraws on the threadless target.** `PersonSprite.recycle()`
+called `_dirty()` unconditionally, and `FloorRow.set_waiting` calls it on every
+unused sprite every refresh — twelve a floor, every floor, at 60 Hz, for people
+who are not on screen. `ShaftColumn.set_riders` queued a redraw unconditionally,
+re-emitting up to 2×capacity `draw_rect` per car (~192 at eight cars). Both are
+gated now, both directions pinned by tests, and `pip_redraw_count()` exists as
+the seam because a gate that can only be tested by asserting its own assignment
+is not tested.
 
-`2026-08-04-passenger-and-car-design.md:593` (§5 table) lists `PIP_FREE` ("the
-pip's own track") as a role. The code never implements it — `_draw_pips`
-(`view/shaft_column.gd`) paints every hollow pip with `Palette.PERSON_BAR_TRACK`,
-reusing the patience-track role. Two documents now disagree about a colour that
-does not exist. Delete the row, or restate it as "hollow = `PERSON_BAR_TRACK`, no
-new role". *(simplifier)*
+### The class of problem worth remembering
 
-### `PersonSprite.recycle()` redraws even when already hidden
+**Docs drift where the code moved twice.** The design spec's §6 table still read
+`SHAFT_AREA_X 240 -> 208` after it became 192; `PIP_FREE` was a palette role in
+the spec that no code ever implemented; the call-direction spec AND its plan both
+showed a `show_as(...)` call that is `show_waiting(...)`. The pattern is that a
+number changing twice leaves the doc wrong in a way that looks deliberate —
+`208` is a real number, just not this one.
 
-`view/person_sprite.gd:129-131` — `recycle()` sets `visible = false` and calls
-`_dirty()` unconditionally. `FloorRow.set_waiting()` calls it on every unused
-sprite each refresh, so the whole strip queues a redraw every frame, violating
-the "Setters early-out on unchanged args" contract the spec's §2.4 is built on.
-Return early when the sprite is already recycled. *(cartographer)*
+**Parameters that can only hold one value.** `set_cell(cell, badge_h, font_size)`
+had one caller passing `CarRack.BADGE_H` and `24` on every call, plus a
+`_font_size = 12` default that was never rendered. It takes `set_cell(cell)`.
 
-### The ghost band cannot reach prestige at the cap
-
-At the 10-floor cap (10 × 120 = 1200 > the 1184 viewport) the ghost band sits
-above the window and cannot be tapped, so `_on_ghost_input`'s
-`prestige_requested.emit()` branch (`view/building_view.gd:219`) is dead — the
-cap's only board-level route to the prestige panel is gone. The management
-view still opens it, so this is a UX gap, not a blocker. Either make the capped
-band reachable (count the ghost row into the scrollable content) or remove the
-dead branch. *(auditor, fable)*
-
-### The pip strip re-records every frame
-
-`set_riders` calls `_car_rect.queue_redraw()` unconditionally each
-`BuildingView.refresh()`, and `_draw_pips` re-emits up to 2×capacity `draw_rect`
-commands per car per frame (~192 at 8 cars × cap 12) — the same per-frame cost
-`PersonSprite`'s redraw suppression exists to avoid. Add a `(_lit, _pips)`
-fingerprint gate like the sprite's. *(fable, opus)*
-
-### Stale comments and test messages from the old geometry
-
-The old constants survive in comments and test messages, all verified present:
-
-- `view/floor_row.gd:16-17` — "the crowd bar, whose LENGTH is the encoding",
-  but the crowd bar is deleted and rows are a fixed 120.
-- `view/building_view.gd:313-314` and `:223` — "five owned shafts fill all five
-  visible positions"; there are two visible columns now. The slot docstring
-  still describes five positions.
-- `view/shaft_column.gd:30-31` — "Today's PassengerSprite.FONT, kept" — a
-  dangling reference to the deleted class.
-- `tests/test_board_input.gd` — `:343` "x = 240 belongs to the shaft, not the
-  hall" (SHAFT_AREA_X is 208); `:386` "the chip is still drawn" (it is a
-  figure); `:442` "Four filled squares of four IS the count" (pips, not
-  squares); `:767` "the 88-unit pan strip" (rows are 120, and at the cap the
-  band is off-screen anyway).
-- `tests/test_palette.gd:102-104` — "INK_ON_LIGHT is drawn on the car AND on the
-  patience chips" — the patience-chip half was deleted two lines below by the
-  same change; the sentence contradicts itself.
-- `tests/test_gesture.gd:4-5` — `H := 29.6` is the old capped row height. The
-  assertion still passes (12 < 14.8 < 60) and the spec says not to "fix" it,
-  but the header comment is stale.
-- `tests/test_coords_scroll.gd:10` / `tests/test_pan_gesture.gd:9` — `const H :=
-  88.0`. Scale-invariant, so they pass and test the transform correctly, but the
-  design spec's §8 item 19 said to re-derive or justify them and this pass
-  neither re-derived nor justified. *(cartographer, opus, fable)*
-
-### `set_cell` carries two always-constant arguments
-
-`view/person_sprite.gd:93` — `set_cell(cell, badge_h, font_size)` has exactly one
-caller (`view/shaft_column.gd`), always passing `CarRack.BADGE_H` (30) and
-`CAR_FONT` (24); the hall never calls it. And the `_font_size = 12` default is
-never rendered. Collapse to `set_cell(cell)` with the two constants read from
-`CarRack`/a `PersonSprite` constant, or say what future caller will pass
-something different. *(simplifier)*
-
-### The call-direction spec and plan document the deleted call
-
-`2026-08-02-call-direction-upgrade-design.md:75-83` still shows the `show_as(...)`
-call, while the live caller is `show_waiting(...)` (`view/floor_row.gd:120`); the
-implementation plan `2026-08-03-call-direction-upgrade.md:192-197` repeats it.
-Update both. *(cartographer)*
-
-### The pager readout timing is untested
-
-`game/game_root.gd` hides the readout when `max_scroll() == 0`, and the column
-widening moved that boundary to `owned = 2`. The spec itself
-(`2026-08-04-passenger-and-car-design.md:358`) acknowledges no test pins it.
-Worth a test: at owned = 2 the readout appears. *(opus)*
+**Test names and comments outliving their subject** — "five visible positions"
+(there are two), "the chip is still drawn" (it is a figure), "four filled
+squares" (pips), `x = 240 belongs to the shaft` (192). All corrected.
+`tests/test_gesture.gd`'s `H := 29.6` is deliberately NOT updated — the
+classifier is scale-invariant and the spec says leave it — but it now says so.
 
 ---
 

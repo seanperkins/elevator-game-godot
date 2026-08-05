@@ -280,6 +280,11 @@ FLOOR_HEIGHT       88 -> 120        car height  84 -> 116
 SHAFT_WIDTH       160 -> 230        car width  150 -> 220
 FloorRow.STRIP_WIDTH 176 -> 144     column     156 -> 226   (SHAFT_WIDTH - 4)
   => SHAFT_AREA_X   240 -> 208                 car = column - 6
+                              (-> 192 on 2026-08-04, when the gutter narrowed
+                               to 48 to pay for the building's exterior; and it
+                               is now measured from the building's left wall,
+                               not the screen's edge -- see
+                               BuildingView.EXTERIOR_LEFT)
 ```
 
 **Height is cheap.** The board is 1184 tall (1280 less the 96-unit HUD), so rows
@@ -590,7 +595,7 @@ Nothing outside `palette.gd` names a pigment.
 | `BADGE_INK` | `CREAM_PALE` | 10.40:1 on `BADGE_BG` |
 | `PERSON_BAR_TRACK` | `BROWN_DARK` | the patience track **and** each pip's track |
 | `PIP_LIT` | `CREAM_PALE` | 15.19:1 on the track |
-| `PIP_FREE` | the pip's own track | 5.21:1 on `CAR` |
+| ~~`PIP_FREE`~~ | **never built** -- `_draw_pips` paints a hollow pip with `PERSON_BAR_TRACK`, the same role the patience track uses. A second name for one colour is a role that can drift apart from itself. |
 
 `SEAT_FREE` is **deleted**, not re-pointed: it named a seat, and there are no seats.
 

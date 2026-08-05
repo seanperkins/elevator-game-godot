@@ -29,7 +29,7 @@ func test_the_figure_is_centred_in_its_band_not_pinned_to_x_one() -> void:
 	var band := PersonSprite.HALL_CELL.x - PersonSprite.BAR_W
 	assert_almost_eq((p.parts()["figure"] as Rect2).position.x,
 		(band - PersonSprite.FIGURE.x) * 0.5, 0.01, "centred in the hall band")
-	p.set_cell(Vector2(52, CarRack.BAND), CarRack.BADGE_H, 24)
+	p.set_cell(Vector2(52, CarRack.BAND))
 	p.show_riding("12", 0)
 	assert_almost_eq((p.parts()["figure"] as Rect2).position.x,
 		(52.0 - PersonSprite.FIGURE.x) * 0.5, 0.01, "centred in the car cell")
@@ -88,8 +88,23 @@ func test_an_unchanged_call_does_not_redraw_but_a_changed_one_does() -> void:
 	p.show_waiting(0.1, FloorRow.CALL_UP, 0)
 	assert_gt(p.redraw_count(), n, "a changed fraction must redraw")
 	var m := p.redraw_count()
-	p.set_cell(Vector2(36, CarRack.BAND), CarRack.BADGE_H, 24)
+	p.set_cell(Vector2(36, CarRack.BAND))
 	assert_gt(p.redraw_count(), m, "a changed cell must redraw")
+
+func test_recycling_an_already_recycled_sprite_does_not_redraw() -> void:
+	# FloorRow.set_waiting calls recycle() on every UNUSED sprite every refresh --
+	# up to twelve a floor, on every floor, at 60Hz. An unconditional _dirty()
+	# there re-recorded the whole strip every frame for people who are not on
+	# screen, which is the exact cost the suppression above exists to avoid.
+	p.show_waiting(1.0, FloorRow.CALL_UP, 0)
+	p.recycle()
+	var n := p.redraw_count()
+	p.recycle()
+	p.recycle()
+	assert_eq(p.redraw_count(), n, "recycling twice must not redraw")
+	assert_false(p.visible)
+	p.show_waiting(1.0, FloorRow.CALL_UP, 0)
+	assert_gt(p.redraw_count(), n, "and coming back does")
 
 func test_a_direction_that_is_not_bought_yet_draws_no_badge() -> void:
 	# An empty badge is a blank dark box, which reads as an error state -- the

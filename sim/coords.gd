@@ -30,6 +30,18 @@ var top_floor: int = 0
 var floor_height: float
 var scroll_offset: float = 0.0
 
+## Content ABOVE the top floor that scrolling has to be able to reach: the ghost
+## band. It is not part of content_height(), because it is not part of the
+## building -- floor_to_y, y_to_floor and the edge table must keep answering
+## about floors that exist. It only widens the scroll clamp.
+##
+## Without it the band sits at floor_to_y(top) - floor_height, which is above the
+## window at every legal offset once the building is taller than the viewport.
+## That is a UX bug with teeth: at the run's floor cap the band stops selling a
+## floor and starts offering PRESTIGE, so the board's only route to demolishing
+## vanished exactly when it became the thing you wanted.
+var headroom: float = 0.0
+
 var _viewport_height: float = 0.0
 var _edges: PackedFloat64Array = PackedFloat64Array()
 
@@ -64,11 +76,19 @@ func set_viewport_height(height: float) -> void:
 	_viewport_height = maxf(height, 0.0)
 	scroll_to(scroll_offset)
 
-## Clamped to the building. Scrolling past either end shows nothing useful and
-## makes the board feel broken rather than roomy.
+## Clamped to the building, plus whatever headroom is asked for. Scrolling past
+## either end shows nothing useful and makes the board feel broken rather than
+## roomy.
+##
+## The lower bound is NEGATIVE by the headroom the sky above the roof does not
+## already show. A short building already floats down on _ground_offset with the
+## band visible above it, so there is nothing to reveal and the bound stays 0;
+## it is the tall building, where the ground offset is zero, that needs to scroll
+## back past the roof.
 func scroll_to(offset: float) -> void:
 	var travel := maxf(content_height() - _viewport_height, 0.0)
-	scroll_offset = clampf(offset, 0.0, travel)
+	var sky := maxf(headroom - _ground_offset(), 0.0)
+	scroll_offset = clampf(offset, -sky, travel)
 
 func scroll_by(delta: float) -> void:
 	scroll_to(scroll_offset + delta)

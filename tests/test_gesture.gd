@@ -1,7 +1,12 @@
 extends GutTest
 
-## The tap-vs-pan classifier shared by every column (and the hall). 40 floors
-## in the board = 29.6 units per floor.
+## The tap-vs-pan classifier shared by every column (and the hall).
+##
+## H is the OLD derived row height, from when 40 floors were squeezed into one
+## screen. Rows are a fixed 120 now. It is deliberately NOT updated: the
+## classifier is scale-invariant, the design spec says to leave it, and
+## re-deriving it to 120 would only restate the constant the code already uses.
+## What it must not be is mistaken for a live number.
 const H := 29.6
 const FLOORS := 40
 

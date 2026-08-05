@@ -168,12 +168,38 @@ func test_a_drag_pans_the_board_and_dispatches_nothing() -> void:
 		"and the car did not")
 
 func test_the_board_cannot_be_panned_off_either_end() -> void:
+	# The upper end stops at the GHOST BAND, not at the roof. The band is one
+	# floor of sky above the top floor and it is a control -- at the cap it is
+	# the board's only route to prestige -- so the scroll range has to reach it
+	# and then stop dead, which is what -FLOOR_HEIGHT is.
 	await build_to(20)
 	await wait_physics_frames(2)
 	await do_drag(column_x(0), floor_centre_y(12), floor_centre_y(12) + 5000.0)
-	assert_almost_eq(view.board_scroll_offset(), 0.0, 0.01, "not past the ground")
+	assert_almost_eq(view.board_scroll_offset(), -BuildingView.FLOOR_HEIGHT, 0.01,
+		"stops with the ghost band shown, and no further")
 	await do_drag(column_x(0), floor_centre_y(12), floor_centre_y(12) - 5000.0)
 	assert_gt(view.board_scroll_offset(), 0.0, "and it did move the other way")
+
+func test_the_ghost_band_is_reachable_on_a_building_taller_than_the_window() -> void:
+	# The bug this fixes. Twenty floors is 2400 units against an ~1184 window, so
+	# before the headroom the band sat above every legal offset and could not be
+	# tapped at all -- which at the floor cap is where prestige is offered.
+	await build_to(20)
+	await wait_physics_frames(2)
+	var coords := view.coords()
+	assert_gt(coords.content_height(), root.size.y, "taller than the window")
+	view.scroll_board_by(-5000.0)
+	await wait_physics_frames(2)
+	var band_y := coords.floor_to_y(coords.top_floor) - BuildingView.FLOOR_HEIGHT
+	assert_gte(band_y, 0.0, "the whole band is inside the window")
+
+func test_a_maxed_building_asks_for_no_headroom() -> void:
+	# At Building.MAX_FLOORS there is no ghost band to reach, so the scroll range
+	# must not open a floor of empty sky above the roof.
+	var coords := BoardCoords.fixed(0, Building.MAX_FLOORS - 1, BuildingView.FLOOR_HEIGHT)
+	coords.set_viewport_height(1184.0)
+	coords.scroll_to(-5000.0)
+	assert_almost_eq(coords.scroll_offset, 0.0, 0.01, "no sky above a maxed roof")
 
 func test_a_tap_on_a_column_dispatches_to_the_floor_tapped() -> void:
 	# A tap is a dispatch of zero drag length. Same bottom-up transform, so this
@@ -233,8 +259,9 @@ func test_a_tap_in_the_ghost_band_does_not_dispatch() -> void:
 		"a floor purchase is not a dispatch: the columns stop below the band")
 
 func test_every_shaft_up_to_the_cap_is_reachable() -> void:
-	# With five visible slots and no ghost slot, five owned shafts fill every
-	# position and shafts 6-8 are unbuyable forever.
+	# Without the trailing ghost slot, owned shafts fill every visible position
+	# and the rest are unbuyable forever. Two columns are visible now, not five,
+	# so this walks the whole ladder by scrolling rather than by luck.
 	#
 	# This is about REACHING a slot with a thumb, so it needs the ceiling out of
 	# the way first -- a first run stops at two shafts for reasons that have
@@ -259,6 +286,26 @@ func test_every_shaft_up_to_the_cap_is_reachable() -> void:
 		assert_eq(root.state.building.cars.size(), owned + 1,
 			"bought shaft %d" % (owned + 1))
 	assert_eq(root.state.building.cars.size(), Building.MAX_SHAFTS)
+
+func test_the_pager_readout_appears_at_the_first_unpageable_shaft() -> void:
+	# The column widening moved this boundary and nothing pinned it. Two columns
+	# are visible, and slot_count counts the trailing ghost slot, so a board with
+	# ONE owned shaft already has two slots and still fits -- the readout must
+	# stay hidden. Buying the second makes three slots, and it must appear.
+	var meta: Meta = root.state.meta
+	meta.blueprints = 1000
+	assert_true(meta.buy("shafts", root.state.upgrades), "room for a second")
+	root.state.upgrades.set_max_level("shaft",
+		meta.shaft_cap() - GameState.BASE_SHAFTS)
+	root.state.economy.accrue(1e12)
+	await wait_physics_frames(2)
+	assert_eq(root.state.building.cars.size(), 1, "starts with one")
+	assert_false(root._pager_label.visible, "nothing to page through yet")
+	assert_true(root.state.buy("shaft"), "second shaft")
+	# The board notices a shape change in _process, so let it run.
+	await wait_physics_frames(3)
+	assert_true(root._pager_label.visible,
+		"two owned plus the ghost slot no longer fit, so the readout says where you are")
 
 func test_only_the_slot_at_index_owned_takes_a_purchase_tap() -> void:
 	# The old test tapped a "non-trailing placeholder", which cannot exist:
@@ -403,7 +450,7 @@ func test_a_waiting_passenger_hides_its_direction_until_the_upgrade() -> void:
 	root.state.building.enqueue(Passenger.new(2, 5, 900, 4.0, 2))
 	view.refresh()
 	var sprite: PersonSprite = view._floors[2]._sprites[0]
-	assert_true(sprite.visible, "the chip is still drawn -- someone IS waiting")
+	assert_true(sprite.visible, "the figure is still drawn -- someone IS waiting")
 	assert_eq(sprite.label_text(), FloorRow.CALL_UNKNOWN,
 		"which way they are going is not readable until it is bought")
 
@@ -459,11 +506,36 @@ func test_a_rider_reveals_its_destination_once_aboard() -> void:
 		"the same little square, now showing the car button they pressed")
 
 func test_no_occupancy_count_is_printed_while_the_seats_are_drawn() -> void:
-	# Four filled squares of four IS the count. Printing "4/4" beside them says
+	# Four lit pips of four IS the count. Printing "4/4" beside them says
 	# it twice and spends the only line of type the car has.
 	board_riders([5, 2])
 	assert_eq(view._columns[0].car_text(), "",
 		"the rack is the count; do not restate it")
+
+func test_the_pip_strip_does_not_re_record_on_an_unchanged_refresh() -> void:
+	# refresh() runs every frame. _draw_pips emits up to 2 x capacity draw_rect
+	# calls per car -- ~192 across eight cars at capacity 12 -- and occupancy
+	# changes on a delivery, not on a frame. This is the same suppression
+	# PersonSprite has, and it was missing here.
+	board_riders([5, 2])
+	await wait_physics_frames(2)
+	var col: ShaftColumn = view._columns[0]
+	var n := col.pip_redraw_count()
+	view.refresh()
+	view.refresh()
+	await wait_physics_frames(2)
+	assert_eq(col.pip_redraw_count(), n, "an unchanged car must not re-record")
+
+func test_the_pip_strip_does_re_record_when_the_car_fills() -> void:
+	# The risky half of any suppression: a stale strip would say a full car has
+	# room, which is the one question the pips exist to answer.
+	board_riders([5])
+	await wait_physics_frames(2)
+	var col: ShaftColumn = view._columns[0]
+	var n := col.pip_redraw_count()
+	board_riders([5, 2, 3])
+	await wait_physics_frames(2)
+	assert_gt(col.pip_redraw_count(), n, "a changed lit count must re-record")
 
 func test_seats_carry_the_floor_now_that_the_column_is_wide_enough() -> void:
 	board_riders([12, 7])
@@ -803,7 +875,7 @@ func test_below_the_cap_the_ghost_band_still_buys_a_floor() -> void:
 func test_the_ghost_band_survives_at_the_cap_so_the_pan_strip_does() -> void:
 	# Line 97 gates CONSTRUCTION on the structural cap, and _on_ghost_input is
 	# also the pan handler. Deleting the band at the purchasable cap would kill
-	# the 88-unit pan strip on precisely the tallest buildings.
+	# the pan strip on precisely the tallest buildings.
 	await build_to(10)
 	view.refresh()
 	assert_not_null(view._ghost_floor, "the band is still there")

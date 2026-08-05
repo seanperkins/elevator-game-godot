@@ -131,6 +131,11 @@ func rebuild() -> void:
 func _build_all() -> void:
 	var previous := _coords.scroll_offset if _coords != null else 0.0
 	_coords = BoardCoords.fixed(0, _state.building.floor_count - 1, FLOOR_HEIGHT)
+	# The ghost band is above the roof, so the scroll range has to reach past it
+	# or the band is unreachable on any building taller than the window. Set
+	# BEFORE the viewport height, which re-clamps the offset through it.
+	_coords.headroom = FLOOR_HEIGHT \
+		if _state.building.floor_count < Building.MAX_FLOORS else 0.0
 	_coords.set_viewport_height(size.y)
 	# Buying a floor must not throw away where the player was looking.
 	_coords.scroll_to(previous)
@@ -341,7 +346,7 @@ func _on_ghost_input(event: InputEvent) -> void:
 			else:
 				floor_purchase_requested.emit()
 
-## All five visible positions draw a placeholder so the early board reads as
+## Every visible position draws a placeholder so the early board reads as
 ## room to grow. Only the TRAILING one -- index `owned` -- is priced and takes
 ## the tap; the rest are inert and visually flatter.
 func _build_slots() -> void:
@@ -434,7 +439,7 @@ func visible_shafts() -> int:
 	return maxi(int((building_width() - SHAFT_AREA_X) / SHAFT_WIDTH), 1)
 
 ## Counts the trailing ghost slot, so the eighth shaft is reachable. Without it,
-## five owned shafts fill all five visible positions and shafts 6-8 are dead.
+## owned shafts filling every visible position would leave the rest unbuyable.
 func slot_count() -> int:
 	return mini(_state.building.cars.size() + 1, Building.MAX_SHAFTS)
 

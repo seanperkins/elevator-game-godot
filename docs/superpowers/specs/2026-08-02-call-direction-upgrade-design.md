@@ -74,12 +74,14 @@ correct answer for a one-shot whose `max_level` already blocks a second purchase
 
 **`view/floor_row.gd`** — add a `CALL_UNKNOWN` constant and give
 `set_waiting(passengers)` a `show_direction: bool` parameter, applied at the
-`show_as` call on line 118:
+sprite call (`show_as` when this was written; the live method is `show_waiting`,
+which also carries the tint key):
 
 ```gdscript
-_sprites[i].show_as(p.patience_fraction(),
+_sprites[i].show_waiting(p.patience_fraction(),
     (CALL_DOWN if p.direction() < 0 else CALL_UP) if show_direction
-    else CALL_UNKNOWN)
+    else CALL_UNKNOWN,
+    PersonSprite.key_for(p.origin_floor, p.destination_floor, p.source_floor))
 ```
 
 **`view/building_view.gd:346`** — pass

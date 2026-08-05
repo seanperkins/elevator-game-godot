@@ -50,6 +50,9 @@ const OUTLINE := 1.0
 ## so it gives up height cheaply -- and those three units are what let the figure
 ## grow to 44 while the cell stays 58 and the hall still shows eight.
 const HALL_BADGE := Vector2(16, 12)
+## The riding badge's font. A font-24 line box is what the 30-unit CarRack badge
+## was sized for, and it is 13.1pt at the 0.546 iPhone scale.
+const CAR_FONT := 24
 const HALL_CELL := Vector2(FIGURE.x + BAR_W, HALL_BADGE.y + 2.0 + FIGURE.y)
 const HALL_FIGURE_TOP := HALL_BADGE.y + 2.0
 
@@ -78,8 +81,11 @@ var _fraction: float = 1.0
 var _tint_key: int = 0
 var _riding: bool = false
 var _cell: Vector2 = HALL_CELL
+## The RIDING badge and its font. A waiting person uses HALL_BADGE and no font
+## at all -- the hall draws its arrow as a triangle -- so these only ever hold
+## the car's numbers, and they are set together by set_cell.
 var _badge_h: float = HALL_BADGE.y
-var _font_size: int = 12
+var _font_size: int = CAR_FONT
 var _redraws: int = 0
 var _label: Label
 
@@ -95,13 +101,17 @@ func _ready() -> void:
 	_sync_label()
 
 ## The car sizes its cells per capacity; the hall never calls this.
-func set_cell(cell: Vector2, badge_h: float, font_size: int) -> void:
-	if is_equal_approx(cell.x, _cell.x) and is_equal_approx(cell.y, _cell.y) \
-			and is_equal_approx(badge_h, _badge_h) and font_size == _font_size:
+##
+## It used to take (cell, badge_h, font_size). The one caller passed
+## CarRack.BADGE_H and 24 on every call and always had -- two parameters that
+## could only ever hold one value each, and a `_font_size = 12` default that was
+## never rendered. Those are constants, so they are constants here.
+func set_cell(cell: Vector2) -> void:
+	if is_equal_approx(cell.x, _cell.x) and is_equal_approx(cell.y, _cell.y):
 		return
 	_cell = cell
-	_badge_h = badge_h
-	_font_size = font_size
+	_badge_h = CarRack.BADGE_H
+	_font_size = CAR_FONT
 	size = cell
 	_sync_label()
 	_dirty()
@@ -132,6 +142,12 @@ func show_riding(glyph: String, tint_key: int) -> void:
 	_dirty()
 
 func recycle() -> void:
+	# EARLY-OUT, like every other setter here. FloorRow.set_waiting calls this on
+	# every unused sprite on every refresh -- twelve per floor, forty floors, at
+	# 60 fps -- so an unconditional _dirty() queued a redraw of the entire strip
+	# every frame for sprites that are not even visible.
+	if not visible:
+		return
 	visible = false
 	_dirty()
 
