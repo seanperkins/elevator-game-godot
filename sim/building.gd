@@ -13,17 +13,53 @@ extends RefCounted
 
 const MAX_FLOORS := 40
 const MAX_SHAFTS := 8
+## The engine's floor limit going DOWN, the mirror of MAX_FLOORS going up. The
+## ladder a player actually walks is Meta.MAX_DEPTH_CAP, which sits at or below
+## this -- the same relationship MAX_HEIGHT_CAP has to MAX_FLOORS. Depth and
+## height are independent budgets: digging never costs a tower floor.
+const MAX_DEPTH := 12
 
+## TOWER floors: the count at index 0 and above. NOT the total -- see
+## total_floors(). Nine loops in the sim say range(floor_count) and every one of
+## them is about the tower, which is why this keeps its meaning.
 var floor_count: int
+## Floors dug below the lobby. The building runs -depth .. floor_count - 1.
+var depth: int = 0
+## The one floor -> slot mapping, shared BY REFERENCE with Tenancy and Fitout so
+## the three cannot disagree about it. See sim/floor_index.gd.
+var index: FloorIndex
 var cars: Array[ElevatorCar] = []
-var waiting: Array = []          # Array of Array[Passenger], one per floor
+## One queue per floor, dense from the BOTTOM floor. Index it through `index`,
+## never with a raw floor number.
+var waiting: Array = []
 
 func _init(p_floor_count: int, shaft_count: int) -> void:
 	floor_count = clampi(p_floor_count, 1, MAX_FLOORS)
+	index = FloorIndex.new(0, floor_count)
 	for i in range(floor_count):
 		waiting.append([] as Array[Passenger])
 	for i in range(clampi(shaft_count, 0, MAX_SHAFTS)):
 		cars.append(ElevatorCar.new(0))
+
+func bottom_floor() -> int:
+	return -depth
+
+func total_floors() -> int:
+	return floor_count + depth
+
+func has_floor(f: int) -> bool:
+	return index.holds(f)
+
+## A new floor BELOW the lobby, excavated and empty. Front insertion, because the
+## basement occupies the front of every per-floor array and the new floor is the
+## deepest one.
+func dig() -> bool:
+	if depth >= MAX_DEPTH:
+		return false
+	depth += 1
+	index.dig()
+	waiting.insert(0, [] as Array[Passenger])
+	return true
 
 func add_shaft() -> bool:
 	if cars.size() >= MAX_SHAFTS:
@@ -35,18 +71,19 @@ func add_floor() -> bool:
 	if floor_count >= MAX_FLOORS:
 		return false
 	floor_count += 1
+	index.grow_up()
 	waiting.append([] as Array[Passenger])
 	return true
 
 func enqueue(p: Passenger) -> void:
-	if p.origin_floor < 0 or p.origin_floor >= floor_count:
+	if not has_floor(p.origin_floor):
 		return
-	waiting[p.origin_floor].append(p)
+	waiting[index.slot(p.origin_floor)].append(p)
 
 func waiting_at(floor_index: int) -> Array[Passenger]:
-	if floor_index < 0 or floor_index >= floor_count:
+	if not has_floor(floor_index):
 		return [] as Array[Passenger]
-	return waiting[floor_index]
+	return waiting[index.slot(floor_index)]
 
 func total_waiting() -> int:
 	var n := 0
@@ -75,9 +112,9 @@ func remove_waiting_from_source(source_floor: int) -> int:
 ## FIFO: the longest-waiting passenger boards first.
 func take_boardable(floor_index: int, limit: int) -> Array[Passenger]:
 	var out: Array[Passenger] = []
-	if limit <= 0 or floor_index < 0 or floor_index >= floor_count:
+	if limit <= 0 or not has_floor(floor_index):
 		return out
-	var queue: Array[Passenger] = waiting[floor_index]
+	var queue: Array[Passenger] = waiting[index.slot(floor_index)]
 	var take := mini(limit, queue.size())
 	for i in range(take):
 		out.append(queue.pop_front())

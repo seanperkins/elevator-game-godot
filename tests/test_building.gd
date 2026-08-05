@@ -77,3 +77,55 @@ func test_take_boardable_with_zero_seats_takes_nobody() -> void:
 	b.enqueue(Passenger.new(2, 4, 100, 1.0, 2))
 	assert_eq(b.take_boardable(2, 0).size(), 0)
 	assert_eq(b.waiting_at(2).size(), 1)
+
+
+# --- the basement -----------------------------------------------------------
+
+func test_a_new_building_has_no_basement() -> void:
+	assert_eq(b.depth, 0)
+	assert_eq(b.bottom_floor(), 0)
+	assert_eq(b.total_floors(), 6)
+	assert_true(b.has_floor(0))
+	assert_false(b.has_floor(-1))
+
+func test_digging_adds_a_floor_below_the_lobby() -> void:
+	assert_true(b.dig())
+	assert_eq(b.depth, 1)
+	assert_eq(b.bottom_floor(), -1)
+	assert_eq(b.total_floors(), 7, "the tower did not shrink to pay for it")
+	assert_eq(b.floor_count, 6, "floor_count still means TOWER floors")
+	assert_true(b.has_floor(-1))
+	assert_false(b.has_floor(-2))
+
+func test_people_waiting_in_the_basement_stay_where_they_were_put() -> void:
+	# The front-insertion bug: invisible until you dig a SECOND time, because
+	# with one basement floor the shift is a no-op for everyone above it.
+	b.dig()
+	b.enqueue(Passenger.new(-1, 3, 100, 1.0, 3))
+	assert_eq(b.waiting_at(-1).size(), 1, "queued in the basement")
+	b.dig()
+	assert_eq(b.waiting_at(-1).size(), 1, "still there after digging deeper")
+	assert_eq(b.waiting_at(-2).size(), 0, "and the new floor is empty")
+
+func test_a_passenger_below_the_basement_is_refused() -> void:
+	b.dig()
+	b.enqueue(Passenger.new(-2, 3, 100, 1.0, 3))
+	assert_eq(b.waiting_at(-2).size(), 0, "there is no floor -2 to wait on")
+	assert_eq(b.total_waiting(), 0)
+
+func test_digging_stops_at_the_engine_cap() -> void:
+	# MAX_DEPTH is the engine limit, the mirror of MAX_FLOORS. The ladder the
+	# player actually walks is Meta.MAX_DEPTH_CAP and sits at or below it.
+	for i in range(Building.MAX_DEPTH):
+		assert_true(b.dig(), "dig %d" % i)
+	assert_false(b.dig(), "the engine cap refuses beyond MAX_DEPTH")
+	assert_eq(b.depth, Building.MAX_DEPTH)
+
+func test_the_tower_can_still_grow_with_a_basement_under_it() -> void:
+	b.dig()
+	assert_true(b.add_floor())
+	assert_eq(b.floor_count, 7)
+	assert_eq(b.depth, 1, "growing up did not fill in the basement")
+	assert_eq(b.total_floors(), 8)
+	b.enqueue(Passenger.new(6, 0, 100, 1.0, 6))
+	assert_eq(b.waiting_at(6).size(), 1, "the new top floor is addressable")
