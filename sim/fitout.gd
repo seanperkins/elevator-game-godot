@@ -9,20 +9,36 @@ extends RefCounted
 ## floor persist, things built for the tenant leave with them. That is what
 ## makes replacing a tenant a real cost rather than a free re-roll.
 ##
-## Indexes its dense array DIRECTLY, exactly as Tenancy does. A shared index
-## object was considered and rejected: in a building whose bottom floor is
-## always 0 the mapping is the identity, so it earns nothing, and it converts a
-## container-size desync from a loud out-of-range access into a silent
-## valid-but-wrong index that an "the containers agree" test would pass through.
+## Indexes its dense array through the building's shared FloorIndex, exactly as
+## Tenancy does.
+##
+## A shared index object was once considered and REJECTED here, and that was
+## right at the time: in a building whose bottom floor is always 0 the mapping is
+## the identity, so it earned nothing. Digging deleted that precondition.
+##
+## What the old rejection got right, and what FloorIndex is shaped by, is the
+## second half of its argument: a COPIED offset converts a container-size desync
+## from a loud out-of-range access into a silent valid-but-wrong index that an
+## "the containers agree" test would pass through. Sharing ONE instance is what
+## makes that unrepresentable rather than something to test for.
 
 const BASE_TIER := 1
 
 var _tier: PackedInt32Array = PackedInt32Array()
 var _revision: int = 0
+## Shared BY REFERENCE with Building and Tenancy.
+var _index: FloorIndex
 
-func _init(floor_count: int) -> void:
-	for i in range(maxi(floor_count, 0)):
+func _init(index: FloorIndex) -> void:
+	_index = index
+	for i in range(maxi(index.size(), 0)):
 		_tier.append(BASE_TIER)
+
+## A floor dug below the lobby, at the base tier. Front insertion: the basement
+## is dense from the bottom and this is the new deepest floor.
+func dig() -> void:
+	_tier.insert(0, BASE_TIER)
+	_revision += 1
 
 func floors() -> int:
 	return _tier.size()
@@ -32,7 +48,7 @@ func add_floor() -> void:
 	_revision += 1
 
 func tier_at(floor_index: int) -> int:
-	return _tier[floor_index] if _valid(floor_index) else BASE_TIER
+	return _tier[_index.slot(floor_index)] if _valid(floor_index) else BASE_TIER
 
 ## Moves the revision, because a cached TrafficSource carries this floor's fare
 ## multiplier. Without that a class upgrade on a TENANTED floor would leave the
@@ -41,11 +57,12 @@ func tier_at(floor_index: int) -> int:
 func set_tier(floor_index: int, tier: int) -> void:
 	if not _valid(floor_index):
 		return
-	_tier[floor_index] = tier
+	_tier[_index.slot(floor_index)] = tier
 	_revision += 1
 
 func revision() -> int:
 	return _revision
 
+## The BUILDING's floor range, not the array's bounds -- see FloorIndex.
 func _valid(floor_index: int) -> bool:
-	return floor_index >= 0 and floor_index < _tier.size()
+	return _index != null and _index.holds(floor_index)

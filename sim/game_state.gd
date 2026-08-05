@@ -126,8 +126,10 @@ func _init(floors: int, shafts: int, p_seed: int,
 		return
 
 	var prefix := mini(building.floor_count, DEFAULT_ROSTER.size())
-	tenancy = Tenancy.new(building.floor_count, prefix)
-	fitout = Fitout.new(building.floor_count)
+	# The SAME FloorIndex instance, not two copies of a number. See
+	# sim/floor_index.gd: a duplicated offset makes a desync silent.
+	tenancy = Tenancy.new(building.index, prefix)
+	fitout = Fitout.new(building.index)
 	for floor_index in range(prefix):
 		tenancy.set_kind(floor_index, DEFAULT_ROSTER[floor_index])
 

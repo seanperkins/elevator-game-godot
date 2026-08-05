@@ -3,7 +3,7 @@ extends GutTest
 var t: Tenancy
 
 func before_each() -> void:
-	t = Tenancy.new(6, 6)
+	t = Tenancy.new(FloorIndex.new(0, 6), 6)
 
 func test_every_row_starts_tenanted_and_content() -> void:
 	for floor_index in range(6):
@@ -68,7 +68,7 @@ func test_vacant_rows_earn_nothing() -> void:
 func test_leasing_retenants_a_mostly_vacated_row() -> void:
 	# Pricing moved out to GameState.lease_cost (Tenancy.lease never charges), so
 	# what is left to pin here is the behaviour: leasing re-tenants a floor.
-	var pair := Tenancy.new(2, 2)
+	var pair := Tenancy.new(FloorIndex.new(0, 2), 2)
 	while pair.satisfaction_at(1) > Tenancy.MOVE_OUT_THRESHOLD:
 		pair.note_expiry(1)
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
@@ -80,7 +80,7 @@ func test_leasing_retenants_a_mostly_vacated_row() -> void:
 func test_leasing_the_last_vacant_row_retenants() -> void:
 	# The single no-fail rule: recovery is always reachable, so
 	# all-floors-vacant-and-broke can never be terminal.
-	var solo := Tenancy.new(1, 1)
+	var solo := Tenancy.new(FloorIndex.new(0, 1), 1)
 	while solo.satisfaction_at(0) > Tenancy.MOVE_OUT_THRESHOLD:
 		solo.note_expiry(0)
 	for i in range(Tenancy.MOVE_OUT_TICKS + 1):
@@ -151,7 +151,7 @@ func test_restoring_a_row_moves_the_revision() -> void:
 	assert_ne(t.revision(), before)
 
 func test_only_the_roster_prefix_starts_tenanted() -> void:
-	var tall := Tenancy.new(10, 6)
+	var tall := Tenancy.new(FloorIndex.new(0, 10), 6)
 	for floor_index in range(6):
 		assert_false(tall.is_vacant(floor_index), "floor_index %d is in the roster" % floor_index)
 	for floor_index in range(6, 10):
@@ -173,3 +173,60 @@ func test_a_kind_is_remembered_and_cleared_on_vacancy() -> void:
 		t.accrue_for_tick()
 	assert_true(t.is_vacant(2))
 	assert_eq(t.kind_at(2), "", "kind leaves with the tenant")
+
+
+# --- the basement -----------------------------------------------------------
+
+func test_a_dug_floor_is_vacant_and_addressable_by_its_negative_index() -> void:
+	var ix := FloorIndex.new(0, 3)
+	var t := Tenancy.new(ix, 3)
+	ix.dig()
+	t.dig()
+	assert_true(t.is_vacant(-1), "digging excavates, it does not lease")
+	assert_eq(t.kind_at(-1), "", "and it has no tenant kind")
+
+func test_leasing_the_basement_does_not_disturb_the_lobby() -> void:
+	# The silent-wrong-index failure this whole design is shaped against: an
+	# off-by-one writes the LOBBY's tenancy when asked for -1, which is in range
+	# and therefore raises nothing at all.
+	var ix := FloorIndex.new(0, 3)
+	var t := Tenancy.new(ix, 3)
+	t.set_kind(0, "shops")
+	ix.dig()
+	t.dig()
+	t.restore_floor(-1, 1.0, false, 0, "parking")
+	assert_eq(t.kind_at(-1), "parking")
+	assert_eq(t.kind_at(0), "shops", "the lobby is untouched")
+	assert_false(t.is_vacant(0))
+
+func test_digging_twice_keeps_the_first_basement_where_it_was() -> void:
+	var ix := FloorIndex.new(0, 2)
+	var t := Tenancy.new(ix, 2)
+	ix.dig(); t.dig()
+	t.restore_floor(-1, 1.0, false, 0, "parking")
+	ix.dig(); t.dig()
+	assert_eq(t.kind_at(-1), "parking", "the leased floor did not move")
+	assert_true(t.is_vacant(-2), "the new one is the empty one")
+
+func test_occupied_floors_reports_floors_not_slots() -> void:
+	# The two were the same number while the bottom floor was 0. A basement makes
+	# them diverge, and the spawner uses this list as floor indices.
+	var ix := FloorIndex.new(0, 2)
+	var t := Tenancy.new(ix, 2)
+	ix.dig(); t.dig()
+	t.restore_floor(-1, 1.0, false, 0, "parking")
+	var occupied := t.occupied_floors()
+	assert_true(occupied.has(-1), "the basement reports as floor -1, not slot 0")
+	assert_true(occupied.has(0), "and the lobby as floor 0")
+	assert_eq(occupied.size(), 3)
+
+func test_a_vacating_basement_reports_its_floor_not_its_slot() -> void:
+	# accrue_for_tick's return drives removal of that floor's waiting passengers.
+	# A slot here removes the wrong floor's people, silently.
+	var ix := FloorIndex.new(0, 2)
+	var t := Tenancy.new(ix, 2)
+	ix.dig(); t.dig()
+	t.restore_floor(-1, 0.0, false, 1, "parking")
+	var vacated := t.accrue_for_tick()
+	assert_eq(vacated.size(), 1, "the garage gave up")
+	assert_eq(vacated[0], -1, "reported as floor -1")
