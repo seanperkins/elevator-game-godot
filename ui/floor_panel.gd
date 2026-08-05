@@ -23,8 +23,14 @@ signal upgrade_requested(floor_index: int)
 const BUTTON_HEIGHT := 72.0            # 39pt at the 0.546 board scale
 const SHEET_FRACTION := 0.46
 
+## "No floor shown." NOT -1: floor -1 is the first basement, and a guard
+## written as `_floor < 0` read every basement floor as "panel not bound" --
+## which locked every lease button on P1. The third home of this sentinel bug,
+## after the spawner's inbound flag and DispatchPolicy.STAY_PUT.
+const NO_FLOOR := -2147483648
+
 var _state: GameState
-var _floor: int = -1
+var _floor: int = NO_FLOOR
 
 var _bg: ColorRect
 var _box: VBoxContainer
@@ -157,12 +163,12 @@ func _rebuild_picker(vacant: bool) -> void:
 		_lease_buttons.append(b)
 
 func picker_visible() -> bool:
-	return _picker != null and _picker.visible and _state != null and _floor >= 0 \
-		and _state.tenancy.is_vacant(_floor)
+	return _picker != null and _picker.visible and _state != null \
+		and _floor != NO_FLOOR and _state.tenancy.is_vacant(_floor)
 
 ## A kind the floor's current class cannot host.
 func is_locked(kind_id: String) -> bool:
-	if _state == null or _floor < 0:
+	if _state == null or _floor == NO_FLOOR:
 		return true
 	var k := _state.catalog.kind(kind_id)
 	if k == null:
@@ -174,4 +180,4 @@ func _on_upgrade() -> void:
 
 func close() -> void:
 	visible = false
-	_floor = -1
+	_floor = NO_FLOOR

@@ -50,7 +50,12 @@ var panel: FloorPanel
 var _prestige: PrestigePanel
 ## A test-facing seam for hall selection: the hall tap sets this, which is what
 ## lets the input tests observe it.
-var last_selected_floor: int = -1
+## The test seam for "which floor did the last tap select". NO_FLOOR, not -1:
+## floor -1 is the first basement, and a test asserting -1 for "nothing was
+## selected" is VACUOUSLY true the moment a basement tap stores -1 -- which is
+## exactly how a broken basement lease shipped to a phone under a green suite.
+const NO_FLOOR := FloorPanel.NO_FLOOR
+var last_selected_floor: int = NO_FLOOR
 var _cash_label: Label
 var _rate_label: Label
 var _day_strip: DaySparkline
@@ -475,7 +480,7 @@ func _on_dev_reset() -> void:
 		set_physics_process(false)
 		return
 	state = fresh
-	last_selected_floor = -1
+	last_selected_floor = NO_FLOOR
 	_rebuild_views()
 	_view_button.text = "MANAGE"
 	_refresh_dev_button()
@@ -499,7 +504,7 @@ func _on_demolish() -> void:
 		_show_save_failed()          # old run and Meta intact, on disk and in memory
 		return
 	state = next
-	last_selected_floor = -1         # a stale index into a building that just shrank
+	last_selected_floor = NO_FLOOR   # a stale index into a building that just shrank
 	_rebuild_views()
 	# It lives outside the rebuilt range, so it would otherwise still read
 	# "BOARD" while the board is showing.

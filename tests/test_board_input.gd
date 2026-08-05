@@ -368,26 +368,26 @@ func test_a_tap_on_the_hall_selects_the_floor_it_looks_like_after_scrolling() ->
 	var target := 12
 	view.pan_board_by(Vector2(0, 300))
 	await wait_physics_frames(2)
-	root.last_selected_floor = -1
+	root.last_selected_floor = FloorPanel.NO_FLOOR
 	await do_tap(100.0, floor_centre_y(target))
 	assert_eq(root.last_selected_floor, target)
 
 func test_a_drag_on_the_hall_pans_and_does_not_select() -> void:
 	await build_to(20)
 	await wait_physics_frames(2)
-	root.last_selected_floor = -1
+	root.last_selected_floor = FloorPanel.NO_FLOOR
 	var before: float = view.board_scroll_offset()
 	await do_drag(100.0, 400.0, 250.0)
-	assert_eq(root.last_selected_floor, -1, "a pan is not a selection")
+	assert_eq(root.last_selected_floor, FloorPanel.NO_FLOOR, "a pan is not a selection")
 	assert_ne(view.board_scroll_offset(), before, "the board moved")
 
 func test_a_tap_on_the_ghost_band_buys_a_floor_and_opens_no_panel() -> void:
-	root.last_selected_floor = -1
+	root.last_selected_floor = FloorPanel.NO_FLOOR
 	root.state.economy.accrue(1e6)
 	var before: int = root.state.building.floor_count
 	await do_tap(100.0, ghost_centre_y())
 	assert_eq(root.state.building.floor_count, before + 1, "the ghost buys a floor")
-	assert_eq(root.last_selected_floor, -1,
+	assert_eq(root.last_selected_floor, FloorPanel.NO_FLOOR,
 		"a tap above the roof is a purchase, not the top floor's panel")
 
 func test_the_ghost_still_wins_after_a_rebuild() -> void:
@@ -396,17 +396,17 @@ func test_the_ghost_still_wins_after_a_rebuild() -> void:
 	root.state.economy.accrue(1e6)
 	view.rebuild()
 	await wait_physics_frames(2)
-	root.last_selected_floor = -1
+	root.last_selected_floor = FloorPanel.NO_FLOOR
 	var before: int = root.state.building.floor_count
 	await do_tap(100.0, ghost_centre_y())
 	assert_eq(root.state.building.floor_count, before + 1)
-	assert_eq(root.last_selected_floor, -1)
+	assert_eq(root.last_selected_floor, FloorPanel.NO_FLOOR)
 
 func test_a_tap_at_exactly_the_shaft_boundary_reaches_the_shaft() -> void:
 	# Rewritten from test_a_tap_past_the_strip_reaches_the_column_not_the_confirm.
 	await do_tap(BuildingView.EXTERIOR_LEFT + BuildingView.SHAFT_AREA_X,
 		floor_centre_y(1))
-	assert_eq(root.last_selected_floor, -1,
+	assert_eq(root.last_selected_floor, FloorPanel.NO_FLOOR,
 		"the first pixel past the strip belongs to the shaft, not the hall")
 	assert_eq(root.state.building.cars[0].target_floor, 1,
 		"and it reached the shaft, which dispatches on a tap")
@@ -1460,4 +1460,14 @@ func test_a_basement_tap_selects_the_floor_for_leasing() -> void:
 	await wait_physics_frames(2)
 	await do_tap(100.0, root.HUD_HEIGHT \
 		+ view.coords().band_centre_y(-1))
-	assert_eq(root.last_selected_floor, -1, "floor -1 is selectable")
+	assert_eq(root.last_selected_floor, -1,
+		"floor -1 is selectable -- NON-vacuous now that no-selection is NO_FLOOR")
+	# The regression that shipped: on P1 the panel guarded `_floor < 0` as
+	# "panel not bound", so every kind reported locked and nothing was buyable.
+	assert_true(root.panel.picker_visible(), "the lease picker is offered")
+	assert_false(root.panel.is_locked("parking"),
+		"and the garage is not falsely locked on a basement floor")
+	root.panel.lease_requested.emit(-1, "parking")
+	await wait_physics_frames(1)
+	assert_eq(root.state.tenancy.kind_at(-1), "parking",
+		"the tap-through lease lands")
