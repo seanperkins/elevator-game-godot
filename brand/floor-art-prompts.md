@@ -1,11 +1,13 @@
 # Floor scenery — image prompts
 
-Seven images: one per tenant kind, plus the vacant shell. Each is the background
-of one floor band, drawn **behind** the little people the game draws itself.
+Eight images: one per tenant kind (parking included), plus the vacant shell.
+Each is the background of one floor band, drawn **behind** the little people the
+game draws itself.
 
-Target: **416 × 240 px, ratio 26:15** (2× the 208 × 120 canvas units the region
-occupies). See `docs/superpowers/backlog.md` § "A background for every floor" for
-where those numbers come from.
+Target: **384 × 240 px, ratio 8:5** (2× the 192 × 120 canvas units the region
+occupies — 416 × 240 until the gutter narrowed to pay for the building's
+exterior). Generate at 16:9/2K and crop LEFT-ALIGNED to 8:5; the compositions
+weight left, so the loss comes off the open right side.
 
 No transparency is needed — these are opaque and replace the cream ground
 entirely, so there is no chroma key and no despill step.
@@ -66,8 +68,8 @@ Furniture and doors that fill more than about half the frame height are WRONG,
 however good they look alone -- the characters stand in front of them and will
 look like children.
 
-Wide landscape format, aspect ratio 26:15. Edge to edge, full bleed, no border,
-no frame, no vignette.
+Wide landscape format. Edge to edge, full bleed, no border, no frame, no
+vignette. (Generated at 16:9 and cropped to the shipping 8:5 afterwards.)
 
 ABSOLUTELY NO: people, figures, humans, silhouettes of people, text, letters,
 numbers, signage with words, logos, watermarks, UI elements, arrows, icons,
@@ -107,7 +109,7 @@ fills the centre (as the apartments doors do) sits directly behind them.
 
 ---
 
-## The seven subjects
+## The subjects
 
 Append one of these to the style block.
 
@@ -157,7 +159,16 @@ on the right with a frosted glass panel. Pale cream walls, teal chairs, a small
 vermilion cross on the counter front.
 ```
 
-**7. Vacant — the construction shell** (no tenant)
+**7. Parking** (`parking`)
+```
+Subject: an underground car park. Two parking bays marked out on the floor with
+flat painted lines, a low concrete beam across the upper wall, a square support
+column on the left, and the bottom of a ramp entering from the right. Exposed
+concrete in flat pale tan, teal bay markings, one rust-coloured sign panel with
+no text on it.
+```
+
+**8. Vacant — the construction shell** (no tenant)
 ```
 Subject: an unfinished concrete shell. Two bare structural columns, a stack of
 three cement bags on the left, a folded step ladder leaning against the right
