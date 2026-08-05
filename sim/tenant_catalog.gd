@@ -90,6 +90,23 @@ func _parse_kind(e: Dictionary) -> TenantKind:
 	k.base_fare = float(e.get("base_fare", 0.0))
 	if not is_finite(k.lease_cost) or k.lease_cost < 0.0:
 		return null
+	k.where = TenantKind.Where.BASEMENT \
+		if str(e.get("where", "tower")) == "basement" else TenantKind.Where.TOWER
+	k.entrance = bool(e.get("entrance", false))
+	# The two shapes must not blur, and this file is fatal-if-malformed. An
+	# entrance with curves spawns trips TO a car park; a source without them is a
+	# floor that silently never spawns anything; an entrance with a fare carries
+	# a price no trip can ever charge.
+	if k.entrance:
+		var raw_rate: Variant = e.get("rate", [])
+		var raw_in: Variant = e.get("inbound", [])
+		var raw_out: Variant = e.get("outbound", [])
+		for raw: Variant in [raw_rate, raw_in, raw_out]:
+			if typeof(raw) != TYPE_ARRAY or not (raw as Array).is_empty():
+				return null
+		if k.base_fare != 0.0:
+			return null
+		return k
 	if not is_finite(k.base_fare) or k.base_fare <= 0.0:
 		return null
 	k.rate = _floats(e.get("rate"))
@@ -123,20 +140,25 @@ func kind(id: String) -> TenantKind:
 func all_kinds() -> Array[TenantKind]:
 	return _kinds
 
-## Every kind at or below `tier`, in file order.
-func available_for_class(tier: int) -> Array[TenantKind]:
+## Every kind at or below `tier` in the given half of the building, in file
+## order. `where` defaults to TOWER because every pre-basement caller meant the
+## tower -- including cheapest_for_class, where an unfiltered list would let a
+## cheap garage become the free recovery tenant on a tower floor.
+func available_for_class(tier: int,
+		where: TenantKind.Where = TenantKind.Where.TOWER) -> Array[TenantKind]:
 	var out: Array[TenantKind] = []
 	for k in _kinds:
-		if k.requires_class <= tier:
+		if k.requires_class <= tier and k.where == where:
 			out.append(k)
 	return out
 
 ## Lowest lease_cost among eligible kinds; ties break by FIRST APPEARANCE in
 ## the file, so the free recovery tenant (§9) and the save-restore fallback
 ## (§10) are deterministic rather than dependent on JSON ordering.
-func cheapest_for_class(tier: int) -> TenantKind:
+func cheapest_for_class(tier: int,
+		where: TenantKind.Where = TenantKind.Where.TOWER) -> TenantKind:
 	var best: TenantKind = null
-	for k in available_for_class(tier):
+	for k in available_for_class(tier, where):
 		if best == null or k.lease_cost < best.lease_cost:
 			best = k
 	return best
@@ -158,5 +180,8 @@ func largest_bucket() -> float:
 	var top := 0.0
 	for k in _kinds:
 		for h in range(TenantKind.BUCKETS):
-			top = maxf(top, k.rate[h])
+			# rate_at, not k.rate[h]: an entrance's curves are EMPTY by contract,
+			# and it contributes nothing to the saturation bound anyway -- its
+			# arrivals ride the scaled total, which the PARK_BONUS cap governs.
+			top = maxf(top, k.rate_at(h))
 	return top

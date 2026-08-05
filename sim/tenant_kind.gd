@@ -14,6 +14,22 @@ extends RefCounted
 
 const BUCKETS := 24
 
+## Which half of the building this kind may be leased in. Without it the picker
+## offers every kind everywhere and the first thing a player does is put a car
+## park on the roof -- or worse, the no-fail recovery rule leases one FOR them,
+## since a cheap garage undercuts apartments in cheapest_for_class.
+enum Where { TOWER, BASEMENT }
+var where: Where = Where.TOWER
+
+## An ENTRANCE kind does not generate trips; it RECEIVES arrivals that other
+## floors generate. A visitor comes IN through a garage, they are not going to
+## it, and a garage with an `inbound` weight would mean "trips from the lobby to
+## the car park" -- which the spawner would happily produce.
+##
+## Not inferred from `where`: the mine, when it arrives, is a BASEMENT kind that
+## genuinely is a source.
+var entrance: bool = false
+
 var id: String
 var display_name: String
 var requires_class: int
@@ -23,14 +39,17 @@ var rate: PackedFloat32Array
 var inbound: PackedFloat32Array
 var outbound: PackedFloat32Array
 
+## All three return 0 for an entrance, whose arrays are EMPTY by contract --
+## the catalog refuses an entrance carrying curves, so indexing would crash on
+## exactly the kind this guard exists for.
 func rate_at(minute: int) -> float:
-	return rate[posmod(minute, BUCKETS)]
+	return 0.0 if rate.is_empty() else rate[posmod(minute, BUCKETS)]
 
 func inbound_at(minute: int) -> float:
-	return inbound[posmod(minute, BUCKETS)]
+	return 0.0 if inbound.is_empty() else inbound[posmod(minute, BUCKETS)]
 
 func outbound_at(minute: int) -> float:
-	return outbound[posmod(minute, BUCKETS)]
+	return 0.0 if outbound.is_empty() else outbound[posmod(minute, BUCKETS)]
 
 func interfloor_at(minute: int) -> float:
 	return maxf(1.0 - inbound_at(minute) - outbound_at(minute), 0.0)

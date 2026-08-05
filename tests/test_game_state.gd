@@ -548,3 +548,35 @@ func test_a_parked_car_keeps_answering_as_people_arrive() -> void:
 	st.building.enqueue(Passenger.new(0, 2, 900, 4.0, 0))
 	st.tick(4)
 	assert_eq(car.riders.size(), 2, "the doors reopen for the next one")
+
+
+# --- leasing across the lobby line ------------------------------------------
+
+func test_a_tower_floor_cannot_lease_the_garage_and_the_basement_cannot_lease_offices() -> void:
+	# Both directions, in the SIM: the picker filters by half, but a refusal that
+	# lives only in the view is a rule a save file can walk around.
+	var s := gs
+	s.economy.accrue(1e6)
+	s.tenancy.restore_floor(2, 1.0, true, 0, "")
+	assert_false(s.lease(2, "parking"), "no car park on floor 2")
+	assert_true(s.building.dig(), "dig one")
+	s.tenancy.dig()
+	s.fitout.dig()
+	assert_false(s.lease(-1, "apartments"), "no apartments at -1")
+	assert_true(s.lease(-1, "parking"), "the garage leases where it belongs")
+	assert_eq(s.tenancy.kind_at(-1), "parking")
+
+func test_the_basement_picker_offers_parking_and_the_tower_picker_does_not() -> void:
+	var s := gs
+	assert_true(s.building.dig())
+	s.tenancy.dig()
+	s.fitout.dig()
+	var tower_ids := PackedStringArray()
+	for k in s.available_kinds(2):
+		tower_ids.append(k.id)
+	assert_false(tower_ids.has("parking"), "the tower picker has no garage")
+	var basement_ids := PackedStringArray()
+	for k in s.available_kinds(-1):
+		basement_ids.append(k.id)
+	assert_eq(basement_ids, PackedStringArray(["parking"]),
+		"the basement picker offers exactly the garage")

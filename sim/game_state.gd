@@ -210,12 +210,16 @@ func _grow_per_floor_containers() -> void:
 ## Refused here rather than merely greyed in the view, because a disabled
 ## button is bypassed by two taps queued during a stalled frame.
 func lease(floor_index: int, kind_id: String) -> bool:
-	if floor_index < 0 or floor_index >= building.floor_count:
+	if not building.has_floor(floor_index):
 		return false
 	if not tenancy.is_vacant(floor_index):
 		return false
 	var k := catalog.kind(kind_id)
 	if k == null or k.requires_class > fitout.tier_at(floor_index):
+		return false
+	# The sim's half of the picker filter. A refusal that lives only in the view
+	# is a rule a save file can walk around.
+	if k.where != _half_of(floor_index):
 		return false
 	var cost := lease_cost(floor_index, kind_id)
 	if not economy.spend(cost):
@@ -232,11 +236,18 @@ func lease_cost(floor_index: int, kind_id: String) -> float:
 		return INF
 	if tenancy.tenanted_count() >= Tenancy.MIN_FLOORS_FOR_TRAFFIC:
 		return k.lease_cost
-	var cheapest := catalog.cheapest_for_class(fitout.tier_at(floor_index))
+	var cheapest := catalog.cheapest_for_class(fitout.tier_at(floor_index),
+		_half_of(floor_index))
 	return 0.0 if cheapest != null and cheapest.id == kind_id else k.lease_cost
 
 func available_kinds(floor_index: int) -> Array[TenantKind]:
-	return catalog.available_for_class(fitout.tier_at(floor_index))
+	return catalog.available_for_class(fitout.tier_at(floor_index),
+		_half_of(floor_index))
+
+## Which half of the building a floor is in, for matching against a kind's
+## `where`. The lobby line is the definition, not a convention.
+func _half_of(floor_index: int) -> TenantKind.Where:
+	return TenantKind.Where.BASEMENT if floor_index < 0 else TenantKind.Where.TOWER
 
 ## The fare multiplier is why this is not inert on a tenanted floor. Class
 ## gates leasing and leasing only happens on vacancy, so a purchase with no

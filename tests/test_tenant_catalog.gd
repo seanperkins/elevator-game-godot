@@ -105,3 +105,100 @@ func test_a_short_bucket_array_is_refused() -> void:
 		"classes": _CLASSES,
 		"kinds": [_valid_kind({ "rate": [0.1, 0.1, 0.1] })],
 	}))
+
+
+# --- where a kind belongs, and whether it generates trips --------------------
+
+func test_existing_kinds_default_to_the_tower_and_generate_trips() -> void:
+	# The six shipped kinds carry neither field, so the defaults are what keeps
+	# this change additive.
+	for id in ["apartments", "shops", "office", "gym", "law_firm", "clinic"]:
+		var k := cat.kind(id)
+		assert_eq(k.where, TenantKind.Where.TOWER, "%s is a tower kind" % id)
+		assert_false(k.entrance, "%s generates its own trips" % id)
+
+func test_parking_is_a_basement_entrance_that_generates_nothing() -> void:
+	var k := cat.kind("parking")
+	assert_not_null(k, "parking is in the catalog")
+	assert_eq(k.where, TenantKind.Where.BASEMENT)
+	assert_true(k.entrance)
+	assert_eq(k.base_fare, 0.0, "a garage earns nothing directly")
+	for minute in range(0, 48):
+		assert_eq(k.rate_at(minute), 0.0, "an entrance spawns no trips at %d" % minute)
+		assert_eq(k.inbound_at(minute), 0.0)
+		assert_eq(k.outbound_at(minute), 0.0)
+
+func test_the_tower_picker_does_not_offer_the_garage() -> void:
+	# available_for_class feeds BOTH the lease picker and the free-recovery
+	# tenant (cheapest_for_class). Unfiltered, a 300-dollar garage undercuts
+	# apartments and the no-fail rule starts leasing car parks on tower floors.
+	for k in cat.available_for_class(3):
+		assert_eq(k.where, TenantKind.Where.TOWER, "%s leaked into the tower picker" % k.id)
+	var basement := cat.available_for_class(3, TenantKind.Where.BASEMENT)
+	assert_eq(basement.size(), 1, "the basement picker offers exactly parking today")
+	assert_eq(basement[0].id, "parking")
+
+func test_the_recovery_tenant_is_never_a_garage() -> void:
+	var cheapest := cat.cheapest_for_class(1)
+	assert_not_null(cheapest)
+	assert_eq(cheapest.where, TenantKind.Where.TOWER,
+		"the free recovery tenant must generate traffic, and an entrance cannot")
+
+func _write_catalog(kinds: Array) -> String:
+	var path := "user://bad_catalog_%d.json" % randi()
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify({
+		"classes": [{"tier": 1, "cost": 0.0, "fare_multiplier": 1.0}],
+		"kinds": kinds}))
+	f.close()
+	return path
+
+func _full_curves() -> Dictionary:
+	var flat := []
+	for h in range(24):
+		flat.append(0.5)
+	var none := []
+	for h in range(24):
+		none.append(0.1)
+	return {"rate": flat, "inbound": none, "outbound": none}
+
+func test_an_entrance_carrying_curves_is_fatal() -> void:
+	# tenants.json is fatal-if-malformed, and the two shapes must not blur: an
+	# entrance with a rate array would spawn trips TO a car park.
+	var c := _full_curves()
+	var bad := TenantCatalog.new()
+	assert_false(bad.load_from(_write_catalog([
+		{"id": "a", "name": "A", "requires_class": 1, "lease_cost": 1.0,
+			"base_fare": 3.0, "rate": c["rate"], "inbound": c["inbound"],
+			"outbound": c["outbound"]},
+		{"id": "x", "name": "X", "entrance": true, "where": "basement",
+			"requires_class": 1, "lease_cost": 1.0, "base_fare": 0.0,
+			"rate": c["rate"], "inbound": c["inbound"], "outbound": c["outbound"]},
+	])), "an entrance with curves must be refused")
+
+func test_a_source_with_empty_curves_is_fatal() -> void:
+	# The other direction, because a one-way check passes vacuously against the
+	# file that ships.
+	var c := _full_curves()
+	var bad := TenantCatalog.new()
+	assert_false(bad.load_from(_write_catalog([
+		{"id": "a", "name": "A", "requires_class": 1, "lease_cost": 1.0,
+			"base_fare": 3.0, "rate": c["rate"], "inbound": c["inbound"],
+			"outbound": c["outbound"]},
+		{"id": "x", "name": "X", "requires_class": 1, "lease_cost": 1.0,
+			"base_fare": 3.0, "rate": [], "inbound": [], "outbound": []},
+	])), "a source with no curves must be refused")
+
+func test_an_entrance_charging_a_fare_is_fatal() -> void:
+	# An entrance generates no trips, so its fare could never be charged -- a
+	# nonzero one is a data error hiding, not a tuning knob.
+	var bad := TenantCatalog.new()
+	var c := _full_curves()
+	assert_false(bad.load_from(_write_catalog([
+		{"id": "a", "name": "A", "requires_class": 1, "lease_cost": 1.0,
+			"base_fare": 3.0, "rate": c["rate"], "inbound": c["inbound"],
+			"outbound": c["outbound"]},
+		{"id": "x", "name": "X", "entrance": true, "where": "basement",
+			"requires_class": 1, "lease_cost": 1.0, "base_fare": 2.0,
+			"rate": [], "inbound": [], "outbound": []},
+	])), "an entrance with a fare must be refused")
