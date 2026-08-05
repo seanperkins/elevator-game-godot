@@ -236,7 +236,7 @@ func _ready() -> void:
 	# first demolish rebuilds the views.
 	_restack()
 
-	_last_shape = Vector2i(state.building.floor_count, state.building.cars.size())
+	_last_shape = Vector2i(state.building.total_floors(), state.building.cars.size())
 	_refresh_pager()
 
 ## Screenshot and device testing need boards that cost 1.36e8 to reach by play.
@@ -303,6 +303,7 @@ func _rebuild_views() -> void:
 	# Resolved through `self` at call time, so it follows a state swap rather
 	# than capturing the dead sim.
 	_view.floor_purchase_requested.connect(func() -> void: state.buy("floor"))
+	_view.dig_requested.connect(func() -> void: state.buy("dig"))
 	_view.shaft_purchase_requested.connect(_on_buy_shaft)
 	_view.hall_floor_selected.connect(_on_hall_floor_selected)
 	_view.prestige_requested.connect(_on_prestige_requested)
@@ -478,7 +479,7 @@ func _on_dev_reset() -> void:
 	_rebuild_views()
 	_view_button.text = "MANAGE"
 	_refresh_dev_button()
-	_last_shape = Vector2i(state.building.floor_count, state.building.cars.size())
+	_last_shape = Vector2i(state.building.total_floors(), state.building.cars.size())
 	_refresh_pager()
 
 func _on_prestige_requested() -> void:
@@ -503,7 +504,7 @@ func _on_demolish() -> void:
 	# It lives outside the rebuilt range, so it would otherwise still read
 	# "BOARD" while the board is showing.
 	_view_button.text = "MANAGE"
-	_last_shape = Vector2i(state.building.floor_count, state.building.cars.size())
+	_last_shape = Vector2i(state.building.total_floors(), state.building.cars.size())
 	# Early-returns on `if _management.visible`, so it must run after the new
 	# (hidden) management view exists.
 	_refresh_pager()
@@ -633,7 +634,10 @@ func _physics_process(delta: float) -> void:
 	if ticks > 0:
 		state.tick(ticks)
 
-	var shape := Vector2i(state.building.floor_count, state.building.cars.size())
+	# total_floors, not floor_count: a dig grows the building DOWNWARD, and a
+	# shape that only watched the tower would never rebuild the board for it --
+	# the new basement row would simply not exist until the next floor purchase.
+	var shape := Vector2i(state.building.total_floors(), state.building.cars.size())
 	if shape != _last_shape:
 		_view.rebuild()
 		if shape.y > _last_shape.y:

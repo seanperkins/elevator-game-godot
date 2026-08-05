@@ -41,6 +41,11 @@ var scroll_offset: float = 0.0
 ## floor and starts offering PRESTIGE, so the board's only route to demolishing
 ## vanished exactly when it became the thing you wanted.
 var headroom: float = 0.0
+## The mirror: content BELOW the bottom floor that scrolling must reach -- the
+## dig band. Widens the UPPER clamp for the same reason headroom widens the
+## lower one: the band is a control, and a control the scroll range cannot
+## reach is not a control.
+var footroom: float = 0.0
 
 var _viewport_height: float = 0.0
 var _edges: PackedFloat64Array = PackedFloat64Array()
@@ -86,7 +91,7 @@ func set_viewport_height(height: float) -> void:
 ## it is the tall building, where the ground offset is zero, that needs to scroll
 ## back past the roof.
 func scroll_to(offset: float) -> void:
-	var travel := maxf(content_height() - _viewport_height, 0.0)
+	var travel := maxf(content_height() + footroom - _viewport_height, 0.0)
 	var sky := maxf(headroom - _ground_offset(), 0.0)
 	scroll_offset = clampf(offset, -sky, travel)
 
@@ -98,8 +103,14 @@ func scroll_by(delta: float) -> void:
 ## empty space is sky, which is also where the "+ BUILD FLOOR" band lives. Left
 ## unhandled, a six-floor tower hangs from the top of the board with a void
 ## beneath it and the ghost floor off-screen entirely.
+##
+## FOOTROOM COMES OUT OF THE GROUND, not out of the scroll range, on a short
+## building: the building stands on the dig band -- the earth -- rather than on
+## the screen edge, so the band is visible without scrolling. On a tall building
+## the ground offset is zero either way and the band is reached by scrolling
+## through the widened travel in scroll_to.
 func _ground_offset() -> float:
-	return maxf(_viewport_height - content_height(), 0.0)
+	return maxf(_viewport_height - content_height() - footroom, 0.0)
 
 ## Top edge of floor f's band, in the scrolled window.
 func floor_to_y(f: int) -> float:

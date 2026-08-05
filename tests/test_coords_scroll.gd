@@ -136,3 +136,32 @@ func test_the_car_still_agrees_with_the_row_on_the_ground() -> void:
 	c.set_viewport_height(1184.0)
 	for f in range(6):
 		assert_eq(c.car_y(float(f)), c.floor_to_y(f), "floor %d" % f)
+
+
+# --- footroom: the dig band -------------------------------------------------
+
+func test_footroom_lets_the_dig_band_be_reached() -> void:
+	# The mirror of headroom. The dig band is one floor BELOW the bottom floor,
+	# so the upper clamp has to reach past the building the way the lower one
+	# reaches past the roof.
+	var c := BoardCoords.fixed(-2, 9, 120.0)
+	c.set_viewport_height(600.0)
+	c.footroom = 120.0
+	c.scroll_to(1e9)
+	var band_top := c.floor_to_y(c.bottom_floor) + 120.0
+	assert_lte(band_top + 120.0, 600.0 + 0.01, "the whole band is inside the window")
+
+func test_no_footroom_means_no_scrolling_past_the_bottom_floor() -> void:
+	var c := BoardCoords.fixed(-2, 9, 120.0)
+	c.set_viewport_height(600.0)
+	c.footroom = 0.0
+	c.scroll_to(1e9)
+	assert_almost_eq(c.floor_to_y(c.bottom_floor) + 120.0, 600.0, 0.01,
+		"the bottom floor sits on the bottom edge and no further")
+
+func test_a_basement_scrolls_and_round_trips_like_any_floor() -> void:
+	var c := BoardCoords.fixed(-3, 9, 120.0)
+	c.set_viewport_height(600.0)
+	c.scroll_to(1e9)
+	for f in range(-3, 10):
+		assert_eq(c.y_to_floor(c.floor_to_y(f) + 1.0), f, "floor %d round-trips" % f)

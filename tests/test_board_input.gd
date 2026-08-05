@@ -1422,3 +1422,42 @@ func test_the_scenery_is_behind_everything_else_in_the_row() -> void:
 	var row: FloorRow = view._floors[1]
 	assert_eq(row.get_children().find(row._scenery), 0,
 		"first child, so the people and the numbers draw over it")
+
+
+# --- the basement on the board ----------------------------------------------
+
+func test_digging_rebuilds_the_board_with_a_P1_row() -> void:
+	# GameRoot rebuilds on a SHAPE change, and a dig changes neither
+	# floor_count nor the car count -- the shape watches total_floors now, or
+	# the new basement row would not exist until the next floor purchase.
+	root.state.economy.accrue(1e9)
+	assert_true(root.state.buy("dig"))
+	await wait_physics_frames(3)
+	var row: FloorRow = view._floors[0]
+	assert_eq(row.floor_index, -1, "the deepest row is floor -1, and signed")
+	assert_eq(row._label.text, "P1", "but it reads as parking, not arithmetic")
+	assert_eq(view._floors.size(), root.state.building.total_floors(),
+		"one row per floor, basement included")
+
+func test_a_tap_on_the_dig_band_digs() -> void:
+	root.state.economy.accrue(1e9)
+	var before: int = root.state.building.depth
+	view.scroll_board_by(1e9)          # the band is below the bottom floor
+	await wait_physics_frames(2)
+	var band_y: float = root.HUD_HEIGHT \
+		+ view.coords().floor_to_y(view.coords().bottom_floor) \
+		+ BuildingView.FLOOR_HEIGHT * 1.5
+	await do_tap(100.0, band_y)
+	assert_eq(root.state.building.depth, before + 1, "the tap dug")
+
+func test_a_basement_tap_selects_the_floor_for_leasing() -> void:
+	# Parking is leased like anything else, so the hall tap must SELECT a
+	# basement floor -- the panel is where the lease picker lives.
+	root.state.economy.accrue(1e9)
+	assert_true(root.state.buy("dig"))
+	await wait_physics_frames(3)
+	view.scroll_board_by(1e9)
+	await wait_physics_frames(2)
+	await do_tap(100.0, root.HUD_HEIGHT \
+		+ view.coords().band_centre_y(-1))
+	assert_eq(root.last_selected_floor, -1, "floor -1 is selectable")

@@ -15,6 +15,7 @@ extends Control
 ## a column's local y can be handed straight to y_to_floor.
 
 signal floor_purchase_requested()
+signal dig_requested()
 ## At the purchasable cap the ghost band stops selling a floor and starts
 ## offering the only thing that raises it.
 signal prestige_requested()
@@ -90,6 +91,9 @@ var _shaft_viewport: Control
 var _ghost_floor: Control
 var _ghost_label: Label
 var _ghost_gesture: Gesture
+var _dig_floor: Control
+var _dig_label: Label
+var _dig_gesture: Gesture
 var hall_column: HallColumn
 var _columns: Array[ShaftColumn] = []
 var _slots: Array[Control] = []
@@ -118,6 +122,10 @@ func rebuild() -> void:
 		_ghost_floor.queue_free()
 		_ghost_floor = null
 		_ghost_label = null
+	if _dig_floor != null:
+		_dig_floor.queue_free()
+		_dig_floor = null
+		_dig_label = null
 	if hall_column != null:
 		hall_column.queue_free()
 		hall_column = null
@@ -130,12 +138,15 @@ func rebuild() -> void:
 
 func _build_all() -> void:
 	var previous := _coords.scroll_offset if _coords != null else 0.0
-	_coords = BoardCoords.fixed(0, _state.building.floor_count - 1, FLOOR_HEIGHT)
-	# The ghost band is above the roof, so the scroll range has to reach past it
-	# or the band is unreachable on any building taller than the window. Set
-	# BEFORE the viewport height, which re-clamps the offset through it.
+	_coords = BoardCoords.fixed(_state.building.bottom_floor(),
+		_state.building.floor_count - 1, FLOOR_HEIGHT)
+	# The ghost band is above the roof and the dig band below the bottom floor,
+	# so the scroll range has to reach past both or a band is unreachable on any
+	# building taller than the window. Set BEFORE the viewport height, which
+	# re-clamps the offset through them.
 	_coords.headroom = FLOOR_HEIGHT \
 		if _state.building.floor_count < Building.MAX_FLOORS else 0.0
+	_coords.footroom = 0.0 if _state.upgrades.is_maxed("dig") else FLOOR_HEIGHT
 	_coords.set_viewport_height(size.y)
 	# Buying a floor must not throw away where the player was looking.
 	_coords.scroll_to(previous)
@@ -147,6 +158,8 @@ func _build_all() -> void:
 	_build_hall_column()
 	if _state.building.floor_count < Building.MAX_FLOORS:
 		_build_ghost_floor()
+	if not _state.upgrades.is_maxed("dig"):
+		_build_dig_floor()
 
 	_shaft_viewport.position = Vector2(EXTERIOR_LEFT + SHAFT_AREA_X, 0.0)
 	_shaft_viewport.size = Vector2(building_width() - SHAFT_AREA_X, size.y)
@@ -159,16 +172,21 @@ func _build_all() -> void:
 	# than dispatching a car it happens to overlap.
 	if _ghost_floor != null:
 		move_child(_ghost_floor, get_child_count() - 1)
+	if _dig_floor != null:
+		move_child(_dig_floor, get_child_count() - 1)
 	_reposition_floors()
 
 ## Scrolls the board and moves everything that rides on the offset. Called on
 ## every scroll and every rebuild, so there is one place that knows what moves.
 func _reposition_floors() -> void:
-	for i in range(_floors.size()):
-		_floors[i].position = Vector2(EXTERIOR_LEFT, _coords.floor_to_y(i))
+	for row in _floors:
+		row.position = Vector2(EXTERIOR_LEFT, _coords.floor_to_y(row.floor_index))
 	if _ghost_floor != null:
 		_ghost_floor.position = Vector2(EXTERIOR_LEFT,
 			_coords.floor_to_y(_coords.top_floor) - FLOOR_HEIGHT)
+	if _dig_floor != null:
+		_dig_floor.position = Vector2(EXTERIOR_LEFT,
+			_coords.floor_to_y(_coords.bottom_floor) + FLOOR_HEIGHT)
 	_layout_face_left()
 	_layout_far_side()
 
@@ -195,14 +213,15 @@ func board_scroll_offset() -> float:
 	return _coords.scroll_offset
 
 func _build_floors() -> void:
-	for i in range(_state.building.floor_count):
-		var floor_index := FloorRow.new()
-		floor_index.position = Vector2(EXTERIOR_LEFT, _coords.floor_to_y(i))
-		floor_index.size = Vector2(building_width(), _coords.floor_height)
-		floor_index.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(floor_index)
-		floor_index.set_floor(i)
-		_floors.append(floor_index)
+	# EVERY floor, basement included -- audit site 9 of the design spec's nine.
+	for f in range(_state.building.bottom_floor(), _state.building.floor_count):
+		var row := FloorRow.new()
+		row.position = Vector2(EXTERIOR_LEFT, _coords.floor_to_y(f))
+		row.size = Vector2(building_width(), _coords.floor_height)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(row)
+		row.set_floor(f)
+		_floors.append(row)
 
 ## The hall region's one touch target, spanning x in [0, STRIP_RIGHT). It
 ## replaces BuildingView._gui_input's relet tap path: TAP selects a floor,
@@ -320,6 +339,43 @@ func _build_ghost_floor() -> void:
 
 	_ghost_floor.gui_input.connect(_on_ghost_input)
 	_ghost_gesture = Gesture.new(_coords)
+
+## The dig band: one band of earth below the bottom floor. The ghost band's
+## mirror in every respect -- a control, not a floor, and it scrolls with the
+## building through the footroom the coords carry for it.
+func _build_dig_floor() -> void:
+	_dig_floor = Control.new()
+	_dig_floor.size = Vector2(building_width(), FLOOR_HEIGHT)
+	add_child(_dig_floor)
+
+	var bg := ColorRect.new()
+	bg.color = Palette.GHOST_BG
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dig_floor.add_child(bg)
+
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 20)
+	label.position = Vector2(FloorRow.LABEL_X, (FLOOR_HEIGHT - 20.0) * 0.5)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dig_floor.add_child(label)
+	_dig_label = label
+
+	_dig_floor.gui_input.connect(_on_dig_input)
+	_dig_gesture = Gesture.new(_coords)
+
+func _on_dig_input(event: InputEvent) -> void:
+	if PointerEvents.is_press(event):
+		_dig_gesture.press(event.position, _coords.bottom_floor - 1)
+	elif PointerEvents.is_drag(event):
+		_dig_gesture.move(event.position)
+		if _dig_gesture.is_panning():
+			var delta := _dig_gesture.take_pan_delta()
+			if delta != Vector2.ZERO:
+				pan_board_by(delta)
+	elif PointerEvents.is_release(event):
+		if _dig_gesture.release() == Gesture.Result.TAP:
+			dig_requested.emit()
 
 ## The ghost band keeps its TAP -- the floor above the roof buys a floor, not a
 ## selection, because y_to_floor clamps there. It also gains the hall region's
@@ -481,13 +537,16 @@ func refresh() -> void:
 		_columns[i].set_doors(0.0 if car.state != ElevatorCar.State.DOORS
 			else ShaftColumn.aperture_for(car.door_elapsed_ticks(), car.door_ticks,
 				car.door_opening_ticks(), car.door_closing_ticks()))
-	for i in range(_floors.size()):
-		var waiting := _state.building.waiting_at(i)
-		var vacant := _state.tenancy.is_vacant(i)
-		_floors[i].set_scenery(FloorScenery.VACANT if vacant else _state.tenancy.kind_at(i))
-		_floors[i].set_moving_out(_state.tenancy.is_moving_out(i))
-		_floors[i].set_waiting(waiting,
+	for row in _floors:
+		var f: int = row.floor_index
+		var vacant := _state.tenancy.is_vacant(f)
+		row.set_scenery(FloorScenery.VACANT if vacant else _state.tenancy.kind_at(f))
+		row.set_moving_out(_state.tenancy.is_moving_out(f))
+		row.set_waiting(_state.building.waiting_at(f),
 			_state.upgrades.is_installed("call_direction"))
+	if _dig_label != null:
+		_dig_label.text = "+ DIG  $%s" % NumberFormat.compact(
+			_state.upgrades.cost_of("dig"))
 	if _ghost_label != null:
 		if _state.upgrades.is_maxed("floor"):
 			# 21 characters ends near x = 227 at font size 15 from LABEL_X = 38,

@@ -107,7 +107,10 @@ func _ready() -> void:
 
 func set_floor(index: int) -> void:
 	floor_index = index
-	_label.text = str(index)
+	# Basements read as P1, P2 counting DOWN. The index stays signed everywhere;
+	# only the label differs. "-1" is the same width in the gutter but reads as
+	# a subtraction.
+	_label.text = str(index) if index >= 0 else "P%d" % -index
 
 ## Everyone waiting, drawn as figures. Rows are a fixed 120 units, and the strip
 ## packs HALL_CELL (32 x 58) four across and two deep -- eight of a possible
