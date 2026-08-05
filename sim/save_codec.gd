@@ -272,6 +272,10 @@ static func encode(state: GameState) -> Dictionary:
 			# kind" contradict each other.
 			"kind": null if state.tenancy.kind_at(floor_index).is_empty() \
 				else state.tenancy.kind_at(floor_index),
+			# Optional-with-default (2026-08-05, still v4): a vacant floor's
+			# market countdown and a renovation's uncancellable move-out.
+			"fill_left": state.market.fill_ticks_left(floor_index),
+			"priced_out": state.tenancy.is_priced_out(floor_index),
 			"class": state.fitout.tier_at(floor_index),
 		})
 
@@ -448,9 +452,16 @@ static func decode(p_data: Dictionary,
 			vacant = raw_vacant
 		elif typeof(raw_vacant) == TYPE_INT or typeof(raw_vacant) == TYPE_FLOAT:
 			vacant = _num(raw_vacant, 0.0) != 0.0
+		# The same TYPE_BOOL caution as `vacant` above: bool() has no Variant
+		# constructor for String, so a bare bool(r.get(...)) is an engine error.
+		var raw_priced: Variant = r.get("priced_out", false)
+		var priced: bool = typeof(raw_priced) == TYPE_BOOL and raw_priced
 		state.tenancy.restore_floor(floor_index,
 			_bounded(r.get("satisfaction", 1.0), 0.0, 1.0, 1.0), vacant,
-			_bounded_int(r.get("move_out_left", 0), 0, Tenancy.MOVE_OUT_TICKS, 0))
+			_bounded_int(r.get("move_out_left", 0), 0, Tenancy.MOVE_OUT_TICKS, 0),
+			"", priced)
+		state.market.restore_floor(floor_index,
+			_bounded_int(r.get("fill_left", 0), 0, Market.FILL_TICKS, 0))
 		state.fitout.set_tier(floor_index,
 			_bounded_int(r.get("class", 1), Fitout.BASE_TIER, state.catalog.max_tier(),
 				Fitout.BASE_TIER))

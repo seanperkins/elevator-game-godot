@@ -851,3 +851,49 @@ func test_the_version_is_still_four() -> void:
 	# The additive-within-v4 claim, pinned: depth rides in the same version.
 	assert_eq(SaveCodec.VERSION, 4)
 	assert_eq(int(SaveCodec.encode(_dug_state())["version"]), 4)
+
+# --- the tenant market -------------------------------------------------------
+
+func test_a_partial_fill_countdown_round_trips() -> void:
+	var s := GameState.new(6, 1, 999)
+	s.tenancy.restore_floor(3, 1.0, true, 0)
+	s.tick(10)   # arms the countdown and burns a few ticks
+	var left := s.market.fill_ticks_left(3)
+	assert_between(left, 1, Market.FILL_TICKS)
+	var back := SaveCodec.decode(SaveCodec.encode(s))
+	assert_eq(back.market.fill_ticks_left(3), left)
+
+func test_a_priced_out_eviction_round_trips() -> void:
+	var s := GameState.new(6, 1, 999)
+	s.economy.accrue(10000.0)
+	assert_true(s.upgrade_class(3))
+	var back := SaveCodec.decode(SaveCodec.encode(s))
+	assert_true(back.tenancy.is_priced_out(3))
+	for i in range(50):
+		back.tenancy.note_delivery(3)
+	assert_true(back.tenancy.is_moving_out(3), "reload must not soften the eviction")
+
+func test_a_save_without_the_market_fields_decodes_and_refills() -> void:
+	var s := GameState.new(6, 1, 999)
+	s.tenancy.restore_floor(3, 1.0, true, 0)
+	var data := SaveCodec.encode(s)
+	for r in data["floors"]:
+		r.erase("fill_left")
+		r.erase("priced_out")
+	var back := SaveCodec.decode(data)
+	assert_not_null(back, "an old v4 save still decodes")
+	assert_false(back.tenancy.is_priced_out(3))
+	back.tick(Market.FILL_TICKS + 2)
+	assert_false(back.tenancy.is_vacant(3), "the countdown restarts, harmlessly")
+
+func test_malformed_market_fields_clamp_rather_than_refuse() -> void:
+	var s := GameState.new(6, 1, 999)
+	s.tenancy.restore_floor(3, 1.0, true, 0)
+	var data := SaveCodec.encode(s)
+	data["floors"][3]["fill_left"] = "x"
+	data["floors"][3]["priced_out"] = "x"
+	data["floors"][2]["fill_left"] = 999999
+	var back := SaveCodec.decode(data)
+	assert_not_null(back)
+	assert_eq(back.market.fill_ticks_left(3), 0)
+	assert_false(back.tenancy.is_priced_out(3))
