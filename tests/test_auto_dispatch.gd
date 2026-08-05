@@ -332,3 +332,21 @@ func test_a_policy_uses_the_spring_too() -> void:
 	assert_true(gs.set_policy(0, DispatchPolicy.Preset.EVERY_FLOOR))
 	assert_false(gs.building.cars[0].is_committed(),
 		"a floor-by-floor sweep never makes the lobby-to-top run")
+
+
+func test_a_swept_car_visits_the_basement() -> void:
+	# The end-to-end version of the candidates bound: dig, wait below, and the
+	# sweep must actually arrive.
+	gs.building.dig()
+	gs.tenancy.dig()
+	gs.fitout.dig()
+	licence(1)
+	assert_true(gs.set_auto(0, true))
+	var visited_basement := false
+	for i in range(400):
+		gs.auto.step(gs.building)
+		gs.tick(1)
+		if gs.building.cars[0].current_floor() == -1:
+			visited_basement = true
+			break
+	assert_true(visited_basement, "the sweep descends below the lobby")

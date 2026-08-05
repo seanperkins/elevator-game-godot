@@ -43,17 +43,33 @@ func load_curve(path: String) -> bool:
 	base_patience_ticks = maxi(int(parsed.get("base_patience_ticks", 900)), 1)
 	return true
 
+## Extra inbound arrivals per LEASED entrance floor, as a fraction of the
+## building's base rate.
+##
+## THIS NUMBER IS A GUESS. It has not been measured on the real sim and must be
+## before it ships -- see the design spec's §9. Run 1 caps at two shafts and may
+## dig 2 with no tree spend, so a wrong value here is not "digging is weak", it
+## is "digging is a trap a new player takes and then drowns in".
+const PARK_BONUS := 0.15
+
 ## One Bernoulli trial per tick against the SUMMED rate, then a weighted pick
 ## of which source produced it. The alternative -- a trial per occupied floor
 ## -- would be forty draws a tick at the cap and would make the seed sequence
-## depend on building height.
+## depend on building height. Entrances scale the rate INSIDE that one trial
+## for the same reason: a trial per entrance would make the sequence depend on
+## how deep the building is.
 ##
-## `lobby_tenanted` decides whether the lobby is a usable endpoint. When floor 0
-## is vacant it is neither an origin nor a destination, so every kind's inbound
-## and outbound weights collapse into interfloor -- the same collapse applied to
-## a tenant ON floor 0, whose lobby trips would otherwise be lobby -> lobby.
+## `lobby_tenanted` decides whether the lobby is a usable DOOR. When floor 0 is
+## vacant it is neither an origin nor a destination -- the same collapse applied
+## to a tenant ON floor 0, whose lobby trips would otherwise be lobby -> lobby.
+## `entrances` are the leased garage floors, and they are doors too: a source
+## whose lobby is unusable but who has a garage still takes inbound and outbound
+## trips, through the garage. Only a source with NO usable door collapses to
+## interfloor. That is the exception that keeps a building with a vacant lobby
+## and a leased basement earning -- a second way out of the no-fail-state hole,
+## not a loophole in it.
 func spawn_from_sources(minute: int, sources: Array[TrafficSource],
-		lobby_tenanted: bool) -> Array[Passenger]:
+		lobby_tenanted: bool, entrances: PackedInt32Array) -> Array[Passenger]:
 	var out: Array[Passenger] = []
 	if sources.size() < 2:
 		return out
@@ -62,7 +78,12 @@ func spawn_from_sources(minute: int, sources: Array[TrafficSource],
 		total += s.rate_at(minute)
 	if total <= 0.0:
 		return out
-	if rng.randf() >= total / float(SimClock.TICKS_PER_SIM_MINUTE):
+	# The scaled total feeds the TRIAL only. The weighted pick below runs on the
+	# base total, so which tenant generates a trip is unaffected by how deep you
+	# have dug -- depth changes how many visitors there are and which door they
+	# use, never whose visitors they are.
+	var park := PARK_BONUS * float(entrances.size())
+	if rng.randf() >= total * (1.0 + park) / float(SimClock.TICKS_PER_SIM_MINUTE):
 		return out
 
 	var pick := rng.randf() * total
@@ -74,15 +95,19 @@ func spawn_from_sources(minute: int, sources: Array[TrafficSource],
 			chosen = s
 			break
 
+	var lobby_usable := lobby_tenanted and chosen.floor_index != LOBBY
 	var origin := chosen.floor_index
-	var answer := _destination_for(chosen, sources, minute, lobby_tenanted)
+	var answer := _destination_for(chosen, sources, minute, lobby_tenanted,
+		not entrances.is_empty())
 	var destination := answer.x
-	# The inbound branch runs FIRST. An inbound answer's .x legitimately equals
+	# The door branches run FIRST. An inbound answer's .x legitimately equals
 	# the chosen floor -- that is the whole point, the trip ends there -- so the
 	# self-trip refusal below would drop every inbound trip if it ran first.
 	if answer.y == 1:
-		origin = LOBBY
+		origin = _door_for(entrances, park, lobby_usable)
 		destination = chosen.floor_index
+	elif answer.y == 2:
+		destination = _door_for(entrances, park, lobby_usable)
 	elif destination == chosen.floor_index:
 		return out
 
@@ -90,23 +115,48 @@ func spawn_from_sources(minute: int, sources: Array[TrafficSource],
 		chosen.kind.base_fare * chosen.fare_multiplier, chosen.floor_index))
 	return out
 
-## The destination floor in `.x`, and `.y == 1` when this is an INBOUND trip, so
-## the caller swaps the endpoints.
+## Which door a lobby-endpoint trip actually uses: an arrival's origin, a
+## leaver's destination -- the SAME draw, because people go out the way they
+## came in.
+##
+## Uniform among garages is deliberate and is the whole diminishing return: the
+## fourth garage adds the same arrivals as the first, but they are further from
+## where they are going, so depth costs more car time per trip it buys.
+##
+## The empty early-out is load-bearing for determinism: with no entrances this
+## must consume NO draws, or a building that never dug would replay a different
+## seed sequence than it did before this feature existed.
+func _door_for(entrances: PackedInt32Array, park: float, lobby_usable: bool) -> int:
+	if entrances.is_empty():
+		return LOBBY
+	if lobby_usable and rng.randf() >= park / (1.0 + park):
+		return LOBBY
+	return entrances[rng.randi_range(0, entrances.size() - 1)]
+
+## The destination floor in `.x`; `.y` says what kind of trip it is:
+##   0 -- a concrete destination (interfloor), or the chosen floor, meaning drop
+##   1 -- INBOUND: the caller draws the door and swaps the endpoints
+##   2 -- OUTBOUND: the caller draws the door as the destination
 ##
 ## The flag used to BE the return value: -1 meant inbound. That was safe exactly
 ## while the lowest floor was 0, and the first floor dug IS -1 -- a sentinel that
 ## is also a legal answer delivers inbound passengers into the basement with
-## nothing raising anywhere. Collapses to interfloor whenever the lobby is not a
-## usable endpoint for this source.
+## nothing raising anywhere.
+##
+## Outbound is flagged rather than returned as LOBBY because "leaving the
+## building" and "visiting the floor-0 tenant" both end at floor 0 -- but only
+## the first may be rerouted through a garage when the lobby is vacant.
+## Collapses to interfloor only when this source has NO usable door.
 func _destination_for(chosen: TrafficSource, sources: Array[TrafficSource],
-		minute: int, lobby_tenanted: bool) -> Vector2i:
-	var lobby_usable := lobby_tenanted and chosen.floor_index != LOBBY
+		minute: int, lobby_tenanted: bool, has_entrance: bool) -> Vector2i:
+	var lobby_usable := (lobby_tenanted and chosen.floor_index != LOBBY) \
+		or has_entrance
 	var roll := rng.randf()
 	if lobby_usable:
 		if roll < chosen.kind.inbound_at(minute):
 			return Vector2i(chosen.floor_index, 1)
 		if roll < chosen.kind.inbound_at(minute) + chosen.kind.outbound_at(minute):
-			return Vector2i(LOBBY, 0)
+			return Vector2i(LOBBY, 2)
 	var others: Array[TrafficSource] = []
 	for s in sources:
 		if s.floor_index != chosen.floor_index:

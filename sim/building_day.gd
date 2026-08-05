@@ -16,13 +16,20 @@ extends RefCounted
 ## Trips per simulated minute for each hour, ABSOLUTE -- not normalised. The
 ## widget normalises for drawing; a caller asking "how busy is 08:00" wants the
 ## real number.
-static func rates(sources: Array[TrafficSource]) -> PackedFloat32Array:
+##
+## `entrance_count` scales the whole curve by the same factor the spawner's
+## trial uses, because leased garages ADD arrivals. Omitting it here would draw
+## a quieter day than the one that actually spawns, which is the drift this
+## class exists to make impossible.
+static func rates(sources: Array[TrafficSource],
+		entrance_count: int = 0) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
+	var park := 1.0 + TrafficSpawner.PARK_BONUS * float(entrance_count)
 	for hour in range(TenantKind.BUCKETS):
 		var total := 0.0
 		for s in sources:
 			total += s.rate_at(hour)
-		out.append(total)
+		out.append(total * park)
 	return out
 
 ## The busiest hour's rate, or 0.0 when nothing is tenanted. Separate from
@@ -41,13 +48,14 @@ static func peak(sources: Array[TrafficSource]) -> float:
 ## generating ten trips a minute must dominate one generating a tenth of that,
 ## or the mix describes a building nobody is in.
 ##
-## `lobby_tenanted` mirrors the spawner exactly. A trip needs a usable lobby to
-## be inbound or outbound at all, and the spawner's rule is
-## `lobby_tenanted and chosen.floor_index != LOBBY` -- so a tenant ON floor 0
-## collapses to interfloor even when the lobby is occupied, because its lobby
-## trips would run lobby -> lobby.
+## `lobby_tenanted` and `entrance_count` mirror the spawner exactly. A trip
+## needs a usable DOOR to be inbound or outbound at all: the lobby if it is
+## tenanted and not the source's own floor, or any leased garage. A tenant ON
+## floor 0 with no garage collapses to interfloor, because its lobby trips
+## would run lobby -> lobby -- but give it a garage and its visitors come in
+## through that instead.
 static func mix(sources: Array[TrafficSource], hour: int,
-		lobby_tenanted: bool) -> Vector3:
+		lobby_tenanted: bool, entrance_count: int = 0) -> Vector3:
 	var inbound := 0.0
 	var outbound := 0.0
 	var interfloor := 0.0
@@ -55,7 +63,9 @@ static func mix(sources: Array[TrafficSource], hour: int,
 		var r := s.rate_at(hour)
 		if r <= 0.0:
 			continue
-		if not lobby_tenanted or s.floor_index == DispatchPolicy.LOBBY:
+		var has_door := (lobby_tenanted and s.floor_index != DispatchPolicy.LOBBY) \
+			or entrance_count > 0
+		if not has_door:
 			interfloor += r
 			continue
 		var i := s.kind.inbound_at(hour)

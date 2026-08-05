@@ -33,7 +33,16 @@ enum Order { SWEEP, NEAREST }
 enum WhenIdle { STAY, RETURN_TO_LOBBY }
 
 ## Returned instead of a floor when the car should not move at all.
-const STAY_PUT := -1
+## "No floor at all." NOT -1: floor -1 EXISTS once something is dug, and a
+## sentinel that is also a legal floor made the sweep structurally unable to
+## say "go to the basement" -- _first_beyond finding floor -1 read as "nothing
+## ahead", so the car turned round instead. The same bug the spawner's inbound
+## flag had (traffic_spawner.gd), in a second home.
+##
+## INT32 min, not int64: choose() carries this through a Vector2i, whose
+## components are 32-bit -- int64 min truncates to 0 in the packing, which
+## reads as "go to the lobby".
+const STAY_PUT := -2147483648
 
 const LOBBY := 0
 
@@ -58,11 +67,16 @@ func uses(source: int) -> bool:
 
 ## Floors worth considering from `from`, sorted, never including `from` itself:
 ## a car does not travel to where it already is.
+##
+## `bottom` is the building's lowest floor, 0 until something is dug. The
+## bound below used to be `f >= 0`, which silently DROPPED a hall call at -1 --
+## a swept car would simply never answer the basement, with nothing raising.
 func candidates(from: int, floor_count: int, waiting: PackedInt32Array,
-		rider_floors: PackedInt32Array, car_is_full := false) -> PackedInt32Array:
+		rider_floors: PackedInt32Array, car_is_full := false,
+		bottom := 0) -> PackedInt32Array:
 	var seen := {}
 	if uses(Source.EVERY_FLOOR):
-		for f in range(floor_count):
+		for f in range(bottom, floor_count):
 			seen[f] = true
 	# A full car still has to deliver the people inside it, so car calls always
 	# count; only the hall calls it cannot serve are passed.
@@ -74,7 +88,7 @@ func candidates(from: int, floor_count: int, waiting: PackedInt32Array,
 			seen[f] = true
 	var out := PackedInt32Array()
 	for f in seen.keys():
-		if f != from and f >= 0 and f < floor_count:
+		if f != from and f >= bottom and f < floor_count:
 			out.append(f)
 	out.sort()
 	return out
@@ -83,10 +97,11 @@ func candidates(from: int, floor_count: int, waiting: PackedInt32Array,
 ## `floor` is STAY_PUT when there is nothing to do and nowhere to idle.
 func choose(from: int, floor_count: int, waiting: PackedInt32Array,
 		rider_floors: PackedInt32Array, direction: int,
-		car_is_full := false) -> Vector2i:
-	if floor_count <= 1:
+		car_is_full := false, bottom := 0) -> Vector2i:
+	if floor_count - bottom <= 1:
 		return Vector2i(STAY_PUT, direction)
-	var options := candidates(from, floor_count, waiting, rider_floors, car_is_full)
+	var options := candidates(from, floor_count, waiting, rider_floors,
+		car_is_full, bottom)
 	if options.is_empty():
 		# Homing is what stops a call-driven car from parking wherever it
 		# happened to finish, which on a tall building is usually the worst

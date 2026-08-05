@@ -111,3 +111,30 @@ func test_the_mix_ignores_hours_a_floor_generates_nothing_in() -> void:
 		[2, _kind("day", day, one, zero)]])
 	var m := BuildingDay.mix(s, 8, true)
 	assert_almost_eq(m.x, 1.0, 0.0001, "the sleeping floor must not vote")
+
+
+# --- the second entrance -----------------------------------------------------
+
+func test_leased_garages_raise_the_day_curve_by_the_spawner_factor() -> void:
+	# The chart must show the day that actually spawns. Two garages scale the
+	# trial by 1 + 2 * PARK_BONUS, so the curve scales identically.
+	var kind := _flat("k", 1.0, 0.2, 0.2)
+	var src: Array[TrafficSource] = [TrafficSource.new(1, kind, 1.0),
+		TrafficSource.new(2, kind, 1.0)]
+	var quiet := BuildingDay.rates(src, 0)
+	var busy := BuildingDay.rates(src, 2)
+	for h in range(TenantKind.BUCKETS):
+		assert_almost_eq(busy[h],
+			quiet[h] * (1.0 + 2.0 * TrafficSpawner.PARK_BONUS), 1e-5,
+			"hour %d" % h)
+
+func test_a_garage_uncollapses_the_mix_when_the_lobby_is_vacant() -> void:
+	# The spawner's exception, reproduced: with no usable door everything is
+	# interfloor, and a leased garage IS a usable door.
+	var kind := _flat("k", 1.0, 0.5, 0.3)
+	var src: Array[TrafficSource] = [TrafficSource.new(1, kind, 1.0)]
+	var collapsed := BuildingDay.mix(src, 0, false, 0)
+	assert_almost_eq(collapsed.z, 1.0, 1e-5, "no door: all interfloor")
+	var opened := BuildingDay.mix(src, 0, false, 1)
+	assert_almost_eq(opened.x, 0.5, 1e-5, "a garage door: inbound flows again")
+	assert_almost_eq(opened.y, 0.3, 1e-5, "and outbound")

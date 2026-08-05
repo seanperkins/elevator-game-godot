@@ -33,6 +33,7 @@ var metrics: Metrics
 var auto: AutoDispatch
 
 var _source_cache: Array[TrafficSource] = []
+var _entrance_cache: PackedInt32Array = PackedInt32Array()
 ## The building's day, cached against the SAME revision as the sources it is
 ## derived from. Recomputing it per frame would be 24 x floors of arithmetic at
 ## 60Hz on a threadless export, for a curve that only moves when somebody leases.
@@ -379,16 +380,30 @@ func _sources() -> Array[TrafficSource]:
 	var revision := tenancy.revision() + fitout.revision()
 	if revision != _source_revision:
 		_source_cache = []
-		for floor_index in range(building.floor_count):
+		_entrance_cache = PackedInt32Array()
+		# EVERY floor, not every tower floor: entrance kinds live below zero.
+		for floor_index in range(building.bottom_floor(), building.floor_count):
 			if tenancy.is_vacant(floor_index):
 				continue
 			var k := catalog.kind(tenancy.kind_at(floor_index))
 			if k == null:
 				continue
+			if k.entrance:
+				# A door, not a source. As a TrafficSource it would also become
+				# an interfloor DESTINATION in _destination_for's `others` pick,
+				# double-counting the exit path _door_for already models.
+				_entrance_cache.append(floor_index)
+				continue
 			_source_cache.append(TrafficSource.new(floor_index, k,
 				catalog.fare_multiplier(fitout.tier_at(floor_index))))
 		_source_revision = revision
 	return _source_cache
+
+## The leased garage floors -- the doors. Refreshed by the same revision as
+## _sources(), which the call here guarantees is fresh.
+func _entrances() -> PackedInt32Array:
+	var _refresh := _sources()
+	return _entrance_cache
 
 ## The whole building's traffic curve, for the HUD's day chart: 24 absolute
 ## rates and 24 directional mixes. Derived from the same TrafficSource array the
@@ -406,16 +421,17 @@ func _refresh_day() -> void:
 	if revision == _day_revision:
 		return
 	var src := _sources()
-	_day_rates = BuildingDay.rates(src)
+	var doors := _entrances()
+	_day_rates = BuildingDay.rates(src, doors.size())
 	_day_mixes = []
 	var lobby := not tenancy.is_vacant(0)
 	for hour in range(TenantKind.BUCKETS):
-		_day_mixes.append(BuildingDay.mix(src, hour, lobby))
+		_day_mixes.append(BuildingDay.mix(src, hour, lobby, doors.size()))
 	_day_revision = revision
 
 func _spawn() -> void:
 	for p in spawner.spawn_from_sources(clock.sim_minute(), _sources(),
-			not tenancy.is_vacant(0)):
+			not tenancy.is_vacant(0), _entrances()):
 		building.enqueue(p)
 		passenger_spawned.emit(p)
 

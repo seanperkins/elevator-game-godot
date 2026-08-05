@@ -146,3 +146,22 @@ func test_calls_need_both_kinds_of_button() -> void:
 func test_lobby_parking_is_its_own_fitting() -> void:
 	var need := DispatchPolicy.preset_requires(DispatchPolicy.Preset.CALLS_THEN_LOBBY)
 	assert_true(need.has("lobby_parking"))
+
+
+# --- the basement -----------------------------------------------------------
+
+func test_the_sweep_includes_dug_floors() -> void:
+	# candidates used to bound at f >= 0, which silently dropped the basement
+	# from EVERY_FLOOR -- the sweep simply never went below the lobby.
+	var got := every_floor().candidates(2, 5, floors([]), floors([]), false, -2)
+	assert_true(got.has(-1) and got.has(-2), "the sweep descends")
+	assert_eq(got.size(), 6, "-2..4 less the car's own floor")
+
+func test_a_hall_call_at_minus_one_is_answered_not_dropped() -> void:
+	var got := calls().candidates(3, 5, floors([-1]), floors([]), false, -1)
+	assert_eq(got, PackedInt32Array([-1]), "the basement call survives the bound")
+
+func test_a_call_below_the_building_is_still_refused() -> void:
+	# The bound moved, it did not vanish: -2 on a one-deep building is outside.
+	var got := calls().candidates(3, 5, floors([-2]), floors([]), false, -1)
+	assert_eq(got.size(), 0, "below the bottom floor is out of the building")

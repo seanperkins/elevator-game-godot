@@ -71,7 +71,7 @@ func step(building: Building) -> void:
 			continue
 		var result := policy.choose(car.current_floor(), building.floor_count,
 			waiting, _rider_floors(car), _direction[i],
-			car.riders.size() >= car.capacity)
+			car.riders.size() >= car.capacity, building.bottom_floor())
 		_direction[i] = result.y
 		if result.x == DispatchPolicy.STAY_PUT or result.x == car.current_floor():
 			continue
@@ -85,7 +85,8 @@ func step(building: Building) -> void:
 ## a policy without them never receives this list.
 func _waiting_floors(building: Building) -> PackedInt32Array:
 	var out := PackedInt32Array()
-	for floor_index in range(building.floor_count):
+	# EVERY floor: hall calls come from the basement too.
+	for floor_index in range(building.bottom_floor(), building.floor_count):
 		if not building.waiting_at(floor_index).is_empty():
 			out.append(floor_index)
 	return out
